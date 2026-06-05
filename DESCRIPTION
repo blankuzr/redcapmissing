@@ -1,0 +1,27 @@
+Package: redcapmissing
+Title: Branching-Aware Missingness Reports for REDCap Exports
+Version: 0.1.1
+Authors@R: person("blankuzr", email = "blankuzr@users.noreply.github.com", role = c("aut", "cre"))
+Description: Build branching-aware missingness reports for REDCap record
+    exports, including form-level, event-level, repeat-instance, and
+    field-level validation surfaces.
+License: MIT + file LICENSE
+URL: https://github.com/blankuzr/redcapmissing
+BugReports: https://github.com/blankuzr/redcapmissing/issues
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Suggests: 
+    flextable,
+    glue,
+    htmltools,
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+Imports: 
+    dplyr,
+    pointblank,
+    stringr,
+    tibble
+VignetteBuilder: knitr
