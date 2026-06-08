@@ -2,8 +2,9 @@
 #'
 #' @description
 #' `redcap_missing_report()` checks whether expected REDCap fields are present
-#' for a single instrument/form. Expected fields are determined from the REDCap
-#' project metadata and project structure supplied by `rcon`.
+#' for a single instrument/form. Expected fields are determined from REDCap
+#' project metadata and project structure supplied through a
+#' `redcapAPI::redcapConnection()` workflow.
 #'
 #' @details
 #' A field is expected when it is on the requested form and, if it has REDCap
@@ -11,8 +12,9 @@
 #' Fields without branching logic are always expected on rows where the form is
 #' offered. Blank values and `NA` values are considered missing.
 #'
-#' The function uses REDCap project structure from `rcon` to avoid checking a
-#' form on events or repeating-instrument rows where that form is not offered.
+#' The function relies on `redcapAPI` project structure exposed through `rcon`
+#' to avoid checking a form on events or repeating-instrument rows where that
+#' form is not offered.
 #' It inspects available connection methods such as `rcon$metadata()`,
 #' `rcon$mapping()` / `rcon$mappings()`, `rcon$repeatInstrumentEvent()`, and
 #' `rcon$projectInformation()` when present.
@@ -79,11 +81,11 @@
 #'   include the REDCap system column `redcap_event_name`. For repeating
 #'   instruments/events, it should include `redcap_repeat_instrument` and
 #'   `redcap_repeat_instance` when those columns are present in the export.
-#' @param rcon A `redcapAPI` connection object, or an offline/preserved
-#'   connection-like object, that provides project metadata through
-#'   `rcon$metadata()`. When available, form-event mapping, repeating
-#'   instrument/event metadata, and project information are also read from the
-#'   connection object.
+#' @param rcon A `redcapAPI::redcapConnection()` object, or an offline or
+#'   preserved connection-like object that mirrors the same methods, and that
+#'   provides project metadata through `rcon$metadata()`. When available,
+#'   form-event mapping, repeating instrument/event metadata, and project
+#'   information are also read from the connection object.
 #' @param form Required. A single REDCap form/instrument name to assess. No
 #'   default is supplied so callers must choose the form deliberately.
 #' @param required_fields Logical scalar. When `TRUE`, only fields marked as
@@ -145,8 +147,21 @@
 #'   \item{`system_fields`}{The REDCap system field names used internally.}
 #' }
 #'
+#' @seealso [redcapAPI::redcapConnection()], [redcapAPI::exportRecordsTyped()]
+#' @references
+#' Nutter B, Garbett S, Obregon S, Obadia T, Lehr M, High B, Lane S,
+#' Beasley W, Gray W, Kennedy N, Hsi-Nien T, Horner J, Stephens J, Beck C,
+#' Johnson B, Chase P, Tobias P (2026). *redcapAPI: Accessing data from REDCap
+#' projects using the API*. R package version 2.12.0.
+#' <https://doi.org/10.5281/zenodo.10564837>.
+#'
 #' @examples
 #' \dontrun{
+#' rcon <- redcapAPI::redcapConnection(
+#'   url = Sys.getenv("REDCAP_API_URL"),
+#'   token = Sys.getenv("REDCAP_API_TOKEN")
+#' )
+#'
 #' records <- redcapAPI::exportRecordsTyped(
 #'   rcon,
 #'   cast = list(
@@ -205,7 +220,7 @@ redcap_missing_report <- function(
     )
   }
 
-  # Normalize inputs and derive project context from the REDCap connection.
+  # Normalize inputs and derive project context from the redcapAPI connection.
   records <- tibble::as_tibble(data)
   all_records <- records
 

@@ -15,6 +15,14 @@ knitr::opts_chunk$set(
 
 `redcapmissing` builds branching-aware missingness reports for REDCap record exports.
 
+This package is built on top of `redcapAPI`. In real workflows, callers create
+an `rcon` object with `redcapAPI::redcapConnection()`, export records with
+`redcapAPI::exportRecordsTyped()`, and then pass both objects into
+`redcap_missing_report()`.
+
+The examples below are intentionally synthetic so the vignette remains runnable
+without live REDCap credentials or access to a specific REDCap project.
+
 ## A minimal synthetic REDCap example
 
 ```{r}
@@ -49,6 +57,34 @@ fake_rcon <- function(metadata, mapping = NULL, repeat_instrument_event = NULL) 
     repeatInstrumentEvent = function() repeat_instrument_event
   )
 }
+```
+
+## Real `redcapAPI` workflow
+
+In routine use, the package expects a `redcapAPI` connection and a typed export:
+
+```{r, eval = FALSE}
+rcon <- redcapAPI::redcapConnection(
+  url = Sys.getenv("REDCAP_API_URL"),
+  token = Sys.getenv("REDCAP_API_TOKEN")
+)
+
+records <- redcapAPI::exportRecordsTyped(
+  rcon,
+  cast = list(
+    radio = redcapAPI::castCode,
+    dropdown = redcapAPI::castCode,
+    yesno = redcapAPI::castCode,
+    checkbox = redcapAPI::castRaw,
+    system = redcapAPI::castRaw
+  )
+)
+
+report <- redcap_missing_report(
+  data = records,
+  rcon = rcon,
+  form = "baseline_form"
+)
 ```
 
 ## Required and branching-aware field checks
@@ -125,3 +161,14 @@ If optional formatting packages are installed, you can format the validation sum
 ```{r, eval = FALSE}
 redcap_missing_summary(report)
 ```
+
+## Citation and acknowledgement
+
+`redcapmissing` depends heavily on `redcapAPI`. Please cite `redcapAPI` when
+`redcapmissing` is part of a REDCap workflow:
+
+> Nutter B, Garbett S, Obregon S, Obadia T, Lehr M, High B, Lane S, Beasley W,
+> Gray W, Kennedy N, Hsi-Nien T, Horner J, Stephens J, Beck C, Johnson B,
+> Chase P, Tobias P (2026). *redcapAPI: Accessing data from REDCap projects
+> using the API*. R package version 2.12.0.
+> <https://doi.org/10.5281/zenodo.10564837>

@@ -22,11 +22,11 @@ include the REDCap system column \code{redcap_event_name}. For repeating
 instruments/events, it should include \code{redcap_repeat_instrument} and
 \code{redcap_repeat_instance} when those columns are present in the export.}
 
-\item{rcon}{A \code{redcapAPI} connection object, or an offline/preserved
-connection-like object, that provides project metadata through
-\code{rcon$metadata()}. When available, form-event mapping, repeating
-instrument/event metadata, and project information are also read from the
-connection object.}
+\item{rcon}{A \code{redcapAPI::redcapConnection()} object, or an offline or
+preserved connection-like object that mirrors the same methods, and that
+provides project metadata through \code{rcon$metadata()}. When available,
+form-event mapping, repeating instrument/event metadata, and project
+information are also read from the connection object.}
 
 \item{form}{Required. A single REDCap form/instrument name to assess. No
 default is supplied so callers must choose the form deliberately.}
@@ -97,8 +97,9 @@ forms, or \code{NULL} for non-repeating forms.}
 }
 \description{
 \code{redcap_missing_report()} checks whether expected REDCap fields are present
-for a single instrument/form. Expected fields are determined from the REDCap
-project metadata and project structure supplied by \code{rcon}.
+for a single instrument/form. Expected fields are determined from REDCap
+project metadata and project structure supplied through a
+\code{redcapAPI::redcapConnection()} workflow.
 }
 \details{
 A field is expected when it is on the requested form and, if it has REDCap
@@ -106,8 +107,9 @@ branching logic, that branching logic evaluates to \code{TRUE} for the record ro
 Fields without branching logic are always expected on rows where the form is
 offered. Blank values and \code{NA} values are considered missing.
 
-The function uses REDCap project structure from \code{rcon} to avoid checking a
-form on events or repeating-instrument rows where that form is not offered.
+The function relies on \code{redcapAPI} project structure exposed through \code{rcon}
+to avoid checking a form on events or repeating-instrument rows where that
+form is not offered.
 It inspects available connection methods such as \code{rcon$metadata()},
 \code{rcon$mapping()} / \code{rcon$mappings()}, \code{rcon$repeatInstrumentEvent()}, and
 \code{rcon$projectInformation()} when present.
@@ -171,6 +173,11 @@ review and downstream correction workflows.
 }
 \examples{
 \dontrun{
+rcon <- redcapAPI::redcapConnection(
+  url = Sys.getenv("REDCAP_API_URL"),
+  token = Sys.getenv("REDCAP_API_TOKEN")
+)
+
 records <- redcapAPI::exportRecordsTyped(
   rcon,
   cast = list(
@@ -200,4 +207,14 @@ repeat_missing <- redcap_missing_report(
 )
 }
 
+}
+\references{
+Nutter B, Garbett S, Obregon S, Obadia T, Lehr M, High B, Lane S,
+Beasley W, Gray W, Kennedy N, Hsi-Nien T, Horner J, Stephens J, Beck C,
+Johnson B, Chase P, Tobias P (2026). \emph{redcapAPI: Accessing data from REDCap
+projects using the API}. R package version 2.12.0.
+\url{https://doi.org/10.5281/zenodo.10564837}.
+}
+\seealso{
+\code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:recordsTypedMethods]{redcapAPI::exportRecordsTyped()}}
 }

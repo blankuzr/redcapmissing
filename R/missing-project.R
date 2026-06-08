@@ -1,9 +1,10 @@
-## Internal helpers: project structure ------------------------------------
+## Internal helpers: redcapAPI project structure ---------------------------
 
 `%||%` <- function(x, y) {
   if (is.null(x)) y else x
 }
 
+# Read metadata through the redcapAPI connection surface used by the package.
 .miss_get_metadata <- function(rcon) {
   if (is.null(rcon)) {
     stop(

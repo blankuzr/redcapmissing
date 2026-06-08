@@ -24,10 +24,21 @@ It is designed for REDCap data-quality workflows where expected values depend on
 - whole-form missingness
 - `pointblank` validation summaries and failed-row extracts
 
+## Dependency on `redcapAPI`
+
+`redcapmissing` is built on top of [`redcapAPI`](https://github.com/vubiostat/redcapAPI).
+In real workflows, `rcon` is not an arbitrary list-like object: it is ordinarily a
+`redcapAPI::redcapConnection()` object, and `data` is ordinarily created with
+`redcapAPI::exportRecordsTyped()`.
+
+This package depends on `redcapAPI` for REDCap metadata access, form-event
+mapping, repeating-instrument structure, and REDCap-style blank-value handling.
+
 ## Why use `redcapmissing`?
 
 `redcapmissing` separates REDCap-aware expectation building from auditable validation output:
 
+- `redcapAPI` exposes the REDCap project metadata and structural context.
 - R code determines which record, event, repeat, and field contexts should be checked.
 - `pointblank` records the validation plan and exposes scope-specific summaries.
 - Row-level failures remain easy to extract for correction workflows.
@@ -39,6 +50,8 @@ It is designed for REDCap data-quality workflows where expected values depend on
 pak::pkg_install("blankuzr/redcapmissing")
 ```
 
+Installing `redcapmissing` also installs `redcapAPI` as a package dependency.
+
 ## Core functions
 
 - `redcap_missing_report()`
@@ -47,6 +60,11 @@ pak::pkg_install("blankuzr/redcapmissing")
   - format the `pointblank` validation summary from a report object
 
 ## Example
+
+The example below uses a lightweight synthetic stand-in for a REDCap connection
+so it can run without live REDCap access. In production use, create `rcon` with
+`redcapAPI::redcapConnection()` and export records with
+`redcapAPI::exportRecordsTyped()`.
 
 ```{r, eval = FALSE}
 library(redcapmissing)
@@ -103,6 +121,17 @@ repeat_report <- redcap_missing_report(
 ```
 
 This checks that repeat instances `1` and `2` exist everywhere that `repeat_form` is expected.
+
+## Acknowledgement and citation
+
+This package relies heavily on `redcapAPI` and would not be practical without it.
+If `redcapmissing` contributes to your work, please also cite `redcapAPI`:
+
+> Nutter B, Garbett S, Obregon S, Obadia T, Lehr M, High B, Lane S, Beasley W,
+> Gray W, Kennedy N, Hsi-Nien T, Horner J, Stephens J, Beck C, Johnson B,
+> Chase P, Tobias P (2026). *redcapAPI: Accessing data from REDCap projects
+> using the API*. R package version 2.12.0.
+> <https://doi.org/10.5281/zenodo.10564837>
 
 ## Learn more
 

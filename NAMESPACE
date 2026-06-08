@@ -2,3 +2,4 @@
 
 export(redcap_missing_report)
 export(redcap_missing_summary)
+importFrom(redcapAPI,isNAorBlank)

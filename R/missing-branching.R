@@ -355,8 +355,7 @@
   if (length(x) == 0) {
     return(logical())
   }
-  x_chr <- .miss_chr_vec(x)
-  is.na(x_chr) | x_chr == ""
+  isNAorBlank(.miss_chr_vec(x))
 }
 
 .miss_is_blank_scalar <- function(x) {

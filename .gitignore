@@ -2,9 +2,5 @@
 AGENTS.md
 LOG.md
 .here
-main.R
 src/
-test/
-redcap metadata/
-data/
 .Rproj.user/

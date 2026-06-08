@@ -1,3 +1,11 @@
+# redcapmissing 0.1.2
+
+## 2026-06-05
+
+- Declared and documented the package's reliance on `redcapAPI` for REDCap connections, metadata, and typed exports.
+- Updated package, README, and vignette documentation to describe `rcon` as a `redcapAPI::redcapConnection()` workflow input.
+- Aligned internal blank-value handling with `redcapAPI::isNAorBlank()`.
+
 # redcapmissing 0.1.1
 
 ## 2026-06-05

@@ -10,13 +10,26 @@ Build branching-aware missingness reports for REDCap record exports,
 including form-level, event-level, repeat-instance, and field-level
 validation surfaces.
 }
-\seealso{
-Useful links:
-\itemize{
-  \item \url{https://github.com/blankuzr/redcapmissing}
-  \item Report bugs at \url{https://github.com/blankuzr/redcapmissing/issues}
-}
+\details{
+\code{redcapmissing} is built on top of the \code{redcapAPI} package. In routine use,
+callers create a \code{redcapAPI::redcapConnection()} object, export typed
+records with \code{redcapAPI::exportRecordsTyped()}, and then pass both the
+exported data and the connection object into \code{\link[=redcap_missing_report]{redcap_missing_report()}}.
 
+This package depends on \code{redcapAPI} for REDCap-aware project metadata, form
+mapping, repeating-instrument structure, and REDCap-style blank-value
+semantics.
+}
+\references{
+Nutter B, Garbett S, Obregon S, Obadia T, Lehr M, High B, Lane S,
+Beasley W, Gray W, Kennedy N, Hsi-Nien T, Horner J, Stephens J, Beck C,
+Johnson B, Chase P, Tobias P (2026). \emph{redcapAPI: Accessing data from REDCap
+projects using the API}. R package version 2.12.0.
+\url{https://doi.org/10.5281/zenodo.10564837}.
+}
+\seealso{
+\code{\link[=redcap_missing_report]{redcap_missing_report()}}, \code{\link[=redcap_missing_summary]{redcap_missing_summary()}},
+\code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:recordsTypedMethods]{redcapAPI::exportRecordsTyped()}}
 }
 \author{
 \strong{Maintainer}: blankuzr \email{blankuzr@users.noreply.github.com}
