@@ -1,8 +1,6 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-<img src="man/figures/logo.svg" align="right" height="180" alt="redcapmissing hex logo" />
-
 # redcapmissing
 
 <!-- badges: start -->
@@ -10,6 +8,8 @@
 ![Lifecycle](https://img.shields.io/badge/lifecycle-experimental-339999)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 <!-- badges: end -->
+
+<img src="man/figures/logo.svg" align="right" width="180" alt="redcapmissing hex logo" />
 
 `redcapmissing` builds branching-aware missingness reports for REDCap
 record exports.
