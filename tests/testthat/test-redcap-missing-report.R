@@ -375,6 +375,131 @@ test_that("desired_events must match offered events for multi-event forms", {
   )
 })
 
+
+test_that("mixed repeat and non-repeat forms only apply repeat logic on repeating events", {
+  mixed_meta <- dplyr::bind_rows(
+    meta_row("record_id", "mixed_form", field_label = "Record ID", required = "y"),
+    meta_row("mixed_started", "mixed_form", field_label = "Mixed started", required = "y"),
+    meta_row("mixed_value", "mixed_form", field_label = "Mixed value", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1, 1),
+    unique_event_name = c("regular_a_arm_1", "repeat_b_arm_1", "regular_c_arm_1"),
+    form = c("mixed_form", "mixed_form", "mixed_form")
+  )
+  repeat_instrument_event <- tibble::tibble(
+    event_name = "repeat_b_arm_1",
+    form_name = "mixed_form",
+    custom_form_label = ""
+  )
+  records <- tibble::tibble(
+    record_id = "r1",
+    redcap_event_name = "regular_a_arm_1",
+    mixed_started = "yes",
+    mixed_value = "entered"
+  )
+
+  expect_warning(
+    report <- redcap_missing_report(
+      data = records,
+      rcon = fake_rcon(
+        mixed_meta,
+        mapping = mapping,
+        repeat_instrument_event = repeat_instrument_event
+      ),
+      form = "mixed_form"
+    ),
+    "Assuming `expected_repeats = 1L`"
+  )
+
+  expect_equal(report$expected_repeats, 1L)
+  expect_true(all(report$repeat_checks$redcap_event_name == "repeat_b_arm_1"))
+  expect_false(any(report$event_checks$redcap_event_name == "repeat_b_arm_1"))
+  expect_true(any(report$repeat_missing$redcap_event_name == "repeat_b_arm_1"))
+  expect_true(any(report$event_missing$redcap_event_name == "regular_c_arm_1"))
+})
+
+test_that("non-repeating desired events do not trigger repeat-instance logic for mixed forms", {
+  mixed_meta <- dplyr::bind_rows(
+    meta_row("record_id", "mixed_form", field_label = "Record ID", required = "y"),
+    meta_row("mixed_started", "mixed_form", field_label = "Mixed started", required = "y"),
+    meta_row("mixed_value", "mixed_form", field_label = "Mixed value", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1, 1),
+    unique_event_name = c("regular_a_arm_1", "repeat_b_arm_1", "regular_c_arm_1"),
+    form = c("mixed_form", "mixed_form", "mixed_form")
+  )
+  repeat_instrument_event <- tibble::tibble(
+    event_name = "repeat_b_arm_1",
+    form_name = "mixed_form",
+    custom_form_label = ""
+  )
+  records <- tibble::tibble(
+    record_id = "r1",
+    redcap_event_name = "regular_a_arm_1",
+    mixed_started = "yes",
+    mixed_value = "entered"
+  )
+
+  report <- redcap_missing_report(
+    data = records,
+    rcon = fake_rcon(
+      mixed_meta,
+      mapping = mapping,
+      repeat_instrument_event = repeat_instrument_event
+    ),
+    form = "mixed_form",
+    desired_events = c("regular_a_arm_1", "regular_c_arm_1")
+  )
+
+  expect_identical(report$expected_repeats, NULL)
+  expect_equal(nrow(report$repeat_checks), 0)
+  expect_equal(nrow(report$repeat_missing), 0)
+  expect_setequal(report$desired_events, c("regular_a_arm_1", "regular_c_arm_1"))
+  expect_false(any(report$event_checks$redcap_event_name == "repeat_b_arm_1"))
+})
+
+test_that("expected_repeats is ignored when desired events exclude repeating contexts", {
+  mixed_meta <- dplyr::bind_rows(
+    meta_row("record_id", "mixed_form", field_label = "Record ID", required = "y"),
+    meta_row("mixed_started", "mixed_form", field_label = "Mixed started", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1),
+    unique_event_name = c("regular_a_arm_1", "repeat_b_arm_1"),
+    form = c("mixed_form", "mixed_form")
+  )
+  repeat_instrument_event <- tibble::tibble(
+    event_name = "repeat_b_arm_1",
+    form_name = "mixed_form",
+    custom_form_label = ""
+  )
+  records <- tibble::tibble(
+    record_id = "r1",
+    redcap_event_name = "regular_a_arm_1",
+    mixed_started = "yes"
+  )
+
+  expect_warning(
+    report <- redcap_missing_report(
+      data = records,
+      rcon = fake_rcon(
+        mixed_meta,
+        mapping = mapping,
+        repeat_instrument_event = repeat_instrument_event
+      ),
+      form = "mixed_form",
+      desired_events = "regular_a_arm_1",
+      expected_repeats = 2L
+    ),
+    "does not include any REDCap repeating-instrument events"
+  )
+
+  expect_identical(report$expected_repeats, NULL)
+  expect_equal(nrow(report$repeat_checks), 0)
+})
+
 test_that("summary helper returns a formatted table when optional packages are available", {
   testthat::skip_if_not_installed("flextable")
   testthat::skip_if_not_installed("glue")

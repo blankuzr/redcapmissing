@@ -224,6 +224,15 @@ This is especially useful in longitudinal REDCap projects where several events
 play the same conceptual role but only a subset should count toward the current
 missingness review.
 
+If a form is regular on some requested events and repeating on others, the
+package applies scopes by event type:
+
+- regular-form events use the standard `field`, `form_blank`, and `event_absent` logic
+- repeating-instrument events use `field`, `form_blank`, and `repeat_absent` logic
+
+When `expected_repeats` is omitted, the default `1L` assumption is only applied
+for the requested events where the form actually repeats.
+
 ## Repeat expectations
 
 For repeating instruments, `expected_repeats` applies a uniform expectation to all assessed record/event contexts.

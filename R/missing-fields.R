@@ -506,10 +506,16 @@
   fields <- project$system_fields
   instances <- as.character(seq_len(expected_repeats))
 
-  if (
-    fields$event_col %in% names(records) &&
-      length(project$repeat_form_events) > 0
-  ) {
+  if (fields$event_col %in% names(records)) {
+    if (length(project$repeat_form_events) == 0) {
+      return(.miss_empty_expected()[, c(
+        "record_id",
+        "redcap_event_name",
+        "redcap_repeat_instrument",
+        "redcap_repeat_instance"
+      )])
+    }
+
     record_events <- .miss_expected_record_events(
       records = records,
       project = project,

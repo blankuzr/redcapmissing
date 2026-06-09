@@ -92,7 +92,9 @@
 #'   the requested form, or `NULL`. When a form is offered on multiple REDCap
 #'   events, this argument can restrict the report to a selected subset of those
 #'   events. If `NULL`, all offered events are assessed. If the form is offered
-#'   on only one event, this argument is ignored. Defaults to `NULL`.
+#'   on only one event, this argument is ignored. If the form is regular on
+#'   some events and a repeating instrument on others, `desired_events` also
+#'   determines whether repeat-instance logic is activated. Defaults to `NULL`.
 #' @param required_fields Logical scalar. When `TRUE`, only fields marked as
 #'   required in the REDCap metadata `required_field` column are assessed. When
 #'   `FALSE`, all fields on the form are assessed after `exclude_types` and
@@ -113,7 +115,9 @@
 #'   of repeat instances expected for every assessed record/event context. For
 #'   example, `expected_repeats = 2L` checks that repeat instances `1` and `2`
 #'   exist. If the form is repeating and this argument is `NULL`, the function
-#'   warns and assumes `1L`. For non-repeating forms, this argument is ignored.
+#'   warns and assumes `1L` for the requested repeating-event contexts. If the
+#'   requested events do not include any repeating contexts for the form, this
+#'   argument is ignored.
 #'
 #' @return A list with class `"redcap_missing_report"` containing:
 #' \describe{

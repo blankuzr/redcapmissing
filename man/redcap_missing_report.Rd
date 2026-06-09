@@ -36,7 +36,9 @@ default is supplied so callers must choose the form deliberately.}
 the requested form, or \code{NULL}. When a form is offered on multiple REDCap
 events, this argument can restrict the report to a selected subset of those
 events. If \code{NULL}, all offered events are assessed. If the form is offered
-on only one event, this argument is ignored. Defaults to \code{NULL}.}
+on only one event, this argument is ignored. If the form is regular on
+some events and a repeating instrument on others, \code{desired_events} also
+determines whether repeat-instance logic is activated. Defaults to \code{NULL}.}
 
 \item{required_fields}{Logical scalar. When \code{TRUE}, only fields marked as
 required in the REDCap metadata \code{required_field} column are assessed. When
@@ -62,7 +64,9 @@ is configured as a REDCap repeating instrument, this is the minimum number
 of repeat instances expected for every assessed record/event context. For
 example, \code{expected_repeats = 2L} checks that repeat instances \code{1} and \code{2}
 exist. If the form is repeating and this argument is \code{NULL}, the function
-warns and assumes \code{1L}. For non-repeating forms, this argument is ignored.}
+warns and assumes \code{1L} for the requested repeating-event contexts. If the
+requested events do not include any repeating contexts for the form, this
+argument is ignored.}
 }
 \value{
 A list with class \code{"redcap_missing_report"} containing:

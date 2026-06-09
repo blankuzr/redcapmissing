@@ -1,3 +1,11 @@
+# redcapmissing 0.1.6
+
+## 2026-06-09
+
+- Fixed mixed repeat/non-repeat event handling so repeat-instance logic follows the requested events rather than the form's global repeat status elsewhere in the project.
+- Added tests for forms that repeat on some REDCap events but not others, including `desired_events` subsets and default repeat-instance behavior.
+- Expanded vignette and README guidance for forms that are regular on some events and repeating instruments on others.
+
 # redcapmissing 0.1.5
 
 ## 2026-06-09
