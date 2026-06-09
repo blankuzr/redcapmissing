@@ -7,6 +7,7 @@ test_that("public report API is stable", {
       "data",
       "rcon",
       "form",
+      "desired_events",
       "required_fields",
       "ignore_fields",
       "ignore_ids",
@@ -15,6 +16,7 @@ test_that("public report API is stable", {
     )
   )
   expect_identical(report_args$form, quote(expr = ))
+  expect_null(report_args$desired_events)
   expect_true(report_args$required_fields)
   expect_null(report_args$ignore_fields)
   expect_null(report_args$ignore_ids)
@@ -262,6 +264,115 @@ test_that("checkbox roots are present when any child is selected", {
 
   expect_false("checkbox_field" %in% report$missing$field_name)
   expect_true(any(report$missing$field_name == "checkbox_other"))
+})
+
+
+test_that("desired_events restrict multi-event assessment and defaults to all offered events", {
+  status_meta <- dplyr::bind_rows(
+    meta_row("record_id", "status_form", field_label = "Record ID", required = "y"),
+    meta_row("status_started", "status_form", field_label = "Status started", required = "y"),
+    meta_row("status_value", "status_form", field_label = "Status value", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1, 1),
+    unique_event_name = c(
+      "follow_up_1_arm_1",
+      "follow_up_2_arm_1",
+      "follow_up_3_arm_1"
+    ),
+    form = c("status_form", "status_form", "status_form")
+  )
+  records <- tibble::tibble(
+    record_id = c("r1", "r1"),
+    redcap_event_name = c("follow_up_1_arm_1", "follow_up_2_arm_1"),
+    status_started = c("yes", "yes"),
+    status_value = c("entered", "")
+  )
+
+  report_all <- redcap_missing_report(
+    data = records,
+    rcon = fake_rcon(status_meta, mapping = mapping),
+    form = "status_form"
+  )
+  report_subset <- redcap_missing_report(
+    data = records,
+    rcon = fake_rcon(status_meta, mapping = mapping),
+    form = "status_form",
+    desired_events = c("follow_up_1_arm_1", "follow_up_2_arm_1")
+  )
+
+  expect_setequal(
+    report_all$desired_events,
+    c("follow_up_1_arm_1", "follow_up_2_arm_1", "follow_up_3_arm_1")
+  )
+  expect_setequal(
+    report_subset$desired_events,
+    c("follow_up_1_arm_1", "follow_up_2_arm_1")
+  )
+  expect_true(any(report_all$event_missing$redcap_event_name == "follow_up_3_arm_1"))
+  expect_false(any(report_subset$event_missing$redcap_event_name == "follow_up_3_arm_1"))
+  expect_true(any(report_subset$missing$redcap_event_name == "follow_up_2_arm_1" & report_subset$missing$field_name == "status_value"))
+})
+
+test_that("desired_events is ignored for single-event forms", {
+  status_meta <- dplyr::bind_rows(
+    meta_row("record_id", "status_form", field_label = "Record ID", required = "y"),
+    meta_row("status_started", "status_form", field_label = "Status started", required = "y"),
+    meta_row("status_value", "status_form", field_label = "Status value", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = 1,
+    unique_event_name = "baseline_event",
+    form = "status_form"
+  )
+  records <- tibble::tibble(
+    record_id = "r1",
+    redcap_event_name = "baseline_event",
+    status_started = "yes",
+    status_value = ""
+  )
+
+  report_default <- redcap_missing_report(
+    data = records,
+    rcon = fake_rcon(status_meta, mapping = mapping),
+    form = "status_form"
+  )
+  report_ignored <- redcap_missing_report(
+    data = records,
+    rcon = fake_rcon(status_meta, mapping = mapping),
+    form = "status_form",
+    desired_events = "not_an_offered_event"
+  )
+
+  expect_identical(report_default$missing, report_ignored$missing)
+  expect_identical(report_ignored$desired_events, "baseline_event")
+})
+
+test_that("desired_events must match offered events for multi-event forms", {
+  status_meta <- dplyr::bind_rows(
+    meta_row("record_id", "status_form", field_label = "Record ID", required = "y"),
+    meta_row("status_started", "status_form", field_label = "Status started", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1),
+    unique_event_name = c("follow_up_1_arm_1", "follow_up_2_arm_1"),
+    form = c("status_form", "status_form")
+  )
+  records <- tibble::tibble(
+    record_id = "r1",
+    redcap_event_name = "follow_up_1_arm_1",
+    status_started = "yes"
+  )
+
+  expect_error(
+    redcap_missing_report(
+      data = records,
+      rcon = fake_rcon(status_meta, mapping = mapping),
+      form = "status_form",
+      desired_events = "not_offered_event"
+    ),
+    "subset of the REDCap events"
+  )
 })
 
 test_that("summary helper returns a formatted table when optional packages are available", {

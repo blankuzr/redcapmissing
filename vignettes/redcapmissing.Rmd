@@ -126,6 +126,28 @@ report <- redcap_missing_report(
 report$missing[, c("record_id", "field_name", "missing_scope")]
 ```
 
+## Restricting a form to selected events
+
+Some REDCap projects use many events of the same general type. In those cases,
+`desired_events` lets you keep the assessment focused on the specific events that
+should count for the current review.
+
+```{r, eval = FALSE}
+followup_report <- redcap_missing_report(
+  data = records,
+  rcon = rcon,
+  form = "patient_status",
+  desired_events = c(
+    "follow_up_1_arm_1",
+    "follow_up_2_arm_1",
+    "follow_up_3_arm_1"
+  )
+)
+```
+
+If `desired_events` is omitted, the function defaults to all offered events for
+that form. If the form is only offered on one event, the argument is ignored.
+
 ## Repeat expectations
 
 `expected_repeats` exists because REDCap does not export nonexistent repeat rows.
