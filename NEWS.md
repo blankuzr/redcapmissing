@@ -1,3 +1,10 @@
+# redcapmissing 0.1.4
+
+## 2026-06-09
+
+- Expanded README and vignette guidance for the `redcap_missing_report()` return object.
+- Added clearer public-facing documentation for `report$missing`, the scope-specific helper tables, and `redcap_missing_summary()`.
+
 # redcapmissing 0.1.3
 
 ## 2026-06-09

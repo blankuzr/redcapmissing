@@ -171,12 +171,29 @@ repeat_report <- redcap_missing_report(
 repeat_report$repeat_missing[, c("record_id", "redcap_repeat_instance", "missing_scope")]
 ```
 
+## Inspecting the return object
+
+The report object is intentionally multi-part. In practice, these are the most
+useful components to inspect first:
+
+- `report$missing`: all failed rows extracted from the interrogated agent
+- `report$form_missing`: the form-level failures for wholly blank form contexts
+- `report$event_missing`: the failures for expected event rows that were absent
+- `report$repeat_missing`: the failures for expected repeat rows that were absent
+- `report$expected`: the field-level expected rows that were actually assessed
+- `report$agent`: the interrogated `pointblank` agent itself
+
+This design keeps the correction queue (`report$missing`) separate from the
+full validation context and from the scope-specific helper tables.
+
 ## Summary tables
 
 If optional formatting packages are installed, you can format the validation summary:
 
 ```{r, eval = FALSE}
-redcap_missing_summary(report)
+summary_tbl <- redcap_missing_summary(report)
+summary_tbl$agent_summary
+summary_tbl$agent_summary_html
 ```
 
 ## Citation and acknowledgement
