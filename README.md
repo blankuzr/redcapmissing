@@ -55,6 +55,48 @@ Installing `redcapmissing` also installs `redcapAPI` as a package dependency.
 - `redcap_missing_summary()`
   - format the `pointblank` validation summary from a report object
 
+## What the report returns
+
+`redcap_missing_report()` returns a structured list, not just a single table. The
+most commonly used components are:
+
+- `report$missing`
+  - the row-level failed extract, intended as the main correction queue
+- `report$agent`
+  - the interrogated `pointblank` agent, including validation metadata and the
+    underlying summary counts
+- `report$expected`
+  - the expected field-level rows that were actually assessed after branching
+    logic and filtering
+- `report$form_missing`, `report$event_missing`, `report$repeat_missing`
+  - the failed rows for the three whole-context missingness scopes
+- `report$form_checks`, `report$event_checks`, `report$repeat_checks`
+  - the full scope-specific check tables, including both passing and failing
+    contexts
+
+This separation matters because REDCap exports can fail at different levels:
+missing event rows, missing repeat-instance rows, wholly blank form rows, and
+ordinary field-level missingness are not the same problem.
+
+## Summary helper
+
+`redcap_missing_summary()` is a convenience formatter for the `pointblank`
+summary stored inside `report$agent`. It does not replace the row-level extracts;
+it gives a clean evaluation table for reporting and review.
+
+It returns:
+
+- `agent_summary`
+  - a `flextable` object
+- `agent_summary_html`
+  - an HTML representation of the same summary table
+
+```r
+summary_tbl <- redcap_missing_summary(report)
+summary_tbl$agent_summary
+summary_tbl$agent_summary_html
+```
+
 ## Example
 
 The example below uses a lightweight synthetic stand-in for a REDCap connection
