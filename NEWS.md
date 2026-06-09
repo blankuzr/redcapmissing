@@ -1,3 +1,10 @@
+# redcapmissing 0.1.7
+
+## 2026-06-09
+
+- Adjusted README logo placement so the package icon renders cleanly beside the package overview instead of intersecting the title rule.
+- Rendered the vignette HTML output alongside the source `.Rmd` file for easier repository browsing.
+
 # redcapmissing 0.1.6
 
 ## 2026-06-09
