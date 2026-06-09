@@ -148,6 +148,47 @@ followup_report <- redcap_missing_report(
 If `desired_events` is omitted, the function defaults to all offered events for
 that form. If the form is only offered on one event, the argument is ignored.
 
+## Forms that are regular on some events and repeating on others
+
+Some REDCap projects offer the same form in mixed ways across events. For
+example, a form might be:
+
+- a regular form on `event_a`
+- a repeating instrument on `event_b`
+- a regular form again on `event_c`
+
+This matters because the package should not activate repeat-instance logic just
+because the form repeats somewhere in the project. It should only activate that
+logic for the requested events where the form actually repeats.
+
+Operationally, that means:
+
+- if you request only non-repeating events for that form, the function uses the
+  standard `field`, `form_blank`, and `event_absent` scopes
+- if you request repeating events for that form, the function uses `field`,
+  `form_blank`, and `repeat_absent` for those repeating contexts
+- if you request a mixture of repeating and non-repeating events, the function
+  applies the appropriate scope model per event
+- if `expected_repeats` is omitted and at least one requested event is repeating
+  for that form, the function assumes `1L` only for those requested repeating
+  contexts
+
+```{r, eval = FALSE}
+mixed_report <- redcap_missing_report(
+  data = records,
+  rcon = rcon,
+  form = "patient_status",
+  desired_events = c(
+    "event_a_arm_1",
+    "event_b_arm_1",
+    "event_c_arm_1"
+  )
+)
+```
+
+In that example, `event_a_arm_1` and `event_c_arm_1` would be checked as regular
+form events, while `event_b_arm_1` would be checked with repeat-instance logic.
+
 ## Repeat expectations
 
 `expected_repeats` exists because REDCap does not export nonexistent repeat rows.

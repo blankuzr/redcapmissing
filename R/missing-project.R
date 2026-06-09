@@ -92,11 +92,15 @@
 
   if (length(offered_events) <= 1) {
     project$desired_events <- offered_events
+    if (length(offered_events) > 0) {
+      project$form_repeats <- length(project$repeat_form_events) > 0
+    }
     return(project)
   }
 
   if (is.null(desired_events)) {
     project$desired_events <- offered_events
+    project$form_repeats <- length(project$repeat_form_events) > 0
     return(project)
   }
 
@@ -124,6 +128,7 @@
   project$form_events <- intersect(project$form_events, desired_events)
   project$repeat_form_events <- intersect(project$repeat_form_events, desired_events)
   project$desired_events <- desired_events
+  project$form_repeats <- length(project$repeat_form_events) > 0
   project
 }
 
@@ -131,9 +136,9 @@
   if (!isTRUE(project$form_repeats)) {
     if (!is.null(expected_repeats)) {
       warning(
-        "`expected_repeats` was supplied, but form `",
+        "`expected_repeats` was supplied, but the requested assessment for form `",
         form,
-        "` is not configured as a REDCap repeating instrument. ",
+        "` does not include any REDCap repeating-instrument events. ",
         "Repeat-instance missingness will not be assessed.",
         call. = FALSE
       )
@@ -145,8 +150,9 @@
     warning(
       "Form `",
       form,
-      "` is configured as a REDCap repeating instrument, but ",
-      "`expected_repeats` was not provided. Assuming `expected_repeats = 1L`.",
+      "` is repeating on at least one requested REDCap event, but ",
+      "`expected_repeats` was not provided. Assuming `expected_repeats = 1L` ",
+      "for the requested repeating-event contexts.",
       call. = FALSE
     )
     return(1L)
