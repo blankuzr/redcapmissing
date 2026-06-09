@@ -23,6 +23,19 @@ an `rcon` object with `redcapAPI::redcapConnection()`, export records with
 The examples below are intentionally synthetic so the vignette remains runnable
 without live REDCap credentials or access to a specific REDCap project.
 
+## Why the package uses multiple missingness scopes
+
+REDCap exports are sparse by design. A field can be missing because a value is
+blank, but it can also be missing because REDCap exported no row at all for the
+needed event or repeat context. The package therefore separates:
+
+- `event_absent`: the expected longitudinal event row is missing
+- `repeat_absent`: the expected repeat-instance row is missing
+- `form_blank`: the row exists, but every form field is blank or unchecked
+- `field`: the row exists and the form is started, but an expected field value is missing
+
+This separation keeps the report aligned with how REDCap actually exports data.
+
 ## A minimal synthetic REDCap example
 
 ```{r}
@@ -115,6 +128,10 @@ report$missing[, c("record_id", "field_name", "missing_scope")]
 
 ## Repeat expectations
 
+`expected_repeats` exists because REDCap does not export nonexistent repeat rows.
+If instance 2 should exist but was never created, there is no row in the export
+for the package to inspect unless it first creates the expected repeat contexts.
+
 ```{r}
 repeat_metadata <- dplyr::bind_rows(
   meta_row("record_id", "screen_form", required = "y"),
@@ -165,10 +182,29 @@ redcap_missing_summary(report)
 ## Citation and acknowledgement
 
 `redcapmissing` depends heavily on `redcapAPI`. Please cite `redcapAPI` when
-`redcapmissing` is part of a REDCap workflow:
+`redcapmissing` is part of a REDCap workflow.
+
+### Foundational package citation
 
 > Nutter B, Garbett S, Obregon S, Obadia T, Lehr M, High B, Lane S, Beasley W,
 > Gray W, Kennedy N, Hsi-Nien T, Horner J, Stephens J, Beck C, Johnson B,
 > Chase P, Tobias P (2026). *redcapAPI: Accessing data from REDCap projects
 > using the API*. R package version 2.12.0.
 > <https://doi.org/10.5281/zenodo.10564837>
+
+### Current stewardship and project resources
+
+Current public stewardship appears under VUMC Biostatistics / `vubiostat`, with
+Shawn Garbett listed as maintainer in current package documentation and the
+upstream project README stating that ownership transfer to VUMC Biostatistics is
+complete.
+
+Useful current references:
+
+- VUMC Biostatistics redcapAPI project page and abstract by Savannah Obregon,
+  Shawn Garbett, and Benjamin Nutter:
+  <https://www.vumc.org/biostatistics/node/565>
+- Current GitHub repository for the package:
+  <https://github.com/vubiostat/redcapAPI>
+- Current package site:
+  <https://vubiostat.r-universe.dev/redcapAPI>

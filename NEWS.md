@@ -1,3 +1,11 @@
+# redcapmissing 0.1.3
+
+## 2026-06-09
+
+- Expanded README and vignette documentation for the four missingness scopes and the expected-repeat-context model.
+- Added public-facing documentation acknowledging both the original redcapAPI lineage and the current VUMC Biostatistics stewardship/resources.
+- Updated package documentation links and citations for current redcapAPI stewardship.
+
 # redcapmissing 0.1.2
 
 ## 2026-06-05

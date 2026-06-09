@@ -18,7 +18,9 @@ exported data and the connection object into \code{\link[=redcap_missing_report]
 
 This package depends on \code{redcapAPI} for REDCap-aware project metadata, form
 mapping, repeating-instrument structure, and REDCap-style blank-value
-semantics.
+semantics. The original package lineage is still important to acknowledge,
+but current public stewardship and development resources now live under the
+VUMC Biostatistics \code{vubiostat/redcapAPI} project.
 }
 \references{
 Nutter B, Garbett S, Obregon S, Obadia T, Lehr M, High B, Lane S,
@@ -26,6 +28,13 @@ Beasley W, Gray W, Kennedy N, Hsi-Nien T, Horner J, Stephens J, Beck C,
 Johnson B, Chase P, Tobias P (2026). \emph{redcapAPI: Accessing data from REDCap
 projects using the API}. R package version 2.12.0.
 \url{https://doi.org/10.5281/zenodo.10564837}.
+
+Vanderbilt University Medical Center Department of Biostatistics.
+\emph{redcapAPI: Analysis-ready data retrieval from REDCap with advanced
+processing capabilities in R}. Public project page and abstract by
+Savannah Obregon, Shawn Garbett, and Benjamin Nutter.
+\url{https://www.vumc.org/biostatistics/node/565}. Current source repository:
+\url{https://github.com/vubiostat/redcapAPI}.
 }
 \seealso{
 \code{\link[=redcap_missing_report]{redcap_missing_report()}}, \code{\link[=redcap_missing_summary]{redcap_missing_summary()}},

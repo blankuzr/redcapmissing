@@ -12,7 +12,9 @@
 #'
 #' This package depends on `redcapAPI` for REDCap-aware project metadata, form
 #' mapping, repeating-instrument structure, and REDCap-style blank-value
-#' semantics.
+#' semantics. The original package lineage is still important to acknowledge,
+#' but current public stewardship and development resources now live under the
+#' VUMC Biostatistics `vubiostat/redcapAPI` project.
 #'
 #' @seealso [redcap_missing_report()], [redcap_missing_summary()],
 #'   [redcapAPI::redcapConnection()], [redcapAPI::exportRecordsTyped()]
@@ -22,6 +24,13 @@
 #' Johnson B, Chase P, Tobias P (2026). *redcapAPI: Accessing data from REDCap
 #' projects using the API*. R package version 2.12.0.
 #' <https://doi.org/10.5281/zenodo.10564837>.
+#'
+#' Vanderbilt University Medical Center Department of Biostatistics.
+#' *redcapAPI: Analysis-ready data retrieval from REDCap with advanced
+#' processing capabilities in R*. Public project page and abstract by
+#' Savannah Obregon, Shawn Garbett, and Benjamin Nutter.
+#' <https://www.vumc.org/biostatistics/node/565>. Current source repository:
+#' <https://github.com/vubiostat/redcapAPI>.
 #'
 #' @importFrom redcapAPI isNAorBlank
 #' @keywords internal
