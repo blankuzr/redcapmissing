@@ -88,6 +88,11 @@
 #'   information are also read from the connection object.
 #' @param form Required. A single REDCap form/instrument name to assess. No
 #'   default is supplied so callers must choose the form deliberately.
+#' @param desired_events Character vector of REDCap event names to assess for
+#'   the requested form, or `NULL`. When a form is offered on multiple REDCap
+#'   events, this argument can restrict the report to a selected subset of those
+#'   events. If `NULL`, all offered events are assessed. If the form is offered
+#'   on only one event, this argument is ignored. Defaults to `NULL`.
 #' @param required_fields Logical scalar. When `TRUE`, only fields marked as
 #'   required in the REDCap metadata `required_field` column are assessed. When
 #'   `FALSE`, all fields on the form are assessed after `exclude_types` and
@@ -135,6 +140,8 @@
 #'     form, including checkbox child export columns.}
 #'   \item{`required_fields`}{Whether the report was limited to REDCap-required
 #'     fields.}
+#'   \item{`desired_events`}{The REDCap events actually used for assessment, or
+#'     `character(0)` when no event restriction applied.}
 #'   \item{`expected_repeats`}{The repeat-instance count used for repeating
 #'     forms, or `NULL` for non-repeating forms.}
 #'   \item{`ignored_fields`}{Root field names skipped because of
@@ -177,6 +184,7 @@
 #'   data = records,
 #'   rcon = rcon,
 #'   form = "baseline_form",
+#'   desired_events = c("baseline_event", "followup_event"),
 #'   ignore_fields = c("status_flag", "screening_code")
 #' )
 #'
@@ -196,6 +204,7 @@ redcap_missing_report <- function(
   data,
   rcon,
   form,
+  desired_events = NULL,
   required_fields = TRUE,
   ignore_fields = NULL,
   ignore_ids = NULL,
@@ -228,6 +237,11 @@ redcap_missing_report <- function(
   .miss_check_metadata(meta)
 
   project <- .miss_get_project(rcon = rcon, meta = meta, form = form)
+  project <- .miss_resolve_desired_events(
+    project = project,
+    desired_events = desired_events,
+    form = form
+  )
   expected_repeats <- .miss_resolve_expected_repeats(
     expected_repeats = expected_repeats,
     project = project,
@@ -439,6 +453,7 @@ redcap_missing_report <- function(
     repeat_missing = repeat_missing,
     field_plan = field_plan,
     required_fields = required_fields,
+    desired_events = project$desired_events %||% character(),
     expected_repeats = expected_repeats,
     ignored_fields = ignore_roots,
     ignored_ids = ignore_ids,

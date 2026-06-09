@@ -1,3 +1,10 @@
+# redcapmissing 0.1.5
+
+## 2026-06-09
+
+- Added a `desired_events` argument to `redcap_missing_report()` for subsetting multi-event form assessment to selected REDCap events.
+- Added tests and public documentation for selected-event assessment behavior.
+
 # redcapmissing 0.1.4
 
 ## 2026-06-09

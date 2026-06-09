@@ -8,6 +8,7 @@ redcap_missing_report(
   data,
   rcon,
   form,
+  desired_events = NULL,
   required_fields = TRUE,
   ignore_fields = NULL,
   ignore_ids = NULL,
@@ -30,6 +31,12 @@ information are also read from the connection object.}
 
 \item{form}{Required. A single REDCap form/instrument name to assess. No
 default is supplied so callers must choose the form deliberately.}
+
+\item{desired_events}{Character vector of REDCap event names to assess for
+the requested form, or \code{NULL}. When a form is offered on multiple REDCap
+events, this argument can restrict the report to a selected subset of those
+events. If \code{NULL}, all offered events are assessed. If the form is offered
+on only one event, this argument is ignored. Defaults to \code{NULL}.}
 
 \item{required_fields}{Logical scalar. When \code{TRUE}, only fields marked as
 required in the REDCap metadata \code{required_field} column are assessed. When
@@ -83,6 +90,8 @@ passed and failed repeat contexts.}
 form, including checkbox child export columns.}
 \item{\code{required_fields}}{Whether the report was limited to REDCap-required
 fields.}
+\item{\code{desired_events}}{The REDCap events actually used for assessment, or
+\code{character(0)} when no event restriction applied.}
 \item{\code{expected_repeats}}{The repeat-instance count used for repeating
 forms, or \code{NULL} for non-repeating forms.}
 \item{\code{ignored_fields}}{Root field names skipped because of
@@ -193,6 +202,7 @@ baseline_missing <- redcap_missing_report(
   data = records,
   rcon = rcon,
   form = "baseline_form",
+  desired_events = c("baseline_event", "followup_event"),
   ignore_fields = c("status_flag", "screening_code")
 )
 

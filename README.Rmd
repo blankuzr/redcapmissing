@@ -201,6 +201,29 @@ Why this exists:
   branching logic is open.
 - This is where REDCap-specific missingness behaves most like standard value-level QA.
 
+## Restricting assessment to selected events
+
+When a form is offered on many REDCap events, you can restrict assessment to a
+chosen subset with `desired_events`. If you do not supply it, the function
+defaults to all REDCap events where the form is offered.
+
+```r
+followup_report <- redcap_missing_report(
+  data = records,
+  rcon = rcon,
+  form = "patient_status",
+  desired_events = c(
+    "follow_up_1_arm_1",
+    "follow_up_2_arm_1",
+    "follow_up_3_arm_1"
+  )
+)
+```
+
+This is especially useful in longitudinal REDCap projects where several events
+play the same conceptual role but only a subset should count toward the current
+missingness review.
+
 ## Repeat expectations
 
 For repeating instruments, `expected_repeats` applies a uniform expectation to all assessed record/event contexts.

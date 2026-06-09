@@ -80,8 +80,51 @@
     form_repeats = any(
       .miss_chr_vec(repeat_instrument_event$form_name) == form,
       na.rm = TRUE
-    )
+    ),
+    desired_events = NULL
   )
+}
+
+
+.miss_resolve_desired_events <- function(project, desired_events, form) {
+  offered_events <- union(project$form_events, project$repeat_form_events)
+  offered_events <- unique(offered_events[!.miss_is_blank_vec(offered_events)])
+
+  if (length(offered_events) <= 1) {
+    project$desired_events <- offered_events
+    return(project)
+  }
+
+  if (is.null(desired_events)) {
+    project$desired_events <- offered_events
+    return(project)
+  }
+
+  if (!is.character(desired_events)) {
+    stop("`desired_events` must be NULL or a character vector of REDCap event names.", call. = FALSE)
+  }
+
+  desired_events <- unique(.miss_chr_vec(desired_events))
+  desired_events <- desired_events[!.miss_is_blank_vec(desired_events)]
+  if (length(desired_events) == 0) {
+    stop("`desired_events` must contain at least one non-blank REDCap event name.", call. = FALSE)
+  }
+
+  unknown_events <- setdiff(desired_events, offered_events)
+  if (length(unknown_events) > 0) {
+    stop(
+      "`desired_events` must be a subset of the REDCap events where form `",
+      form,
+      "` is offered. Unknown event(s): ",
+      paste(unknown_events, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  project$form_events <- intersect(project$form_events, desired_events)
+  project$repeat_form_events <- intersect(project$repeat_form_events, desired_events)
+  project$desired_events <- desired_events
+  project
 }
 
 .miss_resolve_expected_repeats <- function(expected_repeats, project, form) {
