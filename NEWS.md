@@ -1,3 +1,9 @@
+# redcapmissing 0.1.8
+
+## 2026-06-10
+
+- Added clearer README and vignette guidance for the recommended `redcapAPI::exportRecordsTyped()` call, including an explicit cast pattern for missingness reports.
+
 # redcapmissing 0.1.7
 
 ## 2026-06-09

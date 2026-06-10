@@ -13,35 +13,65 @@ output: github_document
 
 <img src="man/figures/logo.svg" align="right" width="180" alt="redcapmissing hex logo" />
 
-`redcapmissing` builds branching-aware missingness reports for REDCap record exports.
+`redcapmissing` builds missingness reports for REDCap record exports.
 
-It is designed for REDCap data-quality workflows where expected values depend on project structure, including:
+It is designed for REDCap data-quality workflows where the expectation of a
+field value depends on two logic layers:
 
-- branching logic
-- longitudinal event mapping
-- repeating instruments
-- checkbox semantics
-- whole-form missingness
-- `pointblank` validation summaries and failed-row extracts
+1. REDCap project structure, including:
+   - project metadata
+   - project mapping
+   - repeating instruments
+   - checkbox semantics
+2. External, user-provided constraints that cannot be specified in REDCap,
+   including:
+   - expected number of repeat instances for a given form
+   - expected number or set of REDCap events for a given form
 
 ## Dependency on `redcapAPI`
 
-`redcapmissing` is built on top of [`redcapAPI`](https://github.com/vubiostat/redcapAPI).
-In real workflows, `rcon` is not an arbitrary list-like object: it is ordinarily a
-`redcapAPI::redcapConnection()` object, and `data` is ordinarily created with
-`redcapAPI::exportRecordsTyped()`.
+`redcapmissing` is built on top of and depends heavily on
+[`redcapAPI`](https://github.com/vubiostat/redcapAPI).
+In real workflows, `rcon` is not an arbitrary list-like object: it is
+ordinarily a `redcapAPI::redcapConnection()` object, and `data` is ordinarily
+created with `redcapAPI::exportRecordsTyped()`.
 
 This package depends on `redcapAPI` for REDCap metadata access, form-event
 mapping, repeating-instrument structure, and REDCap-style blank-value handling.
 
+## Recommended typed export
+
+For missingness reports, use an explicit `exportRecordsTyped()` cast so
+branching-logic comparisons stay in REDCap code space while checkbox and system
+fields remain in their raw REDCap export form.
+
+```r
+records <- redcapAPI::exportRecordsTyped(
+  rcon,
+  cast = list(
+    radio = redcapAPI::castCode,
+    dropdown = redcapAPI::castCode,
+    yesno = redcapAPI::castCode,
+    truefalse = redcapAPI::castCode,
+    checkbox = redcapAPI::castRaw,
+    system = redcapAPI::castRaw
+  )
+)
+```
+
+If your project uses additional coded multiple-choice field types, extend this
+same pattern so those fields are also kept in code space.
+
 ## Why use `redcapmissing`?
 
-`redcapmissing` separates REDCap-aware expectation building from auditable validation output:
+`redcapmissing` extends missingness assessment beyond the REDCap metadata alone
+and works around REDCap export behavior to produce informative missingness
+reports:
 
-- `redcapAPI` exposes the REDCap project metadata and structural context.
-- R code determines which record, event, repeat, and field contexts should be checked.
-- `pointblank` records the validation plan and exposes scope-specific summaries.
-- Row-level failures remain easy to extract for correction workflows.
+- `redcapmissing` extends missingness assessment to four scopes:
+  missing field, missing form, missing event, and missing repeat instance.
+- `redcapmissing` uses `pointblank` for validation and summary output.
+- `redcapmissing` returns both row-level failures and scope-level summary output.
 
 ## Installation
 
@@ -61,26 +91,16 @@ Installing `redcapmissing` also installs `redcapAPI` as a package dependency.
 
 ## What the report returns
 
-`redcap_missing_report()` returns a structured list, not just a single table. The
-most commonly used components are:
+`redcap_missing_report()` returns a structured report object that contains a
+standard `pointblank` agent. The most commonly used components are:
 
-- `report$missing`
-  - the row-level failed extract, intended as the main correction queue
 - `report$agent`
-  - the interrogated `pointblank` agent, including validation metadata and the
+  - the interrogated `pointblank` agent, including validation metadata and
     underlying summary counts
-- `report$expected`
-  - the expected field-level rows that were actually assessed after branching
-    logic and filtering
+- `report$missing`
+  - the row-level dataset detailing missingness for the field scope
 - `report$form_missing`, `report$event_missing`, `report$repeat_missing`
-  - the failed rows for the three whole-context missingness scopes
-- `report$form_checks`, `report$event_checks`, `report$repeat_checks`
-  - the full scope-specific check tables, including both passing and failing
-    contexts
-
-This separation matters because REDCap exports can fail at different levels:
-missing event rows, missing repeat-instance rows, wholly blank form rows, and
-ordinary field-level missingness are not the same problem.
+  - the row-level datasets for the three whole-context missingness scopes
 
 ## Summary helper
 
@@ -105,7 +125,7 @@ summary_tbl$agent_summary_html
 
 The example below uses a lightweight synthetic stand-in for a REDCap connection
 so it can run without live REDCap access. In production use, create `rcon` with
-`redcapAPI::redcapConnection()` and export records with
+`redcapAPI::redcapConnection()` and use the typed export pattern shown above for
 `redcapAPI::exportRecordsTyped()`.
 
 ```{r, eval = FALSE}
