@@ -11,43 +11,44 @@
 
 <img src="man/figures/logo.svg" align="right" width="180" alt="redcapmissing hex logo" />
 
-`redcapmissing` builds branching-aware missingness reports for REDCap
+`redcapmissing` builds missingness reports for REDCap
 record exports.
 
-It is designed for REDCap data-quality workflows where expected values
-depend on project structure, including:
+It is designed for REDCap data-quality workflows where the expectation 
+of values for a field is dependant on the following 2 logic layers:
 
-- branching logic
-- longitudinal event mapping
-- repeating instruments
-- checkbox semantics
-- whole-form missingness
-- `pointblank` validation summaries and failed-row extracts
+1. REDCap project structure, including:
+  - project metadata
+  - project mapping
+  - repeating instruments
+  - checkbox semantics
+
+2. External, user provided constraints that cannot be specified in REDCap including:
+  - expected number of repeat instances for a given form
+  - expected number / set of redcap events for a given form
 
 ## Dependency on `redcapAPI`
 
-`redcapmissing` is built on top of
-[`redcapAPI`](https://github.com/vubiostat/redcapAPI). In real
-workflows, `rcon` is not an arbitrary list-like object: it is ordinarily
-a `redcapAPI::redcapConnection()` object, and `data` is ordinarily
+`redcapmissing` is built on top of and depends heavily on
+[`redcapAPI`](https://github.com/vubiostat/redcapAPI).
+
+The main function in this package takes 
+the `redcapAPI::redcapConnection()` rcon object as an argument. 
+All project information is discerned from the supplied rcon object. 
+The data passed to the main function argument `data` is expected to be
 created with `redcapAPI::exportRecordsTyped()`.
 
-This package depends on `redcapAPI` for REDCap metadata access,
-form-event mapping, repeating-instrument structure, and REDCap-style
-blank-value handling.
 
 ## Why use `redcapmissing`?
 
-`redcapmissing` separates REDCap-aware expectation building from
-auditable validation output:
+`redcapmissing` extends functionality for assessing missingness requiring information beyond
+the REDCap project metadata, and works around REDCap export behavior to produce informative 
+missing fields reports from REDCap projects:
 
-- `redcapAPI` exposes the REDCap project metadata and structural
-  context.
-- R code determines which record, event, repeat, and field contexts
-  should be checked.
-- `pointblank` records the validation plan and exposes scope-specific
-  summaries.
-- Row-level failures remain easy to extract for correction workflows.
+- `redcapmissing` extends missingness assessment to 4 scopes
+  (missing field, missing form, missing event, missing repeat instance)
+- `redcapmissing` returns both row-level failures as well as a summary of missingness for all 4 scopes. 
+
 
 ## Installation
 
@@ -68,34 +69,21 @@ dependency.
 
 ## What the report returns
 
-`redcap_missing_report()` returns a structured list, not just a single
-table. The most commonly used components are:
+`redcap_missing_report()` returns a structured list. 
+The most commonly used components are:
 
-- `report$missing`
-  - the row-level failed extract, intended as the main correction queue
 - `report$agent`
   - the interrogated `pointblank` agent, including validation metadata
     and the underlying summary counts
-- `report$expected`
-  - the expected field-level rows that were actually assessed after
-    branching logic and filtering
+- `report$missing`
+  - the row-level dataset detailing missingness for the field scope
 - `report$form_missing`, `report$event_missing`, `report$repeat_missing`
-  - the failed rows for the three whole-context missingness scopes
-- `report$form_checks`, `report$event_checks`, `report$repeat_checks`
-  - the full scope-specific check tables, including both passing and
-    failing contexts
-
-This separation matters because REDCap exports can fail at different
-levels: missing event rows, missing repeat-instance rows, wholly blank
-form rows, and ordinary field-level missingness are not the same
-problem.
+  - the row-level datasets for the three whole-context missingness scopes
 
 ## Summary helper
 
 `redcap_missing_summary()` is a convenience formatter for the
-`pointblank` summary stored inside `report$agent`. It does not replace
-the row-level extracts; it gives a clean evaluation table for reporting
-and review.
+`pointblank` summary stored inside `report$agent`. 
 
 It returns:
 
@@ -215,8 +203,7 @@ Why this exists:
 - A field is only assessed after the package confirms the row context
   exists, the form is not wholly blank, the field is on the requested
   form, and its branching logic is open.
-- This is where REDCap-specific missingness behaves most like standard
-  value-level QA.
+
 
 ## Restricting assessment to selected events
 
@@ -242,17 +229,6 @@ This is especially useful in longitudinal REDCap projects where several
 events play the same conceptual role but only a subset should count
 toward the current missingness review.
 
-If a form is regular on some requested events and repeating on others,
-the package applies scopes by event type:
-
-- regular-form events use the standard `field`, `form_blank`, and
-  `event_absent` logic
-- repeating-instrument events use `field`, `form_blank`, and
-  `repeat_absent` logic
-
-When `expected_repeats` is omitted, the default `1L` assumption is only
-applied for the requested events where the form actually repeats.
-
 ## Repeat expectations
 
 For repeating instruments, `expected_repeats` applies a uniform
@@ -269,9 +245,23 @@ repeat_report <- redcap_missing_report(
 
 This checks that repeat instances `1` and `2` exist everywhere that
 `repeat_form` is expected. The key REDCap detail is that missing repeat
-instances are absent as rows, not merely blank as values.
+instances are absent as rows, not merely blank as values within an existing row.
 `expected_repeats` lets `redcapmissing` create those expected row
 contexts explicitly before comparing them to the export.
+
+## Forms having both repeat and non-repeat instrument context
+
+If a form is regular on some requested events and repeating on others,
+the package applies scopes by event type:
+
+- regular-form events use the standard `field`, `form_blank`, and
+  `event_absent` logic
+- repeating-instrument events use `field`, `form_blank`, and
+  `repeat_absent` logic
+
+When `expected_repeats` is omitted, the default `1L` assumption is only
+applied for the requested events where the form actually repeats. 
+For more details on this scenario, please see the redcapmissing vignette. 
 
 ## Acknowledgement and citation
 
@@ -287,14 +277,12 @@ cite `redcapAPI`.
 > from REDCap projects using the API*. R package version 2.12.0.
 > <https://doi.org/10.5281/zenodo.10564837>
 
-### Current stewardship and project resources
+### Current package ownership and maintanance
 
-Current public stewardship appears under VUMC Biostatistics /
-`vubiostat`, with Shawn Garbett listed as maintainer in current package
-documentation and the upstream project README stating that ownership
-transfer to VUMC Biostatistics is complete.
+The `redcapAPI` package is managed by VUMC Biostatistics / `vubiostat`
+<https://github.com/vubiostat>
 
-Useful current references:
+Useful current `redcapAPI` references:
 
 - VUMC Biostatistics redcapAPI project page and abstract by Savannah
   Obregon, Shawn Garbett, and Benjamin Nutter:
@@ -303,7 +291,7 @@ Useful current references:
   <https://github.com/vubiostat/redcapAPI>
 - Current package site: <https://vubiostat.r-universe.dev/redcapAPI>
 
-## Learn more
+## Learn more about `redcapmissing`
 
 See the package vignette for a fuller synthetic walk-through of
 branching-aware and repeat-aware validation.
