@@ -16,9 +16,9 @@ knitr::opts_chunk$set(
 `redcapmissing` builds branching-aware missingness reports for REDCap record exports.
 
 This package is built on top of `redcapAPI`. In real workflows, callers create
-an `rcon` object with `redcapAPI::redcapConnection()`, export records with
-`redcapAPI::exportRecordsTyped()`, and then pass both objects into
-`redcap_missing_report()`.
+an `rcon` object with `redcapAPI::redcapConnection()`, export records with an
+explicit `redcapAPI::exportRecordsTyped()` cast strategy, and then pass both
+objects into `redcap_missing_report()`.
 
 The examples below are intentionally synthetic so the vignette remains runnable
 without live REDCap credentials or access to a specific REDCap project.
@@ -74,7 +74,9 @@ fake_rcon <- function(metadata, mapping = NULL, repeat_instrument_event = NULL) 
 
 ## Real `redcapAPI` workflow
 
-In routine use, the package expects a `redcapAPI` connection and a typed export:
+In routine use, the package expects a `redcapAPI` connection and a typed export
+that keeps coded branching-logic fields in REDCap code space while leaving
+checkbox and system fields raw:
 
 ```{r, eval = FALSE}
 rcon <- redcapAPI::redcapConnection(
@@ -88,6 +90,7 @@ records <- redcapAPI::exportRecordsTyped(
     radio = redcapAPI::castCode,
     dropdown = redcapAPI::castCode,
     yesno = redcapAPI::castCode,
+    truefalse = redcapAPI::castCode,
     checkbox = redcapAPI::castRaw,
     system = redcapAPI::castRaw
   )
@@ -99,6 +102,10 @@ report <- redcap_missing_report(
   form = "baseline_form"
 )
 ```
+
+If your project uses additional coded multiple-choice field types, extend this
+same pattern so those fields are also kept in code space for downstream
+branching-logic-aware missingness checks.
 
 ## Required and branching-aware field checks
 

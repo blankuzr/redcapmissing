@@ -357,9 +357,9 @@ display: none;
 for REDCap record exports.</p>
 <p>This package is built on top of <code>redcapAPI</code>. In real
 workflows, callers create an <code>rcon</code> object with
-<code>redcapAPI::redcapConnection()</code>, export records with
-<code>redcapAPI::exportRecordsTyped()</code>, and then pass both objects
-into <code>redcap_missing_report()</code>.</p>
+<code>redcapAPI::redcapConnection()</code>, export records with an
+explicit <code>redcapAPI::exportRecordsTyped()</code> cast strategy, and
+then pass both objects into <code>redcap_missing_report()</code>.</p>
 <p>The examples below are intentionally synthetic so the vignette
 remains runnable without live REDCap credentials or access to a specific
 REDCap project.</p>
@@ -419,7 +419,8 @@ fake_rcon &lt;- function(metadata, mapping = NULL, repeat_instrument_event = NUL
 <div id="real-redcapapi-workflow" class="section level2">
 <h2>Real <code>redcapAPI</code> workflow</h2>
 <p>In routine use, the package expects a <code>redcapAPI</code>
-connection and a typed export:</p>
+connection and a typed export that keeps coded branching-logic fields in
+REDCap code space while leaving checkbox and system fields raw:</p>
 <pre class="r"><code>rcon &lt;- redcapAPI::redcapConnection(
   url = Sys.getenv(&quot;REDCAP_API_URL&quot;),
   token = Sys.getenv(&quot;REDCAP_API_TOKEN&quot;)
@@ -431,6 +432,7 @@ records &lt;- redcapAPI::exportRecordsTyped(
     radio = redcapAPI::castCode,
     dropdown = redcapAPI::castCode,
     yesno = redcapAPI::castCode,
+    truefalse = redcapAPI::castCode,
     checkbox = redcapAPI::castRaw,
     system = redcapAPI::castRaw
   )
@@ -441,6 +443,9 @@ report &lt;- redcap_missing_report(
   rcon = rcon,
   form = &quot;baseline_form&quot;
 )</code></pre>
+<p>If your project uses additional coded multiple-choice field types,
+extend this same pattern so those fields are also kept in code space for
+downstream branching-logic-aware missingness checks.</p>
 </div>
 <div id="required-and-branching-aware-field-checks" class="section level2">
 <h2>Required and branching-aware field checks</h2>
@@ -467,7 +472,7 @@ report &lt;- redcap_missing_report(
 report$missing[, c(&quot;record_id&quot;, &quot;field_name&quot;, &quot;missing_scope&quot;)]
 #&gt; # A tibble: 1 × 3
 #&gt;   record_id field_name       missing_scope
-#&gt;   &lt;chr&gt;     &lt;chr&gt;            &lt;chr&gt;        
+#&gt;   &lt;chr&gt;     &lt;chr&gt;            &lt;chr&gt;
 #&gt; 1 r1        conditional_note field</code></pre>
 </div>
 <div id="restricting-a-form-to-selected-events" class="section level2">
@@ -576,7 +581,7 @@ repeat_report &lt;- redcap_missing_report(
 repeat_report$repeat_missing[, c(&quot;record_id&quot;, &quot;redcap_repeat_instance&quot;, &quot;missing_scope&quot;)]
 #&gt; # A tibble: 1 × 3
 #&gt;   record_id redcap_repeat_instance missing_scope
-#&gt;   &lt;chr&gt;     &lt;chr&gt;                  &lt;chr&gt;        
+#&gt;   &lt;chr&gt;     &lt;chr&gt;                  &lt;chr&gt;
 #&gt; 1 r1        2                      repeat_absent</code></pre>
 </div>
 <div id="inspecting-the-return-object" class="section level2">
