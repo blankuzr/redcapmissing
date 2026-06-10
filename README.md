@@ -47,6 +47,7 @@ missing fields reports from REDCap projects:
 
 - `redcapmissing` extends missingness assessment to 4 scopes
   (missing field, missing form, missing event, missing repeat instance)
+- `redcapmissing` utilizes the `pointblank` package for validation and summary outputs
 - `redcapmissing` returns both row-level failures as well as a summary of missingness for all 4 scopes. 
 
 
@@ -69,7 +70,7 @@ dependency.
 
 ## What the report returns
 
-`redcap_missing_report()` returns a structured list. 
+`redcap_missing_report()` returns a standard `pointblank` object.
 The most commonly used components are:
 
 - `report$agent`
