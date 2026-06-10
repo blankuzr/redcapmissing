@@ -266,11 +266,13 @@ For more details on this scenario, please see the redcapmissing vignette.
 
 ## Acknowledgement and citation
 
+### `redcapAPI`
+
 This package relies heavily on `redcapAPI` and would not be practical
 without it. If `redcapmissing` contributes to your work, please also
 cite `redcapAPI`.
 
-### Foundational package citation
+#### Foundational package citation
 
 > Nutter B, Garbett S, Obregon S, Obadia T, Lehr M, High B, Lane S,
 > Beasley W, Gray W, Kennedy N, Hsi-Nien T, Horner J, Stephens J, Beck
@@ -278,7 +280,7 @@ cite `redcapAPI`.
 > from REDCap projects using the API*. R package version 2.12.0.
 > <https://doi.org/10.5281/zenodo.10564837>
 
-### Current package ownership and maintanance
+#### Current package ownership and maintanance
 
 The `redcapAPI` package is managed by VUMC Biostatistics / `vubiostat`
 <https://github.com/vubiostat>
@@ -292,10 +294,28 @@ Useful current `redcapAPI` references:
   <https://github.com/vubiostat/redcapAPI>
 - Current package site: <https://vubiostat.r-universe.dev/redcapAPI>
 
+### `pointblank`
+
+This package relies on `pointblank` for validating missingness
+as well as standardizing return summaries and row-level flags. 
+
+#### Current package ownership and maintenance
+
+The `pointblank` R package can be found here <https://github.com/rstudio/pointblank>
+
+Useful current `pointblank` references:
+
+- Python package
+  <https://github.com/posit-dev/pointblank>
+  <https://posit-dev.github.io/pointblank/>
+- R package:
+  <https://github.com/rstudio/pointblank>
+  <https://rstudio.github.io/pointblank/>
+- Current package site: <https://vubiostat.r-universe.dev/redcapAPI>
+
 ## Learn more about `redcapmissing`
 
-See the package vignette for a fuller synthetic walk-through of
-branching-aware and repeat-aware validation.
+See the package vignette for more use case examples
 
 ## Development
 
