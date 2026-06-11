@@ -1,3 +1,9 @@
+# redcapmissing 0.1.12
+
+## 2026-06-11
+
+- Shortened the README opening language to describe `redcapmissing` as an R package for working with REDCap, without the extra record-export phrasing.
+
 # redcapmissing 0.1.11
 
 ## 2026-06-11
