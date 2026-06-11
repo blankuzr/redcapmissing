@@ -1,3 +1,10 @@
+# redcapmissing 0.1.11
+
+## 2026-06-11
+
+- Refreshed the package logo with a cleaner centered upside-down tree motif while preserving the existing background palette.
+- Updated the README opening language to clarify that `redcapmissing` is an R package for working with REDCap record exports.
+
 # redcapmissing 0.1.10
 
 ## 2026-06-11
