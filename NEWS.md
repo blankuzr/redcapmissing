@@ -1,3 +1,9 @@
+# redcapmissing 0.1.10
+
+## 2026-06-11
+
+- Restored the README acknowledgement structure for both `redcapAPI` and `pointblank`, including a dedicated `pointblank` references section in the source `README.Rmd`.
+
 # redcapmissing 0.1.9
 
 ## 2026-06-11
