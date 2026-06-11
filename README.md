@@ -11,10 +11,11 @@
 
 <img src="man/figures/logo.svg" align="right" width="180" alt="redcapmissing hex logo" />
 
-`redcapmissing` builds missingness reports for REDCap record exports.
+`redcapmissing` is an R package for working with REDCap record exports
+and building missingness reports.
 
-It is designed for REDCap data-quality workflows where the expectation
-of a field value depends on two logic layers:
+It is designed for REDCap data-quality workflows in R where the
+expectation of a field value depends on two logic layers:
 
 1.  REDCap project structure, including:
     - project metadata
