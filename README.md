@@ -293,11 +293,13 @@ contexts explicitly before comparing them to the export.
 
 ## Acknowledgement and citation
 
+### `redcapAPI`
+
 This package relies heavily on `redcapAPI` and would not be practical
 without it. If `redcapmissing` contributes to your work, please also
 cite `redcapAPI`.
 
-### Foundational package citation
+#### Foundational package citation
 
 > Nutter B, Garbett S, Obregon S, Obadia T, Lehr M, High B, Lane S,
 > Beasley W, Gray W, Kennedy N, Hsi-Nien T, Horner J, Stephens J, Beck
@@ -305,14 +307,14 @@ cite `redcapAPI`.
 > from REDCap projects using the API*. R package version 2.12.0.
 > <https://doi.org/10.5281/zenodo.10564837>
 
-### Current stewardship and project resources
+#### Current package ownership and maintenance
 
 Current public stewardship appears under VUMC Biostatistics /
 `vubiostat`, with Shawn Garbett listed as maintainer in current package
 documentation and the upstream project README stating that ownership
 transfer to VUMC Biostatistics is complete.
 
-Useful current references:
+Useful current `redcapAPI` references:
 
 - VUMC Biostatistics redcapAPI project page and abstract by Savannah
   Obregon, Shawn Garbett, and Benjamin Nutter:
@@ -320,6 +322,21 @@ Useful current references:
 - Current GitHub repository for the package:
   <https://github.com/vubiostat/redcapAPI>
 - Current package site: <https://vubiostat.r-universe.dev/redcapAPI>
+
+### `pointblank`
+
+This package relies on `pointblank` for validating missingness,
+standardizing return summaries, and exposing row-level flags.
+
+#### Current package resources
+
+Useful current `pointblank` references:
+
+- R package GitHub repository: <https://github.com/rstudio/pointblank>
+- R package site: <https://rstudio.github.io/pointblank/>
+- Python package GitHub repository:
+  <https://github.com/posit-dev/pointblank>
+- Python package site: <https://posit-dev.github.io/pointblank/>
 
 ## Learn more
 
