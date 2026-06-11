@@ -29,10 +29,13 @@ of a field value depends on two logic layers:
 ## Dependency on `redcapAPI`
 
 `redcapmissing` is built on top of and depends heavily on
-[`redcapAPI`](https://github.com/vubiostat/redcapAPI). In real
-workflows, `rcon` is not an arbitrary list-like object: it is ordinarily
-a `redcapAPI::redcapConnection()` object, and `data` is ordinarily
-created with `redcapAPI::exportRecordsTyped()`.
+[`redcapAPI`](https://github.com/vubiostat/redcapAPI).
+
+The main function in this package takes a
+`redcapAPI::redcapConnection()` object as `rcon`. All project
+information is discerned from the supplied `rcon` object. The `data`
+argument is expected to be created with
+`redcapAPI::exportRecordsTyped()`.
 
 This package depends on `redcapAPI` for REDCap metadata access,
 form-event mapping, repeating-instrument structure, and REDCap-style
@@ -63,13 +66,14 @@ extend this same pattern so those fields are also kept in code space.
 
 ## Why use `redcapmissing`?
 
-`redcapmissing` extends missingness assessment beyond the REDCap
-metadata alone and works around REDCap export behavior to produce
-informative missingness reports:
+`redcapmissing` extends missingness assessment beyond the REDCap project
+metadata and works around REDCap export behavior to produce informative
+missingness reports from REDCap projects:
 
 - `redcapmissing` extends missingness assessment to four scopes: missing
   field, missing form, missing event, and missing repeat instance.
-- `redcapmissing` uses `pointblank` for validation and summary output.
+- `redcapmissing` uses the `pointblank` package for validation plans and
+  summary output.
 - `redcapmissing` returns both row-level failures and scope-level
   summary output.
 
@@ -92,9 +96,8 @@ dependency.
 
 ## What the report returns
 
-`redcap_missing_report()` returns a structured report object that
-contains a standard `pointblank` agent. The most commonly used
-components are:
+`redcap_missing_report()` returns a structured report object centered on
+a standard `pointblank` agent. The most commonly used components are:
 
 - `report$agent`
   - the interrogated `pointblank` agent, including validation metadata

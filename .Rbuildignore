@@ -7,3 +7,9 @@
 ^LICENSE\.md$
 ^README\.Rmd$
 ^vignettes/.*\.html$
+^Data Requests$
+^Redcap Project Information$
+^\.github$
+^\.gitignore$
+^\.github/.*$
+^\.git$
