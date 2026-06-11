@@ -4,3 +4,11 @@ LOG.md
 .here
 src/
 .Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+output/
+*.tar.gz
+*.Rcheck/
+.DS_Store

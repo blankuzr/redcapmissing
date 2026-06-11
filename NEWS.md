@@ -1,3 +1,10 @@
+# redcapmissing 0.1.9
+
+## 2026-06-11
+
+- Completed `.Rbuildignore` and `.gitignore` with additional package and local-workspace exclusions.
+- Restored concise README source wording in `README.Rmd`, including direct acknowledgment of `pointblank`, so the generated `README.md` preserves the intended public package language.
+
 # redcapmissing 0.1.8
 
 ## 2026-06-10
