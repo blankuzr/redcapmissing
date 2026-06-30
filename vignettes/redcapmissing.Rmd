@@ -18,7 +18,7 @@ knitr::opts_chunk$set(
 This package is built on top of `redcapAPI`. In real workflows, callers create
 an `rcon` object with `redcapAPI::redcapConnection()`, export records with an
 explicit `redcapAPI::exportRecordsTyped()` cast strategy, and then pass both
-objects into `redcap_missing_report()`.
+objects into `find_missing()`.
 
 The examples below are intentionally synthetic so the vignette remains runnable
 without live REDCap credentials or access to a specific REDCap project.
@@ -96,7 +96,7 @@ records <- redcapAPI::exportRecordsTyped(
   )
 )
 
-report <- redcap_missing_report(
+report <- find_missing(
   data = records,
   rcon = rcon,
   form = "baseline_form"
@@ -124,7 +124,7 @@ records <- tibble::tibble(
   conditional_note = c("", "")
 )
 
-report <- redcap_missing_report(
+report <- find_missing(
   data = records,
   rcon = fake_rcon(metadata),
   form = "baseline_form"
@@ -140,7 +140,7 @@ Some REDCap projects use many events of the same general type. In those cases,
 should count for the current review.
 
 ```{r, eval = FALSE}
-followup_report <- redcap_missing_report(
+followup_report <- find_missing(
   data = records,
   rcon = rcon,
   form = "patient_status",
@@ -181,7 +181,7 @@ Operationally, that means:
   contexts
 
 ```{r, eval = FALSE}
-mixed_report <- redcap_missing_report(
+mixed_report <- find_missing(
   data = records,
   rcon = rcon,
   form = "patient_status",
@@ -231,7 +231,7 @@ repeat_records <- tibble::tibble(
   repeat_value = c("10", "20", "30")
 )
 
-repeat_report <- redcap_missing_report(
+repeat_report <- find_missing(
   data = repeat_records,
   rcon = fake_rcon(repeat_metadata, mapping = mapping, repeat_instrument_event = repeat_map),
   form = "repeat_form",

@@ -1,12 +1,15 @@
 #' Build a branching-aware REDCap missing-field report
 #'
 #' @description
-#' `redcap_missing_report()` checks whether expected REDCap fields are present
+#' `find_missing()` checks whether expected REDCap fields are present
 #' for a single instrument/form. Expected fields are determined from REDCap
 #' project metadata and project structure supplied through a
 #' `redcapAPI::redcapConnection()` workflow.
 #'
 #' @details
+#' `find_missing()` is the canonical report-building function.
+#' `redcap_missing_report()` is deprecated and delegates to `find_missing()`.
+#'
 #' A field is expected when it is on the requested form and, if it has REDCap
 #' branching logic, that branching logic evaluates to `TRUE` for the record row.
 #' Fields without branching logic are always expected on rows where the form is
@@ -184,7 +187,7 @@
 #'   )
 #' )
 #'
-#' baseline_missing <- redcap_missing_report(
+#' baseline_missing <- find_missing(
 #'   data = records,
 #'   rcon = rcon,
 #'   form = "baseline_form",
@@ -195,7 +198,7 @@
 #' baseline_missing$agent
 #' baseline_missing$missing
 #'
-#' repeat_missing <- redcap_missing_report(
+#' repeat_missing <- find_missing(
 #'   data = records,
 #'   rcon = rcon,
 #'   form = "repeat_form",
@@ -204,7 +207,7 @@
 #' }
 #'
 #' @export
-redcap_missing_report <- function(
+find_missing <- function(
   data,
   rcon,
   form,
@@ -468,4 +471,45 @@ redcap_missing_report <- function(
   )
   class(out) <- "redcapmissing"
   out
+}
+
+#' @rdname find_missing
+#' @export
+redcap_missing_report <- function(
+  data,
+  rcon,
+  form,
+  desired_events = NULL,
+  required_fields = TRUE,
+  ignore_fields = NULL,
+  ignore_ids = NULL,
+  exclude_types = "descriptive",
+  expected_repeats = NULL
+) {
+  .Deprecated("find_missing", package = "redcapmissing")
+
+  if (missing(form)) {
+    find_missing(
+      data = data,
+      rcon = rcon,
+      desired_events = desired_events,
+      required_fields = required_fields,
+      ignore_fields = ignore_fields,
+      ignore_ids = ignore_ids,
+      exclude_types = exclude_types,
+      expected_repeats = expected_repeats
+    )
+  } else {
+    find_missing(
+      data = data,
+      rcon = rcon,
+      form = form,
+      desired_events = desired_events,
+      required_fields = required_fields,
+      ignore_fields = ignore_fields,
+      ignore_ids = ignore_ids,
+      exclude_types = exclude_types,
+      expected_repeats = expected_repeats
+    )
+  }
 }

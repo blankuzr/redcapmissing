@@ -90,7 +90,7 @@ dependency.
 
 ## Core functions
 
-- `redcap_missing_report()`
+- `find_missing()`
   - build a missingness report for one REDCap form/instrument
 - `summary()`
   - return the unmodified `pointblank` validation summary from a report
@@ -100,10 +100,13 @@ dependency.
 - `flex_html()`
   - render a `flextable` summary as an HTML string
 
+`redcap_missing_report()` remains available as a deprecated
+compatibility alias for `find_missing()`.
+
 ## What the report returns
 
-`redcap_missing_report()` returns a structured report object centered on
-a standard `pointblank` agent. The most commonly used components are:
+`find_missing()` returns a structured report object centered on a
+standard `pointblank` agent. The most commonly used components are:
 
 - `report$agent`
   - the interrogated `pointblank` agent, including validation metadata
@@ -160,7 +163,7 @@ records <- tibble::tibble(
   conditional_note = c("", "")
 )
 
-report <- redcap_missing_report(
+report <- find_missing(
   data = records,
   rcon = rcon,
   form = "baseline_form"
@@ -246,7 +249,7 @@ supply it, the function defaults to all REDCap events where the form is
 offered.
 
 ``` r
-followup_report <- redcap_missing_report(
+followup_report <- find_missing(
   data = records,
   rcon = rcon,
   form = "patient_status",
@@ -279,7 +282,7 @@ For repeating instruments, `expected_repeats` applies a uniform
 expectation to all assessed record/event contexts.
 
 ``` r
-repeat_report <- redcap_missing_report(
+repeat_report <- find_missing(
   data = records,
   rcon = rcon,
   form = "repeat_form",
