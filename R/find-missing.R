@@ -7,9 +7,6 @@
 #' `redcapAPI::redcapConnection()` workflow.
 #'
 #' @details
-#' `find_missing()` is the canonical report-building function.
-#' `redcap_missing_report()` is deprecated and delegates to `find_missing()`.
-#'
 #' A field is expected when it is on the requested form and, if it has REDCap
 #' branching logic, that branching logic evaluates to `TRUE` for the record row.
 #' Fields without branching logic are always expected on rows where the form is
@@ -471,45 +468,4 @@ find_missing <- function(
   )
   class(out) <- "redcapmissing"
   out
-}
-
-#' @rdname find_missing
-#' @export
-redcap_missing_report <- function(
-  data,
-  rcon,
-  form,
-  desired_events = NULL,
-  required_fields = TRUE,
-  ignore_fields = NULL,
-  ignore_ids = NULL,
-  exclude_types = "descriptive",
-  expected_repeats = NULL
-) {
-  .Deprecated("find_missing", package = "redcapmissing")
-
-  if (missing(form)) {
-    find_missing(
-      data = data,
-      rcon = rcon,
-      desired_events = desired_events,
-      required_fields = required_fields,
-      ignore_fields = ignore_fields,
-      ignore_ids = ignore_ids,
-      exclude_types = exclude_types,
-      expected_repeats = expected_repeats
-    )
-  } else {
-    find_missing(
-      data = data,
-      rcon = rcon,
-      form = form,
-      desired_events = desired_events,
-      required_fields = required_fields,
-      ignore_fields = ignore_fields,
-      ignore_ids = ignore_ids,
-      exclude_types = exclude_types,
-      expected_repeats = expected_repeats
-    )
-  }
 }

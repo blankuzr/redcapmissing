@@ -1,3 +1,10 @@
+# redcapmissing 0.4.0
+
+## 2026-06-30
+
+- Removed the `redcap_missing_report()` compatibility function. `find_missing()`
+  is now the only exported report-building function.
+
 # redcapmissing 0.3.0
 
 ## 2026-06-30

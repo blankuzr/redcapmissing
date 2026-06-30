@@ -21,47 +21,9 @@ test_that("public report API is stable", {
   expect_null(report_args$ignore_fields)
   expect_null(report_args$ignore_ids)
   expect_null(report_args$expected_repeats)
-  expect_true(is.function(redcap_missing_report))
-  expect_identical(names(formals(redcap_missing_report)), names(report_args))
-  expect_true(all(
-    c("find_missing", "redcap_missing_report") %in%
-      getNamespaceExports("redcapmissing")
-  ))
+  expect_true("find_missing" %in% getNamespaceExports("redcapmissing"))
+  expect_false("redcap_missing_report" %in% getNamespaceExports("redcapmissing"))
   expect_false("redcap_missing_summary" %in% getNamespaceExports("redcapmissing"))
-})
-
-test_that("deprecated report API delegates to find_missing", {
-  records <- tibble::tibble(
-    record_id = c("r1", "r2"),
-    branch_flag = c("1", "0"),
-    required_note = c("entered", "entered"),
-    optional_note = c("", ""),
-    checkbox_field___1 = c("1", "1"),
-    checkbox_field___2 = c("0", "0"),
-    checkbox_other = c("", ""),
-    conditional_note = c("", "")
-  )
-
-  canonical_report <- find_missing(
-    data = records,
-    rcon = fake_rcon(baseline_form_meta()),
-    form = "baseline_form",
-    required_fields = FALSE
-  )
-  expect_warning(
-    deprecated_report <- redcap_missing_report(
-      data = records,
-      rcon = fake_rcon(baseline_form_meta()),
-      form = "baseline_form",
-      required_fields = FALSE
-    ),
-    "deprecated"
-  )
-
-  expect_identical(deprecated_report$missing, canonical_report$missing)
-  expect_identical(deprecated_report$expected, canonical_report$expected)
-  expect_identical(deprecated_report$form, canonical_report$form)
-  expect_identical(deprecated_report$id_col, canonical_report$id_col)
 })
 
 test_that("branch-open fields fail and branch-closed fields are not expected", {

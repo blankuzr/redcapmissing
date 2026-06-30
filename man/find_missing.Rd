@@ -2,22 +2,9 @@
 % Please edit documentation in R/find-missing.R
 \name{find_missing}
 \alias{find_missing}
-\alias{redcap_missing_report}
 \title{Build a branching-aware REDCap missing-field report}
 \usage{
 find_missing(
-  data,
-  rcon,
-  form,
-  desired_events = NULL,
-  required_fields = TRUE,
-  ignore_fields = NULL,
-  ignore_ids = NULL,
-  exclude_types = "descriptive",
-  expected_repeats = NULL
-)
-
-redcap_missing_report(
   data,
   rcon,
   form,
@@ -128,9 +115,6 @@ project metadata and project structure supplied through a
 \code{redcapAPI::redcapConnection()} workflow.
 }
 \details{
-\code{find_missing()} is the canonical report-building function.
-\code{redcap_missing_report()} is deprecated and delegates to \code{find_missing()}.
-
 A field is expected when it is on the requested form and, if it has REDCap
 branching logic, that branching logic evaluates to \code{TRUE} for the record row.
 Fields without branching logic are always expected on rows where the form is
