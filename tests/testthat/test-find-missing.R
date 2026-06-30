@@ -1,5 +1,5 @@
 test_that("public report API is stable", {
-  report_args <- formals(redcap_missing_report)
+  report_args <- formals(find_missing)
 
   expect_setequal(
     names(report_args),
@@ -21,9 +21,47 @@ test_that("public report API is stable", {
   expect_null(report_args$ignore_fields)
   expect_null(report_args$ignore_ids)
   expect_null(report_args$expected_repeats)
-  expect_true(is.function(flex))
-  expect_true(is.function(flex_html))
+  expect_true(is.function(redcap_missing_report))
+  expect_identical(names(formals(redcap_missing_report)), names(report_args))
+  expect_true(all(
+    c("find_missing", "redcap_missing_report") %in%
+      getNamespaceExports("redcapmissing")
+  ))
   expect_false("redcap_missing_summary" %in% getNamespaceExports("redcapmissing"))
+})
+
+test_that("deprecated report API delegates to find_missing", {
+  records <- tibble::tibble(
+    record_id = c("r1", "r2"),
+    branch_flag = c("1", "0"),
+    required_note = c("entered", "entered"),
+    optional_note = c("", ""),
+    checkbox_field___1 = c("1", "1"),
+    checkbox_field___2 = c("0", "0"),
+    checkbox_other = c("", ""),
+    conditional_note = c("", "")
+  )
+
+  canonical_report <- find_missing(
+    data = records,
+    rcon = fake_rcon(baseline_form_meta()),
+    form = "baseline_form",
+    required_fields = FALSE
+  )
+  expect_warning(
+    deprecated_report <- redcap_missing_report(
+      data = records,
+      rcon = fake_rcon(baseline_form_meta()),
+      form = "baseline_form",
+      required_fields = FALSE
+    ),
+    "deprecated"
+  )
+
+  expect_identical(deprecated_report$missing, canonical_report$missing)
+  expect_identical(deprecated_report$expected, canonical_report$expected)
+  expect_identical(deprecated_report$form, canonical_report$form)
+  expect_identical(deprecated_report$id_col, canonical_report$id_col)
 })
 
 test_that("branch-open fields fail and branch-closed fields are not expected", {
@@ -38,7 +76,7 @@ test_that("branch-open fields fail and branch-closed fields are not expected", {
     conditional_note = c("", "")
   )
 
-  report <- redcap_missing_report(
+  report <- find_missing(
     data = records,
     rcon = fake_rcon(baseline_form_meta()),
     form = "baseline_form",
@@ -62,12 +100,12 @@ test_that("required fields and excluded types are applied in the expected order"
     conditional_note = ""
   )
 
-  required_report <- redcap_missing_report(
+  required_report <- find_missing(
     data = records,
     rcon = fake_rcon(baseline_form_meta()),
     form = "baseline_form"
   )
-  all_field_report <- redcap_missing_report(
+  all_field_report <- find_missing(
     data = records,
     rcon = fake_rcon(baseline_form_meta()),
     form = "baseline_form",
@@ -93,7 +131,7 @@ test_that("ignore fields and ignore ids are applied before assessment", {
     conditional_note = c("", "")
   )
 
-  report <- redcap_missing_report(
+  report <- find_missing(
     data = records,
     rcon = fake_rcon(baseline_form_meta()),
     form = "baseline_form",
@@ -120,7 +158,7 @@ test_that("whole-form blank rows are reported once per form context", {
     conditional_note = c("", "")
   )
 
-  report <- redcap_missing_report(
+  report <- find_missing(
     data = records,
     rcon = fake_rcon(baseline_form_meta()),
     form = "baseline_form",
@@ -164,12 +202,12 @@ test_that("event-qualified branching and missing event rows are handled", {
     follow_note = c("", "", "entered", "", "entered")
   )
 
-  baseline_report <- redcap_missing_report(
+  baseline_report <- find_missing(
     data = records,
     rcon = fake_rcon(event_meta, mapping = mapping),
     form = "baseline_form"
   )
-  followup_report <- redcap_missing_report(
+  followup_report <- find_missing(
     data = records,
     rcon = fake_rcon(event_meta, mapping = mapping),
     form = "followup_form"
@@ -207,7 +245,7 @@ test_that("repeat expectations create repeat-instance checks with scoped denomin
     repeat_value = c("10", "20", "30")
   )
 
-  explicit_report <- redcap_missing_report(
+  explicit_report <- find_missing(
     data = records,
     rcon = fake_rcon(
       repeat_meta,
@@ -219,7 +257,7 @@ test_that("repeat expectations create repeat-instance checks with scoped denomin
   )
 
   expect_warning(
-    default_report <- redcap_missing_report(
+    default_report <- find_missing(
       data = records,
       rcon = fake_rcon(
         repeat_meta,
@@ -258,7 +296,7 @@ test_that("checkbox roots are present when any child is selected", {
     conditional_note = ""
   )
 
-  report <- redcap_missing_report(
+  report <- find_missing(
     data = records,
     rcon = fake_rcon(baseline_form_meta()),
     form = "baseline_form",
@@ -292,12 +330,12 @@ test_that("desired_events restrict multi-event assessment and defaults to all of
     status_value = c("entered", "")
   )
 
-  report_all <- redcap_missing_report(
+  report_all <- find_missing(
     data = records,
     rcon = fake_rcon(status_meta, mapping = mapping),
     form = "status_form"
   )
-  report_subset <- redcap_missing_report(
+  report_subset <- find_missing(
     data = records,
     rcon = fake_rcon(status_meta, mapping = mapping),
     form = "status_form",
@@ -335,12 +373,12 @@ test_that("desired_events is ignored for single-event forms", {
     status_value = ""
   )
 
-  report_default <- redcap_missing_report(
+  report_default <- find_missing(
     data = records,
     rcon = fake_rcon(status_meta, mapping = mapping),
     form = "status_form"
   )
-  report_ignored <- redcap_missing_report(
+  report_ignored <- find_missing(
     data = records,
     rcon = fake_rcon(status_meta, mapping = mapping),
     form = "status_form",
@@ -368,7 +406,7 @@ test_that("desired_events must match offered events for multi-event forms", {
   )
 
   expect_error(
-    redcap_missing_report(
+    find_missing(
       data = records,
       rcon = fake_rcon(status_meta, mapping = mapping),
       form = "status_form",
@@ -403,7 +441,7 @@ test_that("mixed repeat and non-repeat forms only apply repeat logic on repeatin
   )
 
   expect_warning(
-    report <- redcap_missing_report(
+    report <- find_missing(
       data = records,
       rcon = fake_rcon(
         mixed_meta,
@@ -445,7 +483,7 @@ test_that("non-repeating desired events do not trigger repeat-instance logic for
     mixed_value = "entered"
   )
 
-  report <- redcap_missing_report(
+  report <- find_missing(
     data = records,
     rcon = fake_rcon(
       mixed_meta,
@@ -485,7 +523,7 @@ test_that("expected_repeats is ignored when desired events exclude repeating con
   )
 
   expect_warning(
-    report <- redcap_missing_report(
+    report <- find_missing(
       data = records,
       rcon = fake_rcon(
         mixed_meta,
@@ -501,103 +539,4 @@ test_that("expected_repeats is ignored when desired events exclude repeating con
 
   expect_identical(report$expected_repeats, NULL)
   expect_equal(nrow(report$repeat_checks), 0)
-})
-
-test_that("summary returns the unmodified validation-set tibble", {
-  records <- tibble::tibble(
-    record_id = "r1",
-    branch_flag = "0",
-    required_note = "",
-    optional_note = "",
-    checkbox_field___1 = "1",
-    checkbox_field___2 = "0",
-    checkbox_other = "",
-    conditional_note = ""
-  )
-
-  report <- redcap_missing_report(
-    data = records,
-    rcon = fake_rcon(baseline_form_meta()),
-    form = "baseline_form"
-  )
-
-  summary_tbl <- summary(report)
-  validation_set <- report$agent$validation_set
-
-  expect_s3_class(summary_tbl, "summary.redcapmissing")
-  expect_s3_class(summary_tbl, "tbl_df")
-  expect_identical(names(summary_tbl), names(validation_set))
-  expect_identical(lapply(summary_tbl, class), lapply(validation_set, class))
-  expect_identical(unclass(summary_tbl), unclass(validation_set))
-})
-
-test_that("summary print method delegates to tibble printing", {
-  records <- tibble::tibble(
-    record_id = "r1",
-    branch_flag = "0",
-    required_note = "",
-    optional_note = "",
-    checkbox_field___1 = "1",
-    checkbox_field___2 = "0",
-    checkbox_other = "",
-    conditional_note = ""
-  )
-
-  report <- redcap_missing_report(
-    data = records,
-    rcon = fake_rcon(baseline_form_meta()),
-    form = "baseline_form"
-  )
-  summary_tbl <- summary(report)
-
-  expect_output(
-    print_return <- print(summary_tbl),
-    "# A tibble"
-  )
-  expect_identical(print_return, summary_tbl)
-})
-
-test_that("summary and flex helpers reject invalid inputs", {
-  expect_error(
-    redcapmissing:::summary.redcapmissing(list()),
-    "`object` must be a `redcapmissing` object"
-  )
-  expect_error(
-    flex(list()),
-    "no applicable method"
-  )
-  expect_error(
-    flex_html(list()),
-    "`x` must be a `flextable` object"
-  )
-})
-
-test_that("flex helpers return formatted table and HTML when optional packages are available", {
-  testthat::skip_if_not_installed("flextable")
-  testthat::skip_if_not_installed("glue")
-  testthat::skip_if_not_installed("htmltools")
-
-  records <- tibble::tibble(
-    record_id = "r1",
-    branch_flag = "0",
-    required_note = "",
-    optional_note = "",
-    checkbox_field___1 = "1",
-    checkbox_field___2 = "0",
-    checkbox_other = "",
-    conditional_note = ""
-  )
-
-  report <- redcap_missing_report(
-    data = records,
-    rcon = fake_rcon(baseline_form_meta()),
-    form = "baseline_form"
-  )
-
-  flex_out <- flex(report)
-  html_out <- flex_html(flex_out)
-
-  expect_s3_class(flex_out, "flextable")
-  expect_type(html_out, "character")
-  expect_true(nchar(html_out) > 0)
 })

@@ -14,7 +14,7 @@ validation surfaces.
 \code{redcapmissing} is built on top of the \code{redcapAPI} package. In routine use,
 callers create a \code{redcapAPI::redcapConnection()} object, export typed
 records with \code{redcapAPI::exportRecordsTyped()}, and then pass both the
-exported data and the connection object into \code{\link[=redcap_missing_report]{redcap_missing_report()}}.
+exported data and the connection object into \code{\link[=find_missing]{find_missing()}}.
 
 This package depends on \code{redcapAPI} for REDCap-aware project metadata, form
 mapping, repeating-instrument structure, and REDCap-style blank-value
@@ -37,7 +37,7 @@ Savannah Obregon, Shawn Garbett, and Benjamin Nutter.
 \url{https://github.com/vubiostat/redcapAPI}.
 }
 \seealso{
-\code{\link[=redcap_missing_report]{redcap_missing_report()}}, \code{\link[=summary.redcapmissing]{summary.redcapmissing()}}, \code{\link[=flex]{flex()}},
+\code{\link[=find_missing]{find_missing()}}, \code{\link[=summary.redcapmissing]{summary.redcapmissing()}}, \code{\link[=flex]{flex()}},
 \code{\link[=flex_html]{flex_html()}},
 \code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}
 }

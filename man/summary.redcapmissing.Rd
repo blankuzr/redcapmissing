@@ -8,7 +8,7 @@
 }
 \arguments{
 \item{object}{A \code{redcapmissing} object created by
-\code{\link[=redcap_missing_report]{redcap_missing_report()}}.}
+\code{\link[=find_missing]{find_missing()}}.}
 
 \item{...}{Unused.}
 }
@@ -18,6 +18,6 @@ The report's \code{agent$validation_set} tibble with an additional
 }
 \description{
 \code{summary()} returns the unmodified \code{pointblank} validation set stored inside
-a \code{redcap_missing_report()} result. No columns are selected, renamed,
+a \code{find_missing()} result. No columns are selected, renamed,
 rounded, or otherwise changed.
 }

@@ -8,7 +8,7 @@
 #' `redcapmissing` is built on top of the `redcapAPI` package. In routine use,
 #' callers create a `redcapAPI::redcapConnection()` object, export typed
 #' records with `redcapAPI::exportRecordsTyped()`, and then pass both the
-#' exported data and the connection object into [redcap_missing_report()].
+#' exported data and the connection object into [find_missing()].
 #'
 #' This package depends on `redcapAPI` for REDCap-aware project metadata, form
 #' mapping, repeating-instrument structure, and REDCap-style blank-value
@@ -16,7 +16,7 @@
 #' but current public stewardship and development resources now live under the
 #' VUMC Biostatistics `vubiostat/redcapAPI` project.
 #'
-#' @seealso [redcap_missing_report()], [summary.redcapmissing()], [flex()],
+#' @seealso [find_missing()], [summary.redcapmissing()], [flex()],
 #'   [flex_html()],
 #'   [redcapAPI::redcapConnection()], [redcapAPI::exportRecordsTyped()]
 #' @references

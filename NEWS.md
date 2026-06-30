@@ -1,3 +1,13 @@
+# redcapmissing 0.3.0
+
+## 2026-06-30
+
+- Renamed the primary report-building function to `find_missing()`.
+- Deprecated `redcap_missing_report()` while keeping it as an exported
+  compatibility wrapper for this release.
+- Moved `flex()` and `flex_html()` into their own source files for clearer
+  package structure.
+
 # redcapmissing 0.2.0
 
 ## 2026-06-30

@@ -3,6 +3,7 @@
 S3method(flex,redcapmissing)
 S3method(print,summary.redcapmissing)
 S3method(summary,redcapmissing)
+export(find_missing)
 export(flex)
 export(flex_html)
 export(redcap_missing_report)
