@@ -1,3 +1,13 @@
+# redcapmissing 0.2.0
+
+## 2026-06-30
+
+- Refactored the report return object to use the `"redcapmissing"` S3 class.
+- Added `summary.redcapmissing()` so `summary(report)` returns the unmodified
+  `pointblank` validation-set tibble.
+- Added `flex()` and `flex_html()` for flextable and HTML summary output.
+- Removed the previous `redcap_missing_summary()` helper.
+
 # redcapmissing 0.1.12
 
 ## 2026-06-11

@@ -1,6 +1,6 @@
 Package: redcapmissing
 Title: Branching-Aware Missingness Reports for REDCap Exports
-Version: 0.1.12
+Version: 0.2.0
 Authors@R: person("blankuzr", email = "blankuzr@users.noreply.github.com", role = c("aut", "cre"))
 Description: Build branching-aware missingness reports for REDCap record
     exports using project metadata and structure exposed by the redcapAPI
@@ -9,9 +9,10 @@ Description: Build branching-aware missingness reports for REDCap record
 License: MIT + file LICENSE
 URL: https://github.com/blankuzr/redcapmissing
 BugReports: https://github.com/blankuzr/redcapmissing/issues
+Depends:
+    R (>= 4.1.0)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.3
 Suggests: 
     flextable,
     glue,
@@ -27,3 +28,4 @@ Imports:
     stringr,
     tibble
 VignetteBuilder: knitr
+Config/roxygen2/version: 8.0.0

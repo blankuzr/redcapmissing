@@ -258,12 +258,14 @@ full validation context and from the scope-specific helper tables.
 
 ## Summary tables
 
-If optional formatting packages are installed, you can format the validation summary:
+`summary(report)` returns the unmodified `pointblank` validation summary from
+`report$agent$validation_set`. If optional formatting packages are installed,
+you can also format that validation summary for reporting workflows:
 
 ```{r, eval = FALSE}
-summary_tbl <- redcap_missing_summary(report)
-summary_tbl$agent_summary
-summary_tbl$agent_summary_html
+summary_tbl <- summary(report)
+ft <- flex(report)
+html <- flex_html(ft)
 ```
 
 ## Citation and acknowledgement

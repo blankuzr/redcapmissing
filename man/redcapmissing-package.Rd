@@ -37,11 +37,17 @@ Savannah Obregon, Shawn Garbett, and Benjamin Nutter.
 \url{https://github.com/vubiostat/redcapAPI}.
 }
 \seealso{
-\code{\link[=redcap_missing_report]{redcap_missing_report()}}, \code{\link[=redcap_missing_summary]{redcap_missing_summary()}},
-\code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:recordsTypedMethods]{redcapAPI::exportRecordsTyped()}}
+\code{\link[=redcap_missing_report]{redcap_missing_report()}}, \code{\link[=summary.redcapmissing]{summary.redcapmissing()}}, \code{\link[=flex]{flex()}},
+\code{\link[=flex_html]{flex_html()}},
+\code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}
 }
 \author{
 \strong{Maintainer}: blankuzr \email{blankuzr@users.noreply.github.com}
+
+Authors:
+\itemize{
+  \item blankuzr \email{blankuzr@users.noreply.github.com}
+}
 
 }
 \keyword{internal}
