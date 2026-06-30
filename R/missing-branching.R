@@ -460,6 +460,10 @@
         out$form_name,
         "_repeat_instance_missing"
       ),
+      out$missing_scope == "any_field_missing" ~ paste0(
+        out$form_name,
+        "_any_field_missing"
+      ),
       TRUE ~ paste0(out$form_name, "_missing_fields")
     )
   } else {
@@ -473,6 +477,7 @@
     "redcap_event_name",
     "redcap_repeat_instrument",
     "redcap_repeat_instance",
+    "validation_context",
     "form_name",
     "field_name",
     "field_label",

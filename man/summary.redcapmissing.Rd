@@ -13,11 +13,12 @@
 \item{...}{Unused.}
 }
 \value{
-The report's \code{agent$validation_set} tibble with an additional
-\code{"summary.redcapmissing"} S3 class for printing.
+The report's context-stratified \code{agent$validation_set} tibble with
+an additional \code{"summary.redcapmissing"} S3 class for printing.
 }
 \description{
-\code{summary()} returns the unmodified \code{pointblank} validation set stored inside
-a \code{find_missing()} result. No columns are selected, renamed,
-rounded, or otherwise changed.
+\code{summary()} returns the validation set stored inside a \code{find_missing()}
+result. No columns are selected, renamed, rounded, or otherwise changed.
+The table includes the \code{validation_context} and REDCap event/repeat context
+columns added by \code{find_missing()}.
 }

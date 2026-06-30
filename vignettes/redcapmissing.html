@@ -376,6 +376,8 @@ missing</li>
 missing</li>
 <li><code>form_blank</code>: the row exists, but every form field is
 blank or unchecked</li>
+<li><code>any_field_missing</code>: the row context is evaluable, but at
+least one expected field is blank</li>
 <li><code>field</code>: the row exists and the form is started, but an
 expected field value is missing</li>
 </ul>
@@ -501,7 +503,7 @@ event, the argument is ignored.</p>
 For example, a form might be:</p>
 <ul>
 <li>a regular form on <code>event_a</code></li>
-<li>a repeating instrument on <code>event_b</code></li>
+<li>repeating on <code>event_b</code></li>
 <li>a regular form again on <code>event_c</code></li>
 </ul>
 <p>This matters because the package should not activate repeat-instance
@@ -511,11 +513,12 @@ actually repeats.</p>
 <p>Operationally, that means:</p>
 <ul>
 <li>if you request only non-repeating events for that form, the function
-uses the standard <code>field</code>, <code>form_blank</code>, and
-<code>event_absent</code> scopes</li>
+uses the standard <code>field</code>, <code>any_field_missing</code>,
+<code>form_blank</code>, and <code>event_absent</code> scopes</li>
 <li>if you request repeating events for that form, the function uses
-<code>field</code>, <code>form_blank</code>, and
-<code>repeat_absent</code> for those repeating contexts</li>
+<code>field</code>, <code>any_field_missing</code>,
+<code>form_blank</code>, and <code>repeat_absent</code> for those
+repeating contexts</li>
 <li>if you request a mixture of repeating and non-repeating events, the
 function applies the appropriate scope model per event</li>
 <li>if <code>expected_repeats</code> is omitted and at least one
@@ -597,6 +600,9 @@ blank form contexts</li>
 rows that were absent</li>
 <li><code>report$repeat_missing</code>: the failures for expected repeat
 rows that were absent</li>
+<li><code>report$any_field_missing</code>: the patient-context roll-up
+failures for evaluable contexts with at least one missing expected
+field</li>
 <li><code>report$expected</code>: the field-level expected rows that
 were actually assessed</li>
 <li><code>report$agent</code>: the interrogated <code>pointblank</code>
@@ -610,9 +616,11 @@ helper tables.</p>
 <h2>Summary tables</h2>
 <p><code>summary(report)</code> returns the unmodified
 <code>pointblank</code> validation summary from
-<code>report$agent$validation_set</code>. If optional formatting
-packages are installed, you can also format that validation summary for
-reporting workflows:</p>
+<code>report$agent$validation_set</code>, including
+<code>validation_context</code> and the REDCap event/repeat columns used
+for stratified denominators. If optional formatting packages are
+installed, you can also format that validation summary for reporting
+workflows:</p>
 <pre class="r"><code>summary_tbl &lt;- summary(report)
 ft &lt;- flex(report)
 html &lt;- flex_html(ft)</code></pre>

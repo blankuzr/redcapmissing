@@ -1,16 +1,17 @@
 #' Summarize a REDCap missingness report
 #'
 #' @description
-#' `summary()` returns the unmodified `pointblank` validation set stored inside
-#' a `find_missing()` result. No columns are selected, renamed,
-#' rounded, or otherwise changed.
+#' `summary()` returns the validation set stored inside a `find_missing()`
+#' result. No columns are selected, renamed, rounded, or otherwise changed.
+#' The table includes the `validation_context` and REDCap event/repeat context
+#' columns added by `find_missing()`.
 #'
 #' @param object A `redcapmissing` object created by
 #'   [find_missing()].
 #' @param ... Unused.
 #'
-#' @return The report's `agent$validation_set` tibble with an additional
-#'   `"summary.redcapmissing"` S3 class for printing.
+#' @return The report's context-stratified `agent$validation_set` tibble with
+#'   an additional `"summary.redcapmissing"` S3 class for printing.
 #'
 #' @export
 summary.redcapmissing <- function(object, ...) {
