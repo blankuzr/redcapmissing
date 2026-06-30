@@ -100,9 +100,6 @@ dependency.
 - `flex_html()`
   - render a `flextable` summary as an HTML string
 
-`redcap_missing_report()` remains available as a deprecated
-compatibility alias for `find_missing()`.
-
 ## What the report returns
 
 `find_missing()` returns a structured report object centered on a
