@@ -13,8 +13,8 @@
 #' offered. Blank values and `NA` values are considered missing.
 #'
 #' The function relies on `redcapAPI` project structure exposed through `rcon`
-#' to avoid checking a form on events or repeating-instrument rows where that
-#' form is not offered.
+#' to avoid checking a form on events or repeating rows where that form is not
+#' offered.
 #' It inspects available connection methods such as `rcon$metadata()`,
 #' `rcon$mapping()` / `rcon$mappings()`, `rcon$repeatInstrumentEvent()`, and
 #' `rcon$projectInformation()` when present.
@@ -42,12 +42,16 @@
 #'     emitted with `event_row_present = FALSE`, `form_started = TRUE`, and
 #'     `value_present = TRUE`, so it fails only the missing-event pointblank
 #'     check.}
-#'   \item{`"repeat_absent"`}{The form is configured as a REDCap repeating
-#'     instrument and an expected repeat instance is absent for the record/event
-#'     context. The row is emitted with `repeat_instance_present = FALSE`,
+#'   \item{`"repeat_absent"`}{The form is assessed in a REDCap repeating event
+#'     or as a repeating instrument, and an expected repeat instance is absent
+#'     for the record/event context. The row is emitted with
+#'     `repeat_instance_present = FALSE`,
 #'     `form_started = TRUE`, `event_row_present = TRUE`, and
 #'     `value_present = TRUE`, so it fails only the missing-repeat pointblank
 #'     check.}
+#'   \item{`"any_field_missing"`}{The form context passed event, repeat, and
+#'     whole-form checks, but at least one expected field in that context is
+#'     blank. The row fails when `value_present` is `FALSE`.}
 #'   \item{`"field"`}{The form context exists and is started. A field is expected
 #'     after branching logic, required-field filtering, type exclusions, and
 #'     ignored fields are applied. The row fails only when `value_present` is
@@ -61,16 +65,12 @@
 #' events; it provides the auditable validation steps and failed-row extraction
 #' after those REDCap-specific rules have been encoded.
 #'
-#' The pointblank checks are scoped with preconditions so the agent summary
-#' denominator (`n`) is meaningful for each check. The whole-form check is
-#' counted over one row per exported form context, the event-row check is
-#' counted over one row per expected record/event context, the repeat-instance
-#' check is counted over expected record/event/repeat contexts, and the
-#' field-level check is counted over expected field rows. When the requested
-#' form is offered on one event, the form/event denominators are therefore the
-#' unique assessed record IDs. When the form is offered on multiple events,
-#' those denominators are the assessed record-event contexts rather than the
-#' number of fields.
+#' The pointblank checks are scoped with preconditions and stratified by a
+#' `validation_context` so the agent summary denominator (`n`) is clinically
+#' meaningful for each event or repeat instance. Context-level checks are
+#' counted over expected record contexts. Granular field checks are counted over
+#' expected field rows within each context. The `any_field_missing` check rolls
+#' those field rows up to one row per evaluable record context.
 #'
 #' The returned `pointblank` agent is interrogated with failed-row extraction
 #' enabled. The row-level extract is also returned as `missing` for easier
@@ -93,8 +93,8 @@
 #'   events, this argument can restrict the report to a selected subset of those
 #'   events. If `NULL`, all offered events are assessed. If the form is offered
 #'   on only one event, this argument is ignored. If the form is regular on
-#'   some events and a repeating instrument on others, `desired_events` also
-#'   determines whether repeat-instance logic is activated. Defaults to `NULL`.
+#'   some events and repeating on others, `desired_events` also determines
+#'   whether repeat-instance logic is activated. Defaults to `NULL`.
 #' @param required_fields Logical scalar. When `TRUE`, only fields marked as
 #'   required in the REDCap metadata `required_field` column are assessed. When
 #'   `FALSE`, all fields on the form are assessed after `exclude_types` and
@@ -111,13 +111,13 @@
 #'   assessment. Defaults to `"descriptive"` because descriptive fields do not
 #'   capture values. These types are excluded regardless of `required_fields`.
 #' @param expected_repeats Positive whole-number scalar, or `NULL`. When `form`
-#'   is configured as a REDCap repeating instrument, this is the minimum number
-#'   of repeat instances expected for every assessed record/event context. For
-#'   example, `expected_repeats = 2L` checks that repeat instances `1` and `2`
-#'   exist. If the form is repeating and this argument is `NULL`, the function
-#'   warns and assumes `1L` for the requested repeating-event contexts. If the
-#'   requested events do not include any repeating contexts for the form, this
-#'   argument is ignored.
+#'   is assessed in a REDCap repeating event or as a repeating instrument, this
+#'   is the minimum number of repeat instances expected for every assessed
+#'   record/event context. For example, `expected_repeats = 2L` checks that
+#'   repeat instances `1` and `2` exist. If the form is repeating and this
+#'   argument is `NULL`, the function warns and assumes `1L` for the requested
+#'   repeating contexts. If the requested events do not include any repeating
+#'   contexts for the form, this argument is ignored.
 #'
 #' @return A list with class `"redcapmissing"` containing:
 #' \describe{
@@ -126,8 +126,8 @@
 #'     keyed by record, event, repeat context, form, and field.}
 #'   \item{`expected`}{The expected-field table checked by `pointblank`.}
 #'   \item{`validation_rows`}{The full table supplied to `pointblank`, including
-#'     field-level checks, blank-form checks, missing-event checks, and
-#'     missing-repeat checks.}
+#'     field-level checks, any-field roll-up checks, blank-form checks,
+#'     missing-event checks, and missing-repeat checks.}
 #'   \item{`form_missing`}{One-row-per-context checks for exported form rows
 #'     where every form field is blank or unchecked.}
 #'   \item{`form_checks`}{All whole-form startedness checks, including passed
@@ -140,6 +140,10 @@
 #'     instances that are absent from the export.}
 #'   \item{`repeat_checks`}{All expected repeat-instance checks, including
 #'     passed and failed repeat contexts.}
+#'   \item{`any_field_missing`}{One-row-per-context checks where at least one
+#'     expected field is blank.}
+#'   \item{`any_field_checks`}{All any-field roll-up checks, including passed
+#'     and failed evaluable contexts.}
 #'   \item{`field_plan`}{The metadata-derived field plan for the requested
 #'     form, including checkbox child export columns.}
 #'   \item{`required_fields`}{Whether the report was limited to REDCap-required
@@ -336,20 +340,13 @@ find_missing <- function(
     project = project
   )
 
-  form_checks <- .miss_build_form_check_rows(
-    records = records,
-    form_meta = form_all_meta,
-    project = project,
-    form = form
-  )
-  form_missing <- form_checks[form_checks$missing_scope == "form_blank", , drop = FALSE]
-
   event_checks <- .miss_build_event_check_rows(
     records = all_records,
     form_records = records,
     project = project,
     form = form
   )
+  event_checks <- .miss_add_validation_context(event_checks)
   event_missing <- event_checks[event_checks$missing_scope == "event_absent", , drop = FALSE]
 
   repeat_checks <- .miss_build_repeat_check_rows(
@@ -359,7 +356,25 @@ find_missing <- function(
     form = form,
     expected_repeats = expected_repeats
   )
+  repeat_checks <- .miss_add_validation_context(repeat_checks)
   repeat_missing <- repeat_checks[repeat_checks$missing_scope == "repeat_absent", , drop = FALSE]
+
+  expected_contexts <- .miss_build_expected_contexts(
+    records = all_records,
+    event_checks = event_checks,
+    repeat_checks = repeat_checks,
+    project = project
+  )
+
+  form_checks <- .miss_build_form_check_rows(
+    records = records,
+    form_meta = form_all_meta,
+    project = project,
+    form = form,
+    expected_contexts = expected_contexts
+  )
+  form_checks <- .miss_add_validation_context(form_checks)
+  form_missing <- form_checks[form_checks$missing_scope == "form_blank", , drop = FALSE]
 
   # Do not emit field-by-field failures when the whole form is unstarted.
   records_for_fields <- .miss_drop_form_missing_records(
@@ -393,54 +408,88 @@ find_missing <- function(
     project = project,
     form = form
   )
+  expected <- .miss_add_validation_context(expected)
+  any_field_checks <- .miss_build_any_field_check_rows(
+    expected = expected,
+    form = form
+  )
+  any_field_missing <- any_field_checks[
+    any_field_checks$missing_scope == "any_field_missing",
+    ,
+    drop = FALSE
+  ]
   validation_rows <- dplyr::bind_rows(
     event_checks,
     repeat_checks,
     form_checks,
+    any_field_checks,
     expected
   )
+  validation_rows <- .miss_add_validation_context(validation_rows)
 
   # Let pointblank own the validation object and failed-row extract.
   agent <- pointblank::create_agent(
     tbl = validation_rows,
     tbl_name = paste0(form, "_expected_fields"),
     label = paste0("Branch-aware missing fields for ", form)
-  ) |>
-    pointblank::col_vals_equal(
-      columns = "event_row_present",
-      value = TRUE,
-      preconditions = function(tbl) tbl[tbl$check_scope == "event_row_present", , drop = FALSE],
-      step_id = paste0(form, "_event_row_missing"),
-      label = "Offered REDCap event row exists for the form"
-    )
+  )
+
+  agent <- .miss_add_validation_step(
+    agent = agent,
+    rows = event_checks,
+    check_scope = "event_row_present",
+    column = "event_row_present",
+    step_id = paste0(form, "_event_row_missing"),
+    label = "Offered REDCap event row exists for the form",
+    keep_zero = TRUE
+  )
 
   if (nrow(repeat_checks) > 0) {
-    agent <- agent |>
-      pointblank::col_vals_equal(
-        columns = "repeat_instance_present",
-        value = TRUE,
-        preconditions = function(tbl) tbl[tbl$check_scope == "repeat_instance_present", , drop = FALSE],
-        step_id = paste0(form, "_repeat_instance_missing"),
-        label = "Expected REDCap repeat instances exist for the form"
-      )
+    agent <- .miss_add_validation_step(
+      agent = agent,
+      rows = repeat_checks,
+      check_scope = "repeat_instance_present",
+      column = "repeat_instance_present",
+      step_id = paste0(form, "_repeat_instance_missing"),
+      label = "Expected REDCap repeat instances exist for the form"
+    )
   }
 
-  agent <- agent |>
-    pointblank::col_vals_equal(
-      columns = "form_started",
-      value = TRUE,
-      preconditions = function(tbl) tbl[tbl$check_scope == "form_started", , drop = FALSE],
-      step_id = paste0(form, "_entire_form_blank"),
-      label = "Offered REDCap form has at least one entered field"
-    ) |>
-    pointblank::col_vals_equal(
-      columns = "value_present",
-      value = TRUE,
-      preconditions = function(tbl) tbl[tbl$check_scope == "field", , drop = FALSE],
-      step_id = paste0(form, "_missing_fields"),
-      label = "Expected REDCap fields are not blank"
-    ) |>
+  agent <- .miss_add_validation_step(
+    agent = agent,
+    rows = form_checks,
+    check_scope = "form_started",
+    column = "form_started",
+    step_id = paste0(form, "_entire_form_blank"),
+    label = "Offered REDCap form has at least one entered field",
+    keep_zero = TRUE
+  )
+
+  if (nrow(any_field_checks) > 0) {
+    agent <- .miss_add_validation_step(
+      agent = agent,
+      rows = any_field_checks,
+      check_scope = "any_field_missing",
+      column = "value_present",
+      step_id = paste0(form, "_any_field_missing"),
+      label = "Any expected REDCap field is missing"
+    )
+  }
+
+  agent <- .miss_add_validation_step(
+    agent = agent,
+    rows = expected,
+    check_scope = "field",
+    column = "value_present",
+    step_id = paste0(form, "_missing_fields"),
+    label = "Expected REDCap fields are not blank",
+    keep_zero = TRUE
+  ) |>
     pointblank::interrogate(extract_failed = TRUE, progress = FALSE)
+  agent <- .miss_annotate_agent_validation_set(
+    agent = agent,
+    validation_rows = validation_rows
+  )
 
   missing <- .miss_get_failed_rows(agent)
 
@@ -455,6 +504,8 @@ find_missing <- function(
     event_missing = event_missing,
     repeat_checks = repeat_checks,
     repeat_missing = repeat_missing,
+    any_field_checks = any_field_checks,
+    any_field_missing = any_field_missing,
     field_plan = field_plan,
     required_fields = required_fields,
     desired_events = project$desired_events %||% character(),

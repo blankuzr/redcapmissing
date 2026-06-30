@@ -20,7 +20,7 @@ of a field value depends on two logic layers:
 1.  REDCap project structure, including:
     - project metadata
     - project mapping
-    - repeating instruments
+    - repeating events and instruments
     - checkbox semantics
 2.  External, user-provided constraints that cannot be specified in
     REDCap, including:
@@ -39,8 +39,8 @@ argument is expected to be created with
 `redcapAPI::exportRecordsTyped()`.
 
 This package depends on `redcapAPI` for REDCap metadata access,
-form-event mapping, repeating-instrument structure, and REDCap-style
-blank-value handling.
+form-event mapping, repeating event/instrument structure, and
+REDCap-style blank-value handling.
 
 ## Recommended typed export
 
@@ -71,8 +71,9 @@ extend this same pattern so those fields are also kept in code space.
 metadata and works around REDCap export behavior to produce informative
 missingness reports from REDCap projects:
 
-- `redcapmissing` extends missingness assessment to four scopes: missing
-  field, missing form, missing event, and missing repeat instance.
+- `redcapmissing` extends missingness assessment to five scopes: missing
+  field, any field missing, missing form, missing event, and missing
+  repeat instance.
 - `redcapmissing` uses the `pointblank` package for validation plans and
   summary output.
 - `redcapmissing` returns both row-level failures and scope-level
@@ -109,20 +110,24 @@ standard `pointblank` agent. The most commonly used components are:
   - the interrogated `pointblank` agent, including validation metadata
     and underlying summary counts
 - `report$missing`
-  - the row-level dataset detailing missingness for the field scope
+  - the row-level dataset detailing all failed validation scopes
 - `report$form_missing`, `report$event_missing`, `report$repeat_missing`
   - the row-level datasets for the three whole-context missingness
     scopes
+- `report$any_field_missing`
+  - the row-level patient-context roll-up for contexts with at least one
+    missing expected field
 
 ## Summary and formatted output
 
 `summary(report)` returns the `pointblank` validation summary stored
-inside `report$agent$validation_set`. It does not select, rename, round,
-or otherwise modify columns.
+inside `report$agent$validation_set`. It includes `validation_context`
+plus the REDCap event and repeat columns used to stratify `n`,
+`n_passed`, `n_failed`, `f_passed`, and `f_failed`.
 
 For reporting workflows, `flex()` formats that validation summary as a
-`flextable`, and `flex_html()` renders the `flextable` as an HTML string
-for email or report insertion.
+`flextable` with a Context column, and `flex_html()` renders the
+`flextable` as an HTML string for email or report insertion.
 
 ``` r
 summary_tbl <- summary(report)
@@ -176,7 +181,7 @@ REDCap exports make it important to distinguish between a missing
 projects, a record can be missing because REDCap exported no row at all
 for the relevant event or repeat instance. In other contexts, REDCap
 does export a row, but every field on the form is still blank.
-`redcapmissing` separates those cases into four scopes.
+`redcapmissing` separates those cases into five scopes.
 
 ### `event_absent`
 
@@ -195,8 +200,9 @@ Why this exists:
 
 ### `repeat_absent`
 
-Use this scope when a form is a repeating instrument and an expected
-repeat instance row does not exist in the export.
+Use this scope when a form is assessed in a repeating event or as a
+repeating instrument and an expected repeat instance row does not exist
+in the export.
 
 Why this exists:
 
@@ -222,6 +228,23 @@ Why this exists:
   form field is empty.
 - Reporting each field separately would overstate the problem, so the
   package records a single form-level failure for that context.
+
+### `any_field_missing`
+
+Use this scope when the row context exists, the form is not wholly
+blank, and at least one expected field is blank for the
+record/event/repeat context.
+
+Why this exists:
+
+- Granular field-level counts can be much larger than the patient count
+  because every expected patient-field combination is assessed.
+- This roll-up reports one pass/fail result per evaluable patient
+  context, so users can see how many records have any missing expected
+  field.
+- Records that fail `event_absent`, `repeat_absent`, or `form_blank` are
+  not counted in this scope because those failures are owned by upstream
+  scopes.
 
 ### `field`
 
@@ -267,16 +290,18 @@ the package applies scopes by event type:
 
 - regular-form events use the standard `field`, `form_blank`, and
   `event_absent` logic
-- repeating-instrument events use `field`, `form_blank`, and
-  `repeat_absent` logic
+- repeating events and repeating-instrument events use `field`,
+  `form_blank`, and `repeat_absent` logic
+- both regular and repeating contexts use `any_field_missing` to roll
+  expected field rows up to patient-context counts
 
 When `expected_repeats` is omitted, the default `1L` assumption is only
 applied for the requested events where the form actually repeats.
 
 ## Repeat expectations
 
-For repeating instruments, `expected_repeats` applies a uniform
-expectation to all assessed record/event contexts.
+For repeating events and instruments, `expected_repeats` applies a
+uniform expectation to all assessed record/event contexts.
 
 ``` r
 repeat_report <- find_missing(

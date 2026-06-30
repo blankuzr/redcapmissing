@@ -1,3 +1,18 @@
+# redcapmissing 0.5.0
+
+## 2026-06-30
+
+- Stratified `find_missing()` validation summaries by event and repeat-instance
+  context so `n`, `n_passed`, `n_failed`, `f_passed`, and `f_failed` are
+  clinically meaningful for multi-event forms and forms assessed in repeating
+  events or as repeating instruments.
+- Added an `any_field_missing` roll-up scope that reports whether an evaluable
+  record context has at least one missing expected field, while preserving the
+  existing granular field-level scope.
+- Added context columns to `report$agent$validation_set` and updated `flex()`
+  to display the validation context alongside assessed, passed, and failed
+  counts.
+
 # redcapmissing 0.4.0
 
 ## 2026-06-30

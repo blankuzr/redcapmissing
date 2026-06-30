@@ -64,6 +64,12 @@
     rcon,
     c("projectInformation", "project_information", "projectInfo")
   )
+  form_events <- .miss_form_events(mapping = mapping, form = form)
+  repeat_form_events <- .miss_repeat_form_events(
+    repeat_instrument_event,
+    form = form
+  )
+  repeating_events <- .miss_repeating_events(repeat_instrument_event)
 
   list(
     id_col = meta$field_name[[1]],
@@ -71,16 +77,11 @@
     mapping = mapping,
     repeat_instrument_event = repeat_instrument_event,
     project_information = project_information,
-    form_events = .miss_form_events(mapping = mapping, form = form),
-    repeat_form_events = .miss_repeat_form_events(
-      repeat_instrument_event,
-      form = form
-    ),
-    repeating_events = .miss_repeating_events(repeat_instrument_event),
-    form_repeats = any(
-      .miss_chr_vec(repeat_instrument_event$form_name) == form,
-      na.rm = TRUE
-    ),
+    form_events = form_events,
+    repeat_form_events = repeat_form_events,
+    repeating_events = repeating_events,
+    form_repeats = length(repeat_form_events) > 0 ||
+      length(intersect(form_events, repeating_events)) > 0,
     desired_events = NULL
   )
 }
@@ -93,14 +94,14 @@
   if (length(offered_events) <= 1) {
     project$desired_events <- offered_events
     if (length(offered_events) > 0) {
-      project$form_repeats <- length(project$repeat_form_events) > 0
+      project$form_repeats <- .miss_project_has_repeat_contexts(project)
     }
     return(project)
   }
 
   if (is.null(desired_events)) {
     project$desired_events <- offered_events
-    project$form_repeats <- length(project$repeat_form_events) > 0
+    project$form_repeats <- .miss_project_has_repeat_contexts(project)
     return(project)
   }
 
@@ -128,7 +129,7 @@
   project$form_events <- intersect(project$form_events, desired_events)
   project$repeat_form_events <- intersect(project$repeat_form_events, desired_events)
   project$desired_events <- desired_events
-  project$form_repeats <- length(project$repeat_form_events) > 0
+  project$form_repeats <- .miss_project_has_repeat_contexts(project)
   project
 }
 
@@ -138,7 +139,7 @@
       warning(
         "`expected_repeats` was supplied, but the requested assessment for form `",
         form,
-        "` does not include any REDCap repeating-instrument events. ",
+        "` does not include any REDCap repeating event or instrument contexts. ",
         "Repeat-instance missingness will not be assessed.",
         call. = FALSE
       )
@@ -304,6 +305,15 @@
   ])
 }
 
+.miss_form_repeating_events <- function(project) {
+  intersect(project$form_events, project$repeating_events)
+}
+
+.miss_project_has_repeat_contexts <- function(project) {
+  length(project$repeat_form_events) > 0 ||
+    length(.miss_form_repeating_events(project)) > 0
+}
+
 .miss_filter_form_rows <- function(records, form, project) {
   n <- nrow(records)
   if (n == 0) {
@@ -337,10 +347,7 @@
     return(records[event_keep, , drop = FALSE])
   }
 
-  form_repeating_events <- intersect(
-    project$form_events,
-    project$repeating_events
-  )
+  form_repeating_events <- .miss_form_repeating_events(project)
   nonrepeat_events <- setdiff(
     project$form_events,
     union(project$repeat_form_events, form_repeating_events)

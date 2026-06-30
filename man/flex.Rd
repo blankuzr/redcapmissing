@@ -17,5 +17,6 @@ A \code{flextable} object.
 \description{
 \code{flex()} formats the validation summary from a \code{redcapmissing} report as a
 \code{flextable} for reporting workflows. Unlike \code{summary()}, this function is
-presentation-focused and formats pass/fail counts for display.
+presentation-focused and formats context-stratified pass/fail counts for
+display.
 }

@@ -32,6 +32,8 @@ needed event or repeat context. The package therefore separates:
 - `event_absent`: the expected longitudinal event row is missing
 - `repeat_absent`: the expected repeat-instance row is missing
 - `form_blank`: the row exists, but every form field is blank or unchecked
+- `any_field_missing`: the row context is evaluable, but at least one expected
+  field is blank
 - `field`: the row exists and the form is started, but an expected field value is missing
 
 This separation keeps the report aligned with how REDCap actually exports data.
@@ -161,7 +163,7 @@ Some REDCap projects offer the same form in mixed ways across events. For
 example, a form might be:
 
 - a regular form on `event_a`
-- a repeating instrument on `event_b`
+- repeating on `event_b`
 - a regular form again on `event_c`
 
 This matters because the package should not activate repeat-instance logic just
@@ -171,9 +173,11 @@ logic for the requested events where the form actually repeats.
 Operationally, that means:
 
 - if you request only non-repeating events for that form, the function uses the
-  standard `field`, `form_blank`, and `event_absent` scopes
+  standard `field`, `any_field_missing`, `form_blank`, and `event_absent`
+  scopes
 - if you request repeating events for that form, the function uses `field`,
-  `form_blank`, and `repeat_absent` for those repeating contexts
+  `any_field_missing`, `form_blank`, and `repeat_absent` for those repeating
+  contexts
 - if you request a mixture of repeating and non-repeating events, the function
   applies the appropriate scope model per event
 - if `expected_repeats` is omitted and at least one requested event is repeating
@@ -250,6 +254,8 @@ useful components to inspect first:
 - `report$form_missing`: the form-level failures for wholly blank form contexts
 - `report$event_missing`: the failures for expected event rows that were absent
 - `report$repeat_missing`: the failures for expected repeat rows that were absent
+- `report$any_field_missing`: the patient-context roll-up failures for
+  evaluable contexts with at least one missing expected field
 - `report$expected`: the field-level expected rows that were actually assessed
 - `report$agent`: the interrogated `pointblank` agent itself
 
@@ -259,8 +265,10 @@ full validation context and from the scope-specific helper tables.
 ## Summary tables
 
 `summary(report)` returns the unmodified `pointblank` validation summary from
-`report$agent$validation_set`. If optional formatting packages are installed,
-you can also format that validation summary for reporting workflows:
+`report$agent$validation_set`, including `validation_context` and the REDCap
+event/repeat columns used for stratified denominators. If optional formatting
+packages are installed, you can also format that validation summary for
+reporting workflows:
 
 ```{r, eval = FALSE}
 summary_tbl <- summary(report)
