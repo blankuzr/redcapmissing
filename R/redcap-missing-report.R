@@ -119,7 +119,7 @@
 #'   requested events do not include any repeating contexts for the form, this
 #'   argument is ignored.
 #'
-#' @return A list with class `"redcap_missing_report"` containing:
+#' @return A list with class `"redcapmissing"` containing:
 #' \describe{
 #'   \item{`agent`}{An interrogated `pointblank` agent.}
 #'   \item{`missing`}{A tibble of failed rows from the `pointblank` extract,
@@ -466,6 +466,6 @@ redcap_missing_report <- function(
     id_col = project$id_col,
     system_fields = project$system_fields
   )
-  class(out) <- c("redcap_missing_report", class(out))
+  class(out) <- "redcapmissing"
   out
 }

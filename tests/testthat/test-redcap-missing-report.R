@@ -21,6 +21,9 @@ test_that("public report API is stable", {
   expect_null(report_args$ignore_fields)
   expect_null(report_args$ignore_ids)
   expect_null(report_args$expected_repeats)
+  expect_true(is.function(flex))
+  expect_true(is.function(flex_html))
+  expect_false("redcap_missing_summary" %in% getNamespaceExports("redcapmissing"))
 })
 
 test_that("branch-open fields fail and branch-closed fields are not expected", {
@@ -42,7 +45,7 @@ test_that("branch-open fields fail and branch-closed fields are not expected", {
     required_fields = FALSE
   )
 
-  expect_s3_class(report, "redcap_missing_report")
+  expect_identical(class(report), "redcapmissing")
   expect_true(any(report$missing$record_id == "r1" & report$missing$field_name == "conditional_note"))
   expect_false(any(report$expected$record_id == "r2" & report$expected$field_name == "conditional_note"))
 })
@@ -500,7 +503,76 @@ test_that("expected_repeats is ignored when desired events exclude repeating con
   expect_equal(nrow(report$repeat_checks), 0)
 })
 
-test_that("summary helper returns a formatted table when optional packages are available", {
+test_that("summary returns the unmodified validation-set tibble", {
+  records <- tibble::tibble(
+    record_id = "r1",
+    branch_flag = "0",
+    required_note = "",
+    optional_note = "",
+    checkbox_field___1 = "1",
+    checkbox_field___2 = "0",
+    checkbox_other = "",
+    conditional_note = ""
+  )
+
+  report <- redcap_missing_report(
+    data = records,
+    rcon = fake_rcon(baseline_form_meta()),
+    form = "baseline_form"
+  )
+
+  summary_tbl <- summary(report)
+  validation_set <- report$agent$validation_set
+
+  expect_s3_class(summary_tbl, "summary.redcapmissing")
+  expect_s3_class(summary_tbl, "tbl_df")
+  expect_identical(names(summary_tbl), names(validation_set))
+  expect_identical(lapply(summary_tbl, class), lapply(validation_set, class))
+  expect_identical(unclass(summary_tbl), unclass(validation_set))
+})
+
+test_that("summary print method delegates to tibble printing", {
+  records <- tibble::tibble(
+    record_id = "r1",
+    branch_flag = "0",
+    required_note = "",
+    optional_note = "",
+    checkbox_field___1 = "1",
+    checkbox_field___2 = "0",
+    checkbox_other = "",
+    conditional_note = ""
+  )
+
+  report <- redcap_missing_report(
+    data = records,
+    rcon = fake_rcon(baseline_form_meta()),
+    form = "baseline_form"
+  )
+  summary_tbl <- summary(report)
+
+  expect_output(
+    print_return <- print(summary_tbl),
+    "# A tibble"
+  )
+  expect_identical(print_return, summary_tbl)
+})
+
+test_that("summary and flex helpers reject invalid inputs", {
+  expect_error(
+    redcapmissing:::summary.redcapmissing(list()),
+    "`object` must be a `redcapmissing` object"
+  )
+  expect_error(
+    flex(list()),
+    "no applicable method"
+  )
+  expect_error(
+    flex_html(list()),
+    "`x` must be a `flextable` object"
+  )
+})
+
+test_that("flex helpers return formatted table and HTML when optional packages are available", {
   testthat::skip_if_not_installed("flextable")
   testthat::skip_if_not_installed("glue")
   testthat::skip_if_not_installed("htmltools")
@@ -522,10 +594,10 @@ test_that("summary helper returns a formatted table when optional packages are a
     form = "baseline_form"
   )
 
-  summary_out <- redcap_missing_summary(report)
+  flex_out <- flex(report)
+  html_out <- flex_html(flex_out)
 
-  expect_named(summary_out, c("agent_summary", "agent_summary_html"))
-  expect_s3_class(summary_out$agent_summary, "flextable")
-  expect_type(summary_out$agent_summary_html, "character")
-  expect_true(nchar(summary_out$agent_summary_html) > 0)
+  expect_s3_class(flex_out, "flextable")
+  expect_type(html_out, "character")
+  expect_true(nchar(html_out) > 0)
 })

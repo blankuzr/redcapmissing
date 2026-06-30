@@ -69,7 +69,7 @@ requested events do not include any repeating contexts for the form, this
 argument is ignored.}
 }
 \value{
-A list with class \code{"redcap_missing_report"} containing:
+A list with class \code{"redcapmissing"} containing:
 \describe{
 \item{\code{agent}}{An interrogated \code{pointblank} agent.}
 \item{\code{missing}}{A tibble of failed rows from the \code{pointblank} extract,
@@ -230,5 +230,5 @@ projects using the API}. R package version 2.12.0.
 \url{https://doi.org/10.5281/zenodo.10564837}.
 }
 \seealso{
-\code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:recordsTypedMethods]{redcapAPI::exportRecordsTyped()}}
+\code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}
 }

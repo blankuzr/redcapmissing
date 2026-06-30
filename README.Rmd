@@ -90,8 +90,12 @@ Installing `redcapmissing` also installs `redcapAPI` as a package dependency.
 
 - `redcap_missing_report()`
   - build a missingness report for one REDCap form/instrument
-- `redcap_missing_summary()`
-  - format the `pointblank` validation summary from a report object
+- `summary()`
+  - return the unmodified `pointblank` validation summary from a report object
+- `flex()`
+  - format the validation summary as a `flextable`
+- `flex_html()`
+  - render a `flextable` summary as an HTML string
 
 ## What the report returns
 
@@ -106,23 +110,20 @@ standard `pointblank` agent. The most commonly used components are:
 - `report$form_missing`, `report$event_missing`, `report$repeat_missing`
   - the row-level datasets for the three whole-context missingness scopes
 
-## Summary helper
+## Summary and formatted output
 
-`redcap_missing_summary()` is a convenience formatter for the `pointblank`
-summary stored inside `report$agent`. It does not replace the row-level extracts;
-it gives a clean evaluation table for reporting and review.
+`summary(report)` returns the `pointblank` validation summary stored inside
+`report$agent$validation_set`. It does not select, rename, round, or otherwise
+modify columns.
 
-It returns:
-
-- `agent_summary`
-  - a `flextable` object
-- `agent_summary_html`
-  - an HTML representation of the same summary table
+For reporting workflows, `flex()` formats that validation summary as a
+`flextable`, and `flex_html()` renders the `flextable` as an HTML string for
+email or report insertion.
 
 ```{r, eval = FALSE}
-summary_tbl <- redcap_missing_summary(report)
-summary_tbl$agent_summary
-summary_tbl$agent_summary_html
+summary_tbl <- summary(report)
+ft <- flex(report)
+html <- flex_html(ft)
 ```
 
 ## Example
