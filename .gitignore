@@ -1,4 +1,5 @@
 .codex/
+.codex-*/
 AGENTS.md
 LOG.md
 .here
@@ -7,8 +8,15 @@ src/
 .Rhistory
 .RData
 .Ruserdata
+.Renviron
+.env
+.httr-oauth
+.secrets/
 *.Rproj
 output/
 *.tar.gz
 *.Rcheck/
 .DS_Store
+Redcap Project Information/
+/doc/
+/Meta/

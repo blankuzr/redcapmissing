@@ -2,14 +2,21 @@
 ^AGENTS\.md$
 ^LOG\.md$
 ^\.here$
+^\.Renviron$
+^\.env$
+^\.httr-oauth$
+^\.secrets$
 ^src$
 ^\.Rproj\.user$
 ^LICENSE\.md$
 ^README\.Rmd$
 ^vignettes/.*\.html$
-^Data Requests$
 ^Redcap Project Information$
 ^\.github$
 ^\.gitignore$
 ^\.github/.*$
 ^\.git$
+^\.codex-.*$
+^doc$
+^Meta$
+^\.codex/.*$
