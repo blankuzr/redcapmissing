@@ -1,3 +1,10 @@
+# redcapmissing 0.6.1
+
+## 2026-07-01
+
+- Added a suppressible startup banner that reports the installed package
+  version and current release metadata.
+
 # redcapmissing 0.6.0
 
 ## 2026-07-01
