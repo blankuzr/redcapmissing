@@ -1,15 +1,22 @@
 #' Format a REDCap missingness report as a flextable
 #'
 #' @description
-#' `flex()` formats the validation summary from a `redcapmissing` report as a
-#' `flextable` for reporting workflows. Unlike `summary()`, this function is
-#' presentation-focused and formats context-stratified pass/fail counts for
-#' display.
+#' `flex()` formats the validation summary from a REDCap missingness report as a
+#' `flextable` for reporting workflows. It accepts either a `redcapmissing`
+#' object returned by [find_missing()] or the `"summary.redcapmissing"` object
+#' returned by `summary()` for that report. Calling `flex(report)` is equivalent
+#' to formatting `summary(report)`.
 #'
-#' @param x An object to format.
+#' @param x A `redcapmissing` object created by [find_missing()], or a
+#'   `"summary.redcapmissing"` object returned by `summary()` for a
+#'   `redcapmissing` report.
 #' @param ... Unused.
 #'
-#' @return A `flextable` object.
+#' @return A `flextable` object with context-stratified pass/fail counts for
+#'   display. This function requires the optional `flextable` and `glue`
+#'   packages.
+#'
+#' @seealso [find_missing()], [summary.redcapmissing()], [flex_html()]
 #'
 #' @export
 flex <- function(x, ...) {
@@ -19,11 +26,31 @@ flex <- function(x, ...) {
 #' @export
 flex.redcapmissing <- function(x, ...) {
   .redcapmissing_check_report(x)
+  flex(summary(x), ...)
+}
+
+#' @export
+flex.summary.redcapmissing <- function(x, ...) {
   .redcapmissing_check_packages(c("flextable", "glue"), "flex()")
 
-  validation_set <- x$agent$validation_set
-  if (!"validation_context" %in% names(validation_set)) {
-    validation_set$validation_context <- "overall"
+  validation_set <- x
+  required_columns <- c(
+    "label",
+    "validation_context",
+    "n",
+    "n_passed",
+    "n_failed",
+    "f_passed",
+    "f_failed"
+  )
+  missing_columns <- setdiff(required_columns, names(validation_set))
+  if (length(missing_columns) > 0) {
+    stop(
+      "`x` must include the current `summary.redcapmissing` columns: ",
+      paste(required_columns, collapse = ", "),
+      ".",
+      call. = FALSE
+    )
   }
 
   validation_set |>

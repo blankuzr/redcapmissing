@@ -1,3 +1,11 @@
+# redcapmissing 0.5.1
+
+## 2026-07-01
+
+- Added direct `flex()` support for `"summary.redcapmissing"` objects returned
+  by `summary(report)`, with expanded generated documentation for accepted
+  inputs and optional reporting-package requirements.
+
 # redcapmissing 0.5.0
 
 ## 2026-06-30
