@@ -22,12 +22,22 @@ meta_row <- function(
 
 fake_rcon <- function(
   metadata,
+  instruments = NULL,
   mapping = NULL,
   repeat_instrument_event = NULL,
   project_information = NULL
 ) {
+  if (is.null(instruments)) {
+    forms <- unique(as.character(metadata$form_name))
+    instruments <- tibble::tibble(
+      instrument_name = forms,
+      instrument_label = paste(forms, "label")
+    )
+  }
+
   list(
     metadata = function() metadata,
+    instruments = function() instruments,
     mapping = function() mapping,
     mappings = function() mapping,
     repeatInstrumentEvent = function() repeat_instrument_event,

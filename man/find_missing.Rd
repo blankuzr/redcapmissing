@@ -25,9 +25,10 @@ instruments/events, it should include \code{redcap_repeat_instrument} and
 
 \item{rcon}{A \code{redcapAPI::redcapConnection()} object, or an offline or
 preserved connection-like object that mirrors the same methods, and that
-provides project metadata through \code{rcon$metadata()}. When available,
-form-event mapping, repeating instrument/event metadata, and project
-information are also read from the connection object.}
+provides project metadata through \code{rcon$metadata()} and instrument labels
+through \code{rcon$instruments()}. When available, form-event mapping,
+repeating instrument/event metadata, and project information are also read
+from the connection object.}
 
 \item{form}{Required. A single REDCap form/instrument name to assess. No
 default is supplied so callers must choose the form deliberately.}
@@ -74,26 +75,20 @@ A list with class \code{"redcapmissing"} containing:
 \item{\code{agent}}{An interrogated \code{pointblank} agent.}
 \item{\code{missing}}{A tibble of failed rows from the \code{pointblank} extract,
 keyed by record, event, repeat context, form, and field.}
-\item{\code{expected}}{The expected-field table checked by \code{pointblank}.}
 \item{\code{validation_rows}}{The full table supplied to \code{pointblank}, including
-field-level checks, any-field roll-up checks, blank-form checks,
-missing-event checks, and missing-repeat checks.}
-\item{\code{form_missing}}{One-row-per-context checks for exported form rows
-where every form field is blank or unchecked.}
-\item{\code{form_checks}}{All whole-form startedness checks, including passed
-and failed form contexts.}
-\item{\code{event_missing}}{One-row-per-context checks for longitudinal events
-where the form is offered but no event row exists in the export.}
-\item{\code{event_checks}}{All event-row presence checks, including passed and
-failed record/event contexts.}
-\item{\code{repeat_missing}}{One-row-per-context checks for expected repeat
-instances that are absent from the export.}
-\item{\code{repeat_checks}}{All expected repeat-instance checks, including
-passed and failed repeat contexts.}
-\item{\code{any_field_missing}}{One-row-per-context checks where at least one
-expected field is blank.}
-\item{\code{any_field_checks}}{All any-field roll-up checks, including passed
-and failed evaluable contexts.}
+event-row, repeat-instance, form-started, form-complete, and
+field-complete validation rows.}
+\item{\code{event_row_exists_checks}, \code{event_row_exists_failures}}{All
+event-row validation rows and their failed rows.}
+\item{\code{repeat_instance_row_exists_checks},
+\code{repeat_instance_row_exists_failures}}{All repeat-instance validation
+rows and their failed rows.}
+\item{\code{form_started_checks}, \code{form_started_failures}}{All form-started
+validation rows and their failed rows.}
+\item{\code{form_complete_checks}, \code{form_complete_failures}}{All form-complete
+validation rows and their failed rows.}
+\item{\code{fields_complete_checks}, \code{fields_complete_failures}}{All
+field-complete validation rows and their failed rows.}
 \item{\code{field_plan}}{The metadata-derived field plan for the requested
 form, including checkbox child export columns.}
 \item{\code{required_fields}}{Whether the report was limited to REDCap-required
@@ -108,6 +103,7 @@ fields.}
 \item{\code{project}}{A compact list of REDCap project structure inferred from
 \code{rcon}.}
 \item{\code{form}}{The assessed form name.}
+\item{\code{form_label}}{The REDCap instrument label for \code{form}.}
 \item{\code{id_col}}{The REDCap record identifier field.}
 \item{\code{system_fields}}{The REDCap system field names used internally.}
 }
@@ -128,8 +124,9 @@ The function relies on \code{redcapAPI} project structure exposed through \code{
 to avoid checking a form on events or repeating rows where that form is not
 offered.
 It inspects available connection methods such as \code{rcon$metadata()},
-\code{rcon$mapping()} / \code{rcon$mappings()}, \code{rcon$repeatInstrumentEvent()}, and
-\code{rcon$projectInformation()} when present.
+\code{rcon$instruments()}, \code{rcon$mapping()} / \code{rcon$mappings()},
+\code{rcon$repeatInstrumentEvent()}, and \code{rcon$projectInformation()} when
+present.
 
 Checkbox fields are treated as one REDCap root field. A checkbox root is
 considered answered when at least one exported child column
@@ -142,37 +139,29 @@ are absent from the export are also emitted as one form-level missing row for
 that record and event.
 
 Validation is intentionally split between REDCap-specific R preprocessing and
-\code{pointblank} reporting. The R code determines each row's \code{missing_scope}
-before \code{pointblank} runs:
+\code{pointblank} reporting. The R code assigns each row to a positive
+\code{validation_scope} before \code{pointblank} runs:
 \describe{
-\item{\code{"form_blank"}}{An exported row exists for the form context, but every
-exported data-capturing field on that form is blank or unchecked. The row
-is emitted with \code{form_started = FALSE}, \code{event_row_present = TRUE}, and
-\code{value_present = TRUE}, so it fails only the whole-form pointblank check.}
-\item{\code{"event_absent"}}{The form is mapped to a longitudinal event for a
-record, but no exported row exists for that record/event. The row is
-emitted with \code{event_row_present = FALSE}, \code{form_started = TRUE}, and
-\code{value_present = TRUE}, so it fails only the missing-event pointblank
-check.}
-\item{\code{"repeat_absent"}}{The form is assessed in a REDCap repeating event
-or as a repeating instrument, and an expected repeat instance is absent
-for the record/event context. The row is emitted with
-\code{repeat_instance_present = FALSE},
-\code{form_started = TRUE}, \code{event_row_present = TRUE}, and
-\code{value_present = TRUE}, so it fails only the missing-repeat pointblank
-check.}
-\item{\code{"any_field_missing"}}{The form context passed event, repeat, and
-whole-form checks, but at least one expected field in that context is
-blank. The row fails when \code{value_present} is \code{FALSE}.}
-\item{\code{"field"}}{The form context exists and is started. A field is expected
-after branching logic, required-field filtering, type exclusions, and
-ignored fields are applied. The row fails only when \code{value_present} is
-\code{FALSE}.}
+\item{\code{"event_row_exists"}}{The form is mapped to a longitudinal event for
+a record. The row passes when an exported row exists for that
+record/event context.}
+\item{\code{"repeat_instance_row_exists"}}{The form is assessed in a REDCap
+repeating event or as a repeating instrument. The row passes when an
+exported row exists for the expected repeat instance.}
+\item{\code{"form_started"}}{An exported row exists for the form context. The
+row passes when at least one data-capturing field on that form is not
+blank or unchecked.}
+\item{\code{"form_complete"}}{The row context exists and the form is started.
+The row passes when all expected fields in that context are complete.}
+\item{\code{"fields_complete"}}{The row context exists and the form is started.
+A field is expected after branching logic, required-field filtering, type
+exclusions, and ignored fields are applied. The row passes when that
+field is complete.}
 }
 
 The whole-form checks are built before field-level checks. Contexts already
-classified as \code{form_blank} are removed from field-level assessment so the
-report returns one form-level row instead of one row per missing field.
+failing \code{form_started} are removed from field-level assessment so the report
+returns one form-level row instead of one row per missing field.
 \code{pointblank} does not rediscover REDCap branching, blank forms, or absent
 events; it provides the auditable validation steps and failed-row extraction
 after those REDCap-specific rules have been encoded.
@@ -181,7 +170,7 @@ The pointblank checks are scoped with preconditions and stratified by a
 \code{validation_context} so the agent summary denominator (\code{n}) is clinically
 meaningful for each event or repeat instance. Context-level checks are
 counted over expected record contexts. Granular field checks are counted over
-expected field rows within each context. The \code{any_field_missing} check rolls
+expected field rows within each context. The \code{form_complete} check rolls
 those field rows up to one row per evaluable record context.
 
 The returned \code{pointblank} agent is interrogated with failed-row extraction

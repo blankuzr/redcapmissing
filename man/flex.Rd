@@ -12,9 +12,9 @@ flex(x, ...)
 \item{...}{Unused.}
 }
 \value{
-A \code{flextable} object with context-stratified pass/fail counts for
-display. This function requires the optional \code{flextable} and \code{glue}
-packages.
+A \code{flextable} object with form metadata, REDCap context columns, and
+pass/fail counts for display. This function requires the optional
+\code{flextable} and \code{glue} packages.
 }
 \description{
 \code{flex()} formats the tidy validation summary from a REDCap missingness

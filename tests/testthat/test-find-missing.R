@@ -69,6 +69,140 @@ test_that("old report argument and return names are not supported", {
   expect_false(any(c(old_event_arg, old_instance_arg) %in% names(report)))
 })
 
+test_that("instrument labels are required and strict", {
+  records <- tibble::tibble(
+    record_id = "r1",
+    branch_flag = "0",
+    required_note = "entered",
+    optional_note = "",
+    checkbox_field___1 = "1",
+    checkbox_field___2 = "0",
+    checkbox_other = "",
+    conditional_note = ""
+  )
+  metadata <- baseline_form_meta()
+
+  expect_error(
+    find_missing(
+      data = records,
+      rcon = list(metadata = function() metadata),
+      form = "baseline_form"
+    ),
+    "`rcon` must provide instrument labels"
+  )
+
+  expect_error(
+    find_missing(
+      data = records,
+      rcon = fake_rcon(
+        metadata,
+        instruments = tibble::tibble(
+          instrument_name = "other_form",
+          instrument_label = "Other form"
+        )
+      ),
+      form = "baseline_form"
+    ),
+    "exactly one row"
+  )
+
+  expect_error(
+    find_missing(
+      data = records,
+      rcon = fake_rcon(
+        metadata,
+        instruments = tibble::tibble(
+          instrument_name = c("baseline_form", "baseline_form"),
+          instrument_label = c("Baseline form", "Duplicate baseline form")
+        )
+      ),
+      form = "baseline_form"
+    ),
+    "exactly one row"
+  )
+
+  expect_error(
+    find_missing(
+      data = records,
+      rcon = fake_rcon(
+        metadata,
+        instruments = tibble::tibble(
+          instrument_name = "baseline_form",
+          instrument_label = ""
+        )
+      ),
+      form = "baseline_form"
+    ),
+    "non-blank `instrument_label`"
+  )
+})
+
+test_that("report object uses positive validation terminology", {
+  records <- tibble::tibble(
+    record_id = c("r1", "r2"),
+    branch_flag = c("0", "0"),
+    required_note = c("entered", ""),
+    optional_note = c("", ""),
+    checkbox_field___1 = c("1", "1"),
+    checkbox_field___2 = c("0", "0"),
+    checkbox_other = c("", ""),
+    conditional_note = c("", "")
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(baseline_form_meta()),
+    form = "baseline_form"
+  )
+
+  expect_true(all(c(
+    "event_row_exists_checks",
+    "event_row_exists_failures",
+    "form_started_checks",
+    "form_started_failures",
+    "form_complete_checks",
+    "form_complete_failures",
+    "fields_complete_checks",
+    "fields_complete_failures"
+  ) %in% names(report)))
+  expect_false(any(c(
+    "event_checks",
+    "event_missing",
+    "form_checks",
+    "form_missing",
+    "any_field_checks",
+    "any_field_missing",
+    "expected"
+  ) %in% names(report)))
+  expect_false(any(c(
+    "check_scope",
+    "missing_scope",
+    "value_present",
+    "event_row_present",
+    "repeat_instance_present"
+  ) %in% names(report$validation_rows)))
+  expect_true(all(c(
+    "validation_scope",
+    "field_complete",
+    "event_row_exists",
+    "repeat_instance_row_exists",
+    "form_complete"
+  ) %in% names(report$validation_rows)))
+  expect_false(any(report$validation_rows$validation_scope %in% c(
+    "field",
+    "any_field_missing",
+    "event_absent",
+    "repeat_absent",
+    "form_blank"
+  )))
+  expect_true(all(report$agent$validation_set$label %in% c(
+    "Event row for record exists",
+    "Form started",
+    "Form complete",
+    "Fields complete"
+  )))
+})
+
 test_that("branch-open fields fail and branch-closed fields are not expected", {
   records <- tibble::tibble(
     record_id = c("r1", "r2"),
@@ -90,7 +224,10 @@ test_that("branch-open fields fail and branch-closed fields are not expected", {
 
   expect_identical(class(report), "redcapmissing")
   expect_true(any(report$missing$record_id == "r1" & report$missing$field_name == "conditional_note"))
-  expect_false(any(report$expected$record_id == "r2" & report$expected$field_name == "conditional_note"))
+  expect_false(any(
+    report$fields_complete_checks$record_id == "r2" &
+      report$fields_complete_checks$field_name == "conditional_note"
+  ))
 })
 
 test_that("required fields and excluded types are applied in the expected order", {
@@ -160,26 +297,61 @@ test_that("any-field roll-up uses the same expected-field filtering as granular 
     ignore_fields = "ignored_value"
   )
 
-  expect_equal(required_report$any_field_missing$record_id, "r2")
-  expect_false(any(required_report$expected$field_name %in% c(
+  expect_equal(required_report$form_complete_failures$record_id, "r2")
+  expect_false(any(required_report$fields_complete_checks$field_name %in% c(
     "optional_value",
     "ignored_value",
     "descriptive_text"
   )))
   expect_false(any(
-    required_report$expected$record_id == "r1" &
-      required_report$expected$field_name == "conditional_value"
+    required_report$fields_complete_checks$record_id == "r1" &
+      required_report$fields_complete_checks$field_name == "conditional_value"
   ))
-  expect_setequal(all_field_report$any_field_missing$record_id, c("r1", "r2"))
-  expect_true("optional_value" %in% all_field_report$expected$field_name)
-  expect_false(any(all_field_report$expected$field_name %in% c(
+  expect_setequal(all_field_report$form_complete_failures$record_id, c("r1", "r2"))
+  expect_true("optional_value" %in% all_field_report$fields_complete_checks$field_name)
+  expect_false(any(all_field_report$fields_complete_checks$field_name %in% c(
     "ignored_value",
     "descriptive_text"
   )))
   expect_false(any(
-    all_field_report$expected$record_id == "r1" &
-      all_field_report$expected$field_name == "conditional_value"
+    all_field_report$fields_complete_checks$record_id == "r1" &
+      all_field_report$fields_complete_checks$field_name == "conditional_value"
   ))
+})
+
+test_that("form complete passes only when all expected fields are complete", {
+  records <- tibble::tibble(
+    record_id = c("complete", "incomplete"),
+    branch_flag = c("0", "0"),
+    required_note = c("entered", ""),
+    optional_note = c("", ""),
+    checkbox_field___1 = c("1", "1"),
+    checkbox_field___2 = c("0", "0"),
+    checkbox_other = c("", ""),
+    conditional_note = c("", "")
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(baseline_form_meta()),
+    form = "baseline_form"
+  )
+  form_complete_summary <- report$agent$validation_set[
+    report$agent$validation_set$step_id == "baseline_form_form_complete",
+    ,
+    drop = FALSE
+  ]
+
+  expect_equal(form_complete_summary$n, 2)
+  expect_equal(form_complete_summary$n_passed, 1)
+  expect_equal(form_complete_summary$n_failed, 1)
+  expect_equal(report$form_complete_failures$record_id, "incomplete")
+  expect_true(report$form_complete_checks$form_complete[
+    report$form_complete_checks$record_id == "complete"
+  ])
+  expect_false(report$form_complete_checks$form_complete[
+    report$form_complete_checks$record_id == "incomplete"
+  ])
 })
 
 test_that("ignore fields and ignore ids are applied before assessment", {
@@ -205,8 +377,8 @@ test_that("ignore fields and ignore ids are applied before assessment", {
 
   expect_equal(report$ignored_ids, "drop")
   expect_true(all(c("optional_note", "checkbox_field") %in% report$ignored_fields))
-  expect_false(any(report$expected$record_id == "drop"))
-  expect_false(any(report$expected$field_name %in% c("optional_note", "checkbox_field")))
+  expect_false(any(report$fields_complete_checks$record_id == "drop"))
+  expect_false(any(report$fields_complete_checks$field_name %in% c("optional_note", "checkbox_field")))
 })
 
 test_that("ignore ids are removed before event-context denominators are built", {
@@ -240,7 +412,7 @@ test_that("ignore ids are removed before event-context denominators are built", 
     ignore_ids = "r3"
   )
   event_summary <- report$agent$validation_set[
-    report$agent$validation_set$step_id == "status_form_event_row_missing",
+    report$agent$validation_set$step_id == "status_form_event_row_exists",
     ,
     drop = FALSE
   ]
@@ -248,10 +420,10 @@ test_that("ignore ids are removed before event-context denominators are built", 
 
   expect_equal(event_summary$n, c(2, 2))
   expect_equal(event_summary$n_failed, c(0, 1))
-  expect_false(any(report$event_checks$record_id == "r3"))
-  expect_false(any(report$form_checks$record_id == "r3"))
-  expect_false(any(report$any_field_checks$record_id == "r3"))
-  expect_false(any(report$expected$record_id == "r3"))
+  expect_false(any(report$event_row_exists_checks$record_id == "r3"))
+  expect_false(any(report$form_started_checks$record_id == "r3"))
+  expect_false(any(report$form_complete_checks$record_id == "r3"))
+  expect_false(any(report$fields_complete_checks$record_id == "r3"))
 })
 
 test_that("whole-form blank rows are reported once per form context", {
@@ -274,16 +446,22 @@ test_that("whole-form blank rows are reported once per form context", {
   )
 
   form_summary <- report$agent$validation_set[
-    report$agent$validation_set$label == "Offered REDCap form has at least one entered field",
+    report$agent$validation_set$label == "Form started",
     ,
     drop = FALSE
   ]
 
-  expect_equal(nrow(report$form_missing), 1)
-  expect_true(any(report$missing$record_id == "blank" & report$missing$missing_scope == "form_blank"))
-  expect_false(any(report$missing$record_id == "blank" & report$missing$missing_scope == "field"))
-  expect_equal(form_summary$n, nrow(report$form_checks))
-  expect_equal(form_summary$n_failed, nrow(report$form_missing))
+  expect_equal(nrow(report$form_started_failures), 1)
+  expect_true(any(
+    report$missing$record_id == "blank" &
+      report$missing$validation_scope == "form_started"
+  ))
+  expect_false(any(
+    report$missing$record_id == "blank" &
+      report$missing$validation_scope == "fields_complete"
+  ))
+  expect_equal(form_summary$n, nrow(report$form_started_checks))
+  expect_equal(form_summary$n_failed, nrow(report$form_started_failures))
 })
 
 test_that("event-qualified branching and missing event rows are handled", {
@@ -323,8 +501,14 @@ test_that("event-qualified branching and missing event rows are handled", {
 
   expect_true(any(baseline_report$missing$record_id == "cross_open" & baseline_report$missing$field_name == "cross_event_note"))
   expect_true(any(baseline_report$missing$record_id == "same_open" & baseline_report$missing$field_name == "same_event_note"))
-  expect_true(any(followup_report$missing$record_id == "missing_followup" & followup_report$missing$missing_scope == "event_absent"))
-  expect_false(any(followup_report$missing$record_id == "missing_followup" & followup_report$missing$missing_scope == "field"))
+  expect_true(any(
+    followup_report$missing$record_id == "missing_followup" &
+      followup_report$missing$validation_scope == "event_row_exists"
+  ))
+  expect_false(any(
+    followup_report$missing$record_id == "missing_followup" &
+      followup_report$missing$validation_scope == "fields_complete"
+  ))
 })
 
 test_that("repeat expectations create repeat-instance checks with scoped denominators", {
@@ -378,16 +562,20 @@ test_that("repeat expectations create repeat-instance checks with scoped denomin
   )
 
   repeat_summary <- explicit_report$agent$validation_set[
-    explicit_report$agent$validation_set$label == "Expected REDCap repeat instances exist for the form",
+    explicit_report$agent$validation_set$label == "Repeat instance row for record exists",
     ,
     drop = FALSE
   ]
   repeat_summary <- repeat_summary[order(repeat_summary$redcap_repeat_instance), , drop = FALSE]
 
   expect_equal(explicit_report$instances, 2L)
-  expect_equal(nrow(explicit_report$repeat_checks), 4)
-  expect_equal(nrow(explicit_report$repeat_missing), 1)
-  expect_true(any(explicit_report$missing$record_id == "r1" & explicit_report$missing$redcap_repeat_instance == "2" & explicit_report$missing$missing_scope == "repeat_absent"))
+  expect_equal(nrow(explicit_report$repeat_instance_row_exists_checks), 4)
+  expect_equal(nrow(explicit_report$repeat_instance_row_exists_failures), 1)
+  expect_true(any(
+    explicit_report$missing$record_id == "r1" &
+      explicit_report$missing$redcap_repeat_instance == "2" &
+      explicit_report$missing$validation_scope == "repeat_instance_row_exists"
+  ))
   expect_equal(repeat_summary$validation_context, c(
     "event: baseline_event; repeat: 1",
     "event: baseline_event; repeat: 2"
@@ -433,19 +621,19 @@ test_that("repeating events create repeat-instance checks with blank repeat inst
     instances = 2L
   )
   repeat_summary <- report$agent$validation_set[
-    report$agent$validation_set$step_id == "repeat_event_form_repeat_instance_missing",
+    report$agent$validation_set$step_id == "repeat_event_form_repeat_instance_row_exists",
     ,
     drop = FALSE
   ]
   repeat_summary <- repeat_summary[order(repeat_summary$redcap_repeat_instance), , drop = FALSE]
 
   expect_equal(report$instances, 2L)
-  expect_equal(nrow(report$repeat_checks), 4)
-  expect_true(all(report$repeat_checks$redcap_repeat_instrument == ""))
-  expect_equal(nrow(report$repeat_missing), 1)
+  expect_equal(nrow(report$repeat_instance_row_exists_checks), 4)
+  expect_true(all(report$repeat_instance_row_exists_checks$redcap_repeat_instrument == ""))
+  expect_equal(nrow(report$repeat_instance_row_exists_failures), 1)
   expect_true(any(
-    report$repeat_missing$record_id == "r1" &
-      report$repeat_missing$redcap_repeat_instance == "2"
+    report$repeat_instance_row_exists_failures$record_id == "r1" &
+      report$repeat_instance_row_exists_failures$redcap_repeat_instance == "2"
   ))
   expect_equal(repeat_summary$validation_context, c(
     "event: repeat_event_arm_1; repeat: 1",
@@ -480,19 +668,19 @@ test_that("multi-event summaries are stratified by event with record denominator
   )
 
   event_summary <- report$agent$validation_set[
-    report$agent$validation_set$label == "Offered REDCap event row exists for the form",
+    report$agent$validation_set$label == "Event row for record exists",
     ,
     drop = FALSE
   ]
   event_summary <- event_summary[order(event_summary$redcap_event_name), , drop = FALSE]
   any_summary <- report$agent$validation_set[
-    report$agent$validation_set$label == "Any expected REDCap field is missing",
+    report$agent$validation_set$label == "Form complete",
     ,
     drop = FALSE
   ]
   any_summary <- any_summary[order(any_summary$redcap_event_name), , drop = FALSE]
   field_summary <- report$agent$validation_set[
-    report$agent$validation_set$label == "Expected REDCap fields are not blank",
+    report$agent$validation_set$label == "Fields complete",
     ,
     drop = FALSE
   ]
@@ -506,8 +694,8 @@ test_that("multi-event summaries are stratified by event with record denominator
   expect_equal(any_summary$n_failed, c(0, 1))
   expect_equal(field_summary$n, c(6, 6))
   expect_equal(field_summary$n_failed, c(0, 1))
-  expect_equal(report$any_field_missing$record_id, "r1")
-  expect_equal(report$any_field_missing$redcap_event_name, "event_2_arm_1")
+  expect_equal(report$form_complete_failures$record_id, "r1")
+  expect_equal(report$form_complete_failures$redcap_event_name, "event_2_arm_1")
 })
 
 test_that("multi-arm event denominators do not cross arms", {
@@ -539,7 +727,7 @@ test_that("multi-arm event denominators do not cross arms", {
     form = "status_form"
   )
   event_summary <- report$agent$validation_set[
-    report$agent$validation_set$step_id == "status_form_event_row_missing",
+    report$agent$validation_set$step_id == "status_form_event_row_exists",
     ,
     drop = FALSE
   ]
@@ -554,12 +742,12 @@ test_that("multi-arm event denominators do not cross arms", {
   expect_equal(event_summary$n, c(1, 1, 1, 1))
   expect_equal(event_summary$n_failed, c(0, 1, 0, 1))
   expect_false(any(
-    report$event_checks$record_id == "r1" &
-      report$event_checks$redcap_event_name %in% c("arm_2_event_1", "arm_2_event_2")
+    report$event_row_exists_checks$record_id == "r1" &
+      report$event_row_exists_checks$redcap_event_name %in% c("arm_2_event_1", "arm_2_event_2")
   ))
   expect_false(any(
-    report$event_checks$record_id == "r2" &
-      report$event_checks$redcap_event_name %in% c("arm_1_event_1", "arm_1_event_2")
+    report$event_row_exists_checks$record_id == "r2" &
+      report$event_row_exists_checks$redcap_event_name %in% c("arm_1_event_1", "arm_1_event_2")
   ))
 })
 
@@ -588,17 +776,17 @@ test_that("all-upstream event failures do not create any-field checks", {
   )
   validation_set <- report$agent$validation_set
   event_summary <- validation_set[
-    validation_set$step_id == "status_form_event_row_missing",
+    validation_set$step_id == "status_form_event_row_exists",
     ,
     drop = FALSE
   ]
 
   expect_equal(event_summary$n, 2)
   expect_equal(event_summary$n_failed, 2)
-  expect_equal(nrow(report$any_field_checks), 0)
-  expect_equal(nrow(report$any_field_missing), 0)
-  expect_false("status_form_any_field_missing" %in% validation_set$step_id)
-  expect_false(any(report$missing$missing_scope == "any_field_missing"))
+  expect_equal(nrow(report$form_complete_checks), 0)
+  expect_equal(nrow(report$form_complete_failures), 0)
+  expect_false("status_form_form_complete" %in% validation_set$step_id)
+  expect_false(any(report$missing$validation_scope == "form_complete"))
 })
 
 test_that("non-longitudinal zero event summaries use zero fractions", {
@@ -619,7 +807,7 @@ test_that("non-longitudinal zero event summaries use zero fractions", {
     form = "baseline_form"
   )
   event_summary <- report$agent$validation_set[
-    report$agent$validation_set$label == "Offered REDCap event row exists for the form",
+    report$agent$validation_set$label == "Event row for record exists",
     ,
     drop = FALSE
   ]
@@ -696,8 +884,8 @@ test_that("events restrict multi-event assessment and defaults to all offered ev
     report_subset$events,
     c("follow_up_1_arm_1", "follow_up_2_arm_1")
   )
-  expect_true(any(report_all$event_missing$redcap_event_name == "follow_up_3_arm_1"))
-  expect_false(any(report_subset$event_missing$redcap_event_name == "follow_up_3_arm_1"))
+  expect_true(any(report_all$event_row_exists_failures$redcap_event_name == "follow_up_3_arm_1"))
+  expect_false(any(report_subset$event_row_exists_failures$redcap_event_name == "follow_up_3_arm_1"))
   expect_true(any(report_subset$missing$redcap_event_name == "follow_up_2_arm_1" & report_subset$missing$field_name == "status_value"))
 })
 
@@ -800,10 +988,10 @@ test_that("mixed repeat and non-repeat forms only apply repeat logic on repeatin
   )
 
   expect_equal(report$instances, 1L)
-  expect_true(all(report$repeat_checks$redcap_event_name == "repeat_b_arm_1"))
-  expect_false(any(report$event_checks$redcap_event_name == "repeat_b_arm_1"))
-  expect_true(any(report$repeat_missing$redcap_event_name == "repeat_b_arm_1"))
-  expect_true(any(report$event_missing$redcap_event_name == "regular_c_arm_1"))
+  expect_true(all(report$repeat_instance_row_exists_checks$redcap_event_name == "repeat_b_arm_1"))
+  expect_false(any(report$event_row_exists_checks$redcap_event_name == "repeat_b_arm_1"))
+  expect_true(any(report$repeat_instance_row_exists_failures$redcap_event_name == "repeat_b_arm_1"))
+  expect_true(any(report$event_row_exists_failures$redcap_event_name == "regular_c_arm_1"))
 })
 
 test_that("mixed repeat and non-repeat summaries separate upstream and field scopes", {
@@ -851,27 +1039,27 @@ test_that("mixed repeat and non-repeat summaries separate upstream and field sco
   validation_set <- report$agent$validation_set
 
   expect_identical(unique(validation_set$step_id), c(
-    "mixed_form_event_row_missing",
-    "mixed_form_repeat_instance_missing",
-    "mixed_form_entire_form_blank",
-    "mixed_form_any_field_missing",
-    "mixed_form_missing_fields"
+    "mixed_form_event_row_exists",
+    "mixed_form_repeat_instance_row_exists",
+    "mixed_form_form_started",
+    "mixed_form_form_complete",
+    "mixed_form_fields_complete"
   ))
 
   event_summary <- validation_set[
-    validation_set$step_id == "mixed_form_event_row_missing",
+    validation_set$step_id == "mixed_form_event_row_exists",
     ,
     drop = FALSE
   ]
   event_summary <- event_summary[order(event_summary$redcap_event_name), , drop = FALSE]
   repeat_summary <- validation_set[
-    validation_set$step_id == "mixed_form_repeat_instance_missing",
+    validation_set$step_id == "mixed_form_repeat_instance_row_exists",
     ,
     drop = FALSE
   ]
   repeat_summary <- repeat_summary[order(repeat_summary$redcap_repeat_instance), , drop = FALSE]
   form_summary <- validation_set[
-    validation_set$step_id == "mixed_form_entire_form_blank",
+    validation_set$step_id == "mixed_form_form_started",
     ,
     drop = FALSE
   ]
@@ -881,13 +1069,13 @@ test_that("mixed repeat and non-repeat summaries separate upstream and field sco
     drop = FALSE
   ]
   any_summary <- validation_set[
-    validation_set$step_id == "mixed_form_any_field_missing",
+    validation_set$step_id == "mixed_form_form_complete",
     ,
     drop = FALSE
   ]
   any_summary <- any_summary[order(any_summary$validation_context), , drop = FALSE]
   field_summary <- validation_set[
-    validation_set$step_id == "mixed_form_missing_fields",
+    validation_set$step_id == "mixed_form_fields_complete",
     ,
     drop = FALSE
   ]
@@ -907,25 +1095,25 @@ test_that("mixed repeat and non-repeat summaries separate upstream and field sco
   expect_equal(any_summary$n_failed, c(1, 1))
   expect_equal(field_summary$n, c(4, 8))
   expect_equal(field_summary$n_failed, c(1, 1))
-  expect_true(any(report$missing$missing_scope == "event_absent"))
-  expect_true(any(report$missing$missing_scope == "repeat_absent"))
-  expect_true(any(report$missing$missing_scope == "form_blank"))
-  expect_true(any(report$missing$missing_scope == "any_field_missing"))
-  expect_true(any(report$missing$missing_scope == "field"))
-  expect_equal(report$any_field_missing$field_name, c("mixed_form", "mixed_form"))
+  expect_true(any(report$missing$validation_scope == "event_row_exists"))
+  expect_true(any(report$missing$validation_scope == "repeat_instance_row_exists"))
+  expect_true(any(report$missing$validation_scope == "form_started"))
+  expect_true(any(report$missing$validation_scope == "form_complete"))
+  expect_true(any(report$missing$validation_scope == "fields_complete"))
+  expect_equal(report$form_complete_failures$field_name, c("mixed_form", "mixed_form"))
   any_extract <- report$missing[
-    report$missing$missing_scope == "any_field_missing",
+    report$missing$validation_scope == "form_complete",
     ,
     drop = FALSE
   ]
   any_extract <- any_extract[order(any_extract$validation_context), , drop = FALSE]
-  expect_equal(any_extract$pointblank_step, rep("mixed_form_any_field_missing", 2))
+  expect_equal(any_extract$pointblank_step, rep("mixed_form_form_complete", 2))
   expect_equal(any_extract$validation_context, c(
     "event: regular_a_arm_1",
     "event: repeat_b_arm_1; repeat: 1"
   ))
   expect_equal(any_extract$field_name, c("mixed_form", "mixed_form"))
-  expect_equal(any_extract$field_label, rep("Any expected field is missing", 2))
+  expect_equal(any_extract$field_label, rep("Form complete", 2))
 })
 
 test_that("non-repeating events do not trigger repeat-instance logic for mixed forms", {
@@ -963,10 +1151,10 @@ test_that("non-repeating events do not trigger repeat-instance logic for mixed f
   )
 
   expect_identical(report$instances, NULL)
-  expect_equal(nrow(report$repeat_checks), 0)
-  expect_equal(nrow(report$repeat_missing), 0)
+  expect_equal(nrow(report$repeat_instance_row_exists_checks), 0)
+  expect_equal(nrow(report$repeat_instance_row_exists_failures), 0)
   expect_setequal(report$events, c("regular_a_arm_1", "regular_c_arm_1"))
-  expect_false(any(report$event_checks$redcap_event_name == "repeat_b_arm_1"))
+  expect_false(any(report$event_row_exists_checks$redcap_event_name == "repeat_b_arm_1"))
 })
 
 test_that("instances is ignored when events exclude repeating contexts", {
@@ -1006,5 +1194,5 @@ test_that("instances is ignored when events exclude repeating contexts", {
   )
 
   expect_identical(report$instances, NULL)
-  expect_equal(nrow(report$repeat_checks), 0)
+  expect_equal(nrow(report$repeat_instance_row_exists_checks), 0)
 })

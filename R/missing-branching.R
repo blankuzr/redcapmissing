@@ -229,7 +229,7 @@
     child_fields <- child_fields[child_fields %in% names(records)]
     if (length(child_fields) == 0) {
       return(list(
-        value_present = rep(FALSE, nrow(records)),
+        field_complete = rep(FALSE, nrow(records)),
         value_summary = rep("", nrow(records))
       ))
     }
@@ -243,21 +243,21 @@
       selected <- matrix(selected, ncol = length(child_fields))
     }
 
-    value_present <- rowSums(selected, na.rm = TRUE) > 0
+    field_complete <- rowSums(selected, na.rm = TRUE) > 0
     value_summary <- apply(selected, 1, function(row) {
       picked <- child_fields[row]
       if (length(picked) == 0) "" else paste(picked, collapse = ", ")
     })
 
     return(list(
-      value_present = value_present,
+      field_complete = field_complete,
       value_summary = value_summary
     ))
   }
 
   value <- .miss_col_vec(records, field)
   list(
-    value_present = !.miss_is_blank_vec(value),
+    field_complete = !.miss_is_blank_vec(value),
     value_summary = .miss_chr_vec(value)
   )
 }
@@ -446,25 +446,25 @@
   }
 
   out <- dplyr::bind_rows(extracts, .id = "pointblank_extract")
-  if (all(c("missing_scope", "form_name") %in% names(out))) {
+  if (all(c("validation_scope", "form_name") %in% names(out))) {
     out$pointblank_step <- dplyr::case_when(
-      out$missing_scope == "form_blank" ~ paste0(
+      out$validation_scope == "form_started" ~ paste0(
         out$form_name,
-        "_entire_form_blank"
+        "_form_started"
       ),
-      out$missing_scope == "event_absent" ~ paste0(
+      out$validation_scope == "event_row_exists" ~ paste0(
         out$form_name,
-        "_event_row_missing"
+        "_event_row_exists"
       ),
-      out$missing_scope == "repeat_absent" ~ paste0(
+      out$validation_scope == "repeat_instance_row_exists" ~ paste0(
         out$form_name,
-        "_repeat_instance_missing"
+        "_repeat_instance_row_exists"
       ),
-      out$missing_scope == "any_field_missing" ~ paste0(
+      out$validation_scope == "form_complete" ~ paste0(
         out$form_name,
-        "_any_field_missing"
+        "_form_complete"
       ),
-      TRUE ~ paste0(out$form_name, "_missing_fields")
+      TRUE ~ paste0(out$form_name, "_fields_complete")
     )
   } else {
     out$pointblank_step <- out$pointblank_extract
@@ -482,13 +482,13 @@
     "field_name",
     "field_label",
     "field_type",
-    "check_scope",
-    "missing_scope",
+    "validation_scope",
     "branching_logic",
     "form_started",
-    "event_row_present",
-    "repeat_instance_present",
-    "value_present",
+    "event_row_exists",
+    "repeat_instance_row_exists",
+    "form_complete",
+    "field_complete",
     "value_summary",
     "export_fields"
   )

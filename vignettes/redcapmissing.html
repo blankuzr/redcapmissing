@@ -363,23 +363,23 @@ then pass both objects into <code>find_missing()</code>.</p>
 <p>The examples below are intentionally synthetic so the vignette
 remains runnable without live REDCap credentials or access to a specific
 REDCap project.</p>
-<div id="why-the-package-uses-multiple-missingness-scopes" class="section level2">
-<h2>Why the package uses multiple missingness scopes</h2>
+<div id="why-the-package-uses-multiple-validation-checks" class="section level2">
+<h2>Why the package uses multiple validation checks</h2>
 <p>REDCap exports are sparse by design. A field can be missing because a
 value is blank, but it can also be missing because REDCap exported no
 row at all for the needed event or repeat context. The package therefore
 separates:</p>
 <ul>
-<li><code>event_absent</code>: the expected longitudinal event row is
-missing</li>
-<li><code>repeat_absent</code>: the expected repeat-instance row is
-missing</li>
-<li><code>form_blank</code>: the row exists, but every form field is
-blank or unchecked</li>
-<li><code>any_field_missing</code>: the row context is evaluable, but at
-least one expected field is blank</li>
-<li><code>field</code>: the row exists and the form is started, but an
-expected field value is missing</li>
+<li><code>event_row_exists</code>: the expected longitudinal event row
+exists</li>
+<li><code>repeat_instance_row_exists</code>: the expected
+repeat-instance row exists</li>
+<li><code>form_started</code>: the row exists and the form has at least
+one entered field</li>
+<li><code>form_complete</code>: the row context is evaluable and all
+expected fields are complete</li>
+<li><code>fields_complete</code>: the row exists, the form is started,
+and each expected field is complete</li>
 </ul>
 <p>This separation keeps the report aligned with how REDCap actually
 exports data.</p>
@@ -410,8 +410,15 @@ meta_row &lt;- function(
 }
 
 fake_rcon &lt;- function(metadata, mapping = NULL, repeat_instrument_event = NULL) {
+  forms &lt;- unique(as.character(metadata$form_name))
+  instruments &lt;- tibble::tibble(
+    instrument_name = forms,
+    instrument_label = paste(forms, &quot;label&quot;)
+  )
+
   list(
     metadata = function() metadata,
+    instruments = function() instruments,
     mapping = function() mapping,
     mappings = function() mapping,
     repeatInstrumentEvent = function() repeat_instrument_event
@@ -471,12 +478,12 @@ report &lt;- find_missing(
   form = &quot;baseline_form&quot;
 )
 
-report$missing[, c(&quot;record_id&quot;, &quot;field_name&quot;, &quot;missing_scope&quot;)]
+report$missing[, c(&quot;record_id&quot;, &quot;field_name&quot;, &quot;validation_scope&quot;)]
 #&gt; # A tibble: 2 × 3
-#&gt;   record_id field_name       missing_scope
+#&gt;   record_id field_name       validation_scope
 #&gt;   &lt;chr&gt;     &lt;chr&gt;            &lt;chr&gt;
-#&gt; 1 r1        baseline_form    any_field_missing
-#&gt; 2 r1        conditional_note field</code></pre>
+#&gt; 1 r1        baseline_form    form_complete
+#&gt; 2 r1        conditional_note fields_complete</code></pre>
 </div>
 <div id="restricting-a-form-to-selected-events" class="section level2">
 <h2>Restricting a form to selected events</h2>
@@ -513,14 +520,15 @@ actually repeats.</p>
 <p>Operationally, that means:</p>
 <ul>
 <li>if you request only non-repeating events for that form, the function
-uses the standard <code>field</code>, <code>any_field_missing</code>,
-<code>form_blank</code>, and <code>event_absent</code> scopes</li>
+uses the standard <code>fields_complete</code>,
+<code>form_complete</code>, <code>form_started</code>, and
+<code>event_row_exists</code> checks</li>
 <li>if you request repeating events for that form, the function uses
-<code>field</code>, <code>any_field_missing</code>,
-<code>form_blank</code>, and <code>repeat_absent</code> for those
-repeating contexts</li>
+<code>fields_complete</code>, <code>form_complete</code>,
+<code>form_started</code>, and <code>repeat_instance_row_exists</code>
+for those repeating contexts</li>
 <li>if you request a mixture of repeating and non-repeating events, the
-function applies the appropriate scope model per event</li>
+function applies the appropriate validation model per event</li>
 <li>if <code>instances</code> is omitted and at least one requested
 event is repeating for that form, the function assumes <code>1L</code>
 only for those requested repeating contexts</li>
@@ -581,11 +589,14 @@ repeat_report &lt;- find_missing(
   instances = 2L
 )
 
-repeat_report$repeat_missing[, c(&quot;record_id&quot;, &quot;redcap_repeat_instance&quot;, &quot;missing_scope&quot;)]
+repeat_report$repeat_instance_row_exists_failures[
+  ,
+  c(&quot;record_id&quot;, &quot;redcap_repeat_instance&quot;, &quot;validation_scope&quot;)
+]
 #&gt; # A tibble: 1 × 3
-#&gt;   record_id redcap_repeat_instance missing_scope
+#&gt;   record_id redcap_repeat_instance validation_scope
 #&gt;   &lt;chr&gt;     &lt;chr&gt;                  &lt;chr&gt;
-#&gt; 1 r1        2                      repeat_absent</code></pre>
+#&gt; 1 r1        2                      repeat_instance_row_exists</code></pre>
 </div>
 <div id="inspecting-the-return-object" class="section level2">
 <h2>Inspecting the return object</h2>
@@ -594,32 +605,31 @@ the most useful components to inspect first:</p>
 <ul>
 <li><code>report$missing</code>: all failed rows extracted from the
 interrogated agent</li>
-<li><code>report$form_missing</code>: the form-level failures for wholly
-blank form contexts</li>
-<li><code>report$event_missing</code>: the failures for expected event
-rows that were absent</li>
-<li><code>report$repeat_missing</code>: the failures for expected repeat
-rows that were absent</li>
-<li><code>report$any_field_missing</code>: the patient-context roll-up
-failures for evaluable contexts with at least one missing expected
-field</li>
-<li><code>report$expected</code>: the field-level expected rows that
-were actually assessed</li>
+<li><code>report$form_started_failures</code>: the form-level failures
+for unstarted form contexts</li>
+<li><code>report$event_row_exists_failures</code>: the failures for
+expected event rows that do not exist</li>
+<li><code>report$repeat_instance_row_exists_failures</code>: the
+failures for expected repeat rows that do not exist</li>
+<li><code>report$form_complete_failures</code>: the patient-context
+roll-up failures for evaluable contexts where not every expected field
+is complete</li>
+<li><code>report$fields_complete_checks</code>: the field-level expected
+rows that were actually assessed</li>
 <li><code>report$agent</code>: the interrogated <code>pointblank</code>
 agent itself</li>
 </ul>
 <p>This design keeps the correction queue (<code>report$missing</code>)
-separate from the full validation context and from the scope-specific
-helper tables.</p>
+separate from the full validation context and from the
+validation-specific helper tables.</p>
 </div>
 <div id="tidy-summary-tables" class="section level2">
 <h2>Tidy summary tables</h2>
 <p><code>tidy(report)</code> returns a focused validation summary tibble
-with one row per validation step and REDCap context, including
-<code>validation_context</code> and the REDCap event/repeat columns used
-for stratified denominators. If optional formatting packages are
-installed, you can also format that validation summary for reporting
-workflows:</p>
+with one row per validation step and REDCap context, including form
+metadata and the REDCap event/repeat columns used for stratified
+denominators. If optional formatting packages are installed, you can
+also format that validation summary for reporting workflows:</p>
 <pre class="r"><code>tidy_tbl &lt;- tidy(report)
 ft &lt;- flex(report)
 html &lt;- flex_html(ft)</code></pre>

@@ -19,13 +19,12 @@ tidy_baseline_report <- function() {
 
 tidy_expected_columns <- function() {
   c(
-    "validation_id",
+    "form",
+    "form_label",
     "validation",
-    "validation_context",
     "redcap_event_name",
     "redcap_repeat_instrument",
     "redcap_repeat_instance",
-    "all_passed",
     "assessed",
     "passed",
     "failed",
@@ -43,9 +42,11 @@ test_that("tidy returns a focused validation-summary tibble", {
   expect_s3_class(tidy_tbl, "tbl_df")
   expect_false(inherits(tidy_tbl, "summary.redcapmissing"))
   expect_identical(names(tidy_tbl), tidy_expected_columns())
-  expect_identical(tidy_tbl$validation_id, validation_set$step_id)
+  expect_equal(unique(tidy_tbl$form), "baseline_form")
+  expect_equal(unique(tidy_tbl$form_label), "baseline_form label")
+  expect_identical(tidy_tbl$form, validation_set$form)
+  expect_identical(tidy_tbl$form_label, validation_set$form_label)
   expect_identical(tidy_tbl$validation, validation_set$label)
-  expect_identical(tidy_tbl$validation_context, validation_set$validation_context)
   expect_identical(tidy_tbl$redcap_event_name, validation_set$redcap_event_name)
   expect_identical(
     tidy_tbl$redcap_repeat_instrument,
@@ -55,13 +56,15 @@ test_that("tidy returns a focused validation-summary tibble", {
     tidy_tbl$redcap_repeat_instance,
     validation_set$redcap_repeat_instance
   )
-  expect_identical(tidy_tbl$all_passed, validation_set$all_passed)
   expect_equal(tidy_tbl$assessed, validation_set$n)
   expect_equal(tidy_tbl$passed, validation_set$n_passed)
   expect_equal(tidy_tbl$failed, validation_set$n_failed)
   expect_equal(tidy_tbl$pass_rate, validation_set$f_passed)
   expect_equal(tidy_tbl$fail_rate, validation_set$f_failed)
   expect_false(any(c(
+    "validation_id",
+    "validation_context",
+    "all_passed",
     "sha1",
     "column",
     "values",
@@ -81,7 +84,7 @@ test_that("tidy preserves zero-denominator rows with zero fractions", {
   report <- tidy_baseline_report()
 
   event_summary <- tidy(report)[
-    tidy(report)$validation_id == "baseline_form_event_row_missing",
+    tidy(report)$validation == "Event row for record exists",
     ,
     drop = FALSE
   ]
@@ -91,7 +94,7 @@ test_that("tidy preserves zero-denominator rows with zero fractions", {
   expect_equal(event_summary$failed, 0)
   expect_equal(event_summary$pass_rate, 0)
   expect_equal(event_summary$fail_rate, 0)
-  expect_equal(event_summary$validation_context, "overall")
+  expect_equal(event_summary$redcap_event_name, "")
 })
 
 test_that("tidy returns multi-event context denominators", {
@@ -125,7 +128,7 @@ test_that("tidy returns multi-event context denominators", {
   tidy_tbl <- tidy(report)
 
   event_summary <- tidy_tbl[
-    tidy_tbl$validation_id == "status_form_event_row_missing",
+    tidy_tbl$validation == "Event row for record exists",
     ,
     drop = FALSE
   ]
@@ -135,7 +138,7 @@ test_that("tidy returns multi-event context denominators", {
     drop = FALSE
   ]
   field_summary <- tidy_tbl[
-    tidy_tbl$validation_id == "status_form_missing_fields",
+    tidy_tbl$validation == "Fields complete",
     ,
     drop = FALSE
   ]
@@ -145,10 +148,7 @@ test_that("tidy returns multi-event context denominators", {
     drop = FALSE
   ]
 
-  expect_equal(
-    event_summary$validation_context,
-    paste0("event: event_", 1:3, "_arm_1")
-  )
+  expect_equal(event_summary$redcap_event_name, paste0("event_", 1:3, "_arm_1"))
   expect_equal(event_summary$assessed, c(2, 2, 2))
   expect_equal(event_summary$failed, c(0, 0, 2))
   expect_equal(event_summary$pass_rate, c(1, 1, 0))
@@ -193,7 +193,7 @@ test_that("tidy returns repeating context denominators", {
     instances = 2L
   )
   repeat_summary <- tidy(report)[
-    tidy(report)$validation_id == "repeat_form_repeat_instance_missing",
+    tidy(report)$validation == "Repeat instance row for record exists",
     ,
     drop = FALSE
   ]
@@ -203,10 +203,7 @@ test_that("tidy returns repeating context denominators", {
     drop = FALSE
   ]
 
-  expect_equal(repeat_summary$validation_context, c(
-    "event: baseline_event; repeat: 1",
-    "event: baseline_event; repeat: 2"
-  ))
+  expect_equal(repeat_summary$redcap_event_name, c("baseline_event", "baseline_event"))
   expect_equal(repeat_summary$redcap_repeat_instance, c("1", "2"))
   expect_equal(repeat_summary$assessed, c(2, 2))
   expect_equal(repeat_summary$failed, c(0, 1))

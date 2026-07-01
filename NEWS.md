@@ -1,3 +1,18 @@
+# redcapmissing 0.8.0
+
+## 2026-07-01
+
+- Updated report summaries to use positive validation terminology for event
+  rows, repeat-instance rows, form startedness, form completeness, and field
+  completeness.
+- Changed `tidy.redcapmissing()` to return the focused public summary columns:
+  form metadata, validation label, REDCap event/repeat context, assessed,
+  passed, failed, pass rate, and fail rate.
+- Added strict instrument-label validation through `rcon$instruments()` so
+  tidy summaries can include REDCap form labels.
+- Renamed report helper tables to positive validation-check and failure
+  components.
+
 # redcapmissing 0.7.1
 
 ## 2026-07-01

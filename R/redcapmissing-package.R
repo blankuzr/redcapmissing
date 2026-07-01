@@ -1,8 +1,8 @@
 #' redcapmissing: Branching-Aware Missingness Reports for REDCap Exports
 #'
 #' Build branching-aware missingness reports for REDCap record exports,
-#' including form-level, event-level, repeat-instance, any-field, and
-#' field-level validation surfaces.
+#' including event-row, repeat-instance, form-started, form-complete, and
+#' field-complete validation surfaces.
 #'
 #' @details
 #' `redcapmissing` is built on top of the `redcapAPI` package. In routine use,

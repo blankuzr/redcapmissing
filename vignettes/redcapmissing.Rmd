@@ -23,18 +23,18 @@ objects into `find_missing()`.
 The examples below are intentionally synthetic so the vignette remains runnable
 without live REDCap credentials or access to a specific REDCap project.
 
-## Why the package uses multiple missingness scopes
+## Why the package uses multiple validation checks
 
 REDCap exports are sparse by design. A field can be missing because a value is
 blank, but it can also be missing because REDCap exported no row at all for the
 needed event or repeat context. The package therefore separates:
 
-- `event_absent`: the expected longitudinal event row is missing
-- `repeat_absent`: the expected repeat-instance row is missing
-- `form_blank`: the row exists, but every form field is blank or unchecked
-- `any_field_missing`: the row context is evaluable, but at least one expected
-  field is blank
-- `field`: the row exists and the form is started, but an expected field value is missing
+- `event_row_exists`: the expected longitudinal event row exists
+- `repeat_instance_row_exists`: the expected repeat-instance row exists
+- `form_started`: the row exists and the form has at least one entered field
+- `form_complete`: the row context is evaluable and all expected fields are complete
+- `fields_complete`: the row exists, the form is started, and each expected
+  field is complete
 
 This separation keeps the report aligned with how REDCap actually exports data.
 
@@ -65,8 +65,15 @@ meta_row <- function(
 }
 
 fake_rcon <- function(metadata, mapping = NULL, repeat_instrument_event = NULL) {
+  forms <- unique(as.character(metadata$form_name))
+  instruments <- tibble::tibble(
+    instrument_name = forms,
+    instrument_label = paste(forms, "label")
+  )
+
   list(
     metadata = function() metadata,
+    instruments = function() instruments,
     mapping = function() mapping,
     mappings = function() mapping,
     repeatInstrumentEvent = function() repeat_instrument_event
@@ -132,7 +139,7 @@ report <- find_missing(
   form = "baseline_form"
 )
 
-report$missing[, c("record_id", "field_name", "missing_scope")]
+report$missing[, c("record_id", "field_name", "validation_scope")]
 ```
 
 ## Restricting a form to selected events
@@ -173,13 +180,13 @@ logic for the requested events where the form actually repeats.
 Operationally, that means:
 
 - if you request only non-repeating events for that form, the function uses the
-  standard `field`, `any_field_missing`, `form_blank`, and `event_absent`
-  scopes
-- if you request repeating events for that form, the function uses `field`,
-  `any_field_missing`, `form_blank`, and `repeat_absent` for those repeating
-  contexts
+  standard `fields_complete`, `form_complete`, `form_started`, and
+  `event_row_exists` checks
+- if you request repeating events for that form, the function uses
+  `fields_complete`, `form_complete`, `form_started`, and
+  `repeat_instance_row_exists` for those repeating contexts
 - if you request a mixture of repeating and non-repeating events, the function
-  applies the appropriate scope model per event
+  applies the appropriate validation model per event
 - if `instances` is omitted and at least one requested event is repeating
   for that form, the function assumes `1L` only for those requested repeating
   contexts
@@ -242,7 +249,10 @@ repeat_report <- find_missing(
   instances = 2L
 )
 
-repeat_report$repeat_missing[, c("record_id", "redcap_repeat_instance", "missing_scope")]
+repeat_report$repeat_instance_row_exists_failures[
+  ,
+  c("record_id", "redcap_repeat_instance", "validation_scope")
+]
 ```
 
 ## Inspecting the return object
@@ -251,24 +261,25 @@ The report object is intentionally multi-part. In practice, these are the most
 useful components to inspect first:
 
 - `report$missing`: all failed rows extracted from the interrogated agent
-- `report$form_missing`: the form-level failures for wholly blank form contexts
-- `report$event_missing`: the failures for expected event rows that were absent
-- `report$repeat_missing`: the failures for expected repeat rows that were absent
-- `report$any_field_missing`: the patient-context roll-up failures for
-  evaluable contexts with at least one missing expected field
-- `report$expected`: the field-level expected rows that were actually assessed
+- `report$form_started_failures`: the form-level failures for unstarted form contexts
+- `report$event_row_exists_failures`: the failures for expected event rows that do not exist
+- `report$repeat_instance_row_exists_failures`: the failures for expected repeat rows that do not exist
+- `report$form_complete_failures`: the patient-context roll-up failures for
+  evaluable contexts where not every expected field is complete
+- `report$fields_complete_checks`: the field-level expected rows that were
+  actually assessed
 - `report$agent`: the interrogated `pointblank` agent itself
 
 This design keeps the correction queue (`report$missing`) separate from the
-full validation context and from the scope-specific helper tables.
+full validation context and from the validation-specific helper tables.
 
 ## Tidy summary tables
 
 `tidy(report)` returns a focused validation summary tibble with one row per
-validation step and REDCap context, including `validation_context` and the
-REDCap event/repeat columns used for stratified denominators. If optional
-formatting packages are installed, you can also format that validation summary
-for reporting workflows:
+validation step and REDCap context, including form metadata and the REDCap
+event/repeat columns used for stratified denominators. If optional formatting
+packages are installed, you can also format that validation summary for
+reporting workflows:
 
 ```{r, eval = FALSE}
 tidy_tbl <- tidy(report)
