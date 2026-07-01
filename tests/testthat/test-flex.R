@@ -27,11 +27,10 @@ test_that("flex returns a formatted table when optional packages are available",
   )
 
   flex_out <- flex(report)
-  summary_flex_out <- flex(summary(report))
+  tidy_tbl <- tidy(report)
 
   expect_s3_class(flex_out, "flextable")
-  expect_s3_class(summary_flex_out, "flextable")
-  expect_equal(summary_flex_out$body$dataset, flex_out$body$dataset)
+  expect_equal(flex_out$body$dataset$Assessed, tidy_tbl$assessed)
   expect_true("Context" %in% names(flex_out$body$dataset))
   expect_true(any(flex_out$body$dataset$Context == "overall"))
   expect_true(any(
@@ -42,7 +41,7 @@ test_that("flex returns a formatted table when optional packages are available",
   ))
 })
 
-test_that("flex rejects summary objects without current context columns", {
+test_that("flex no longer accepts summary objects", {
   testthat::skip_if_not_installed("flextable")
   testthat::skip_if_not_installed("glue")
 
@@ -58,6 +57,6 @@ test_that("flex rejects summary objects without current context columns", {
 
   expect_error(
     flex(summary_tbl),
-    "current `summary.redcapmissing` columns"
+    "no applicable method"
   )
 })

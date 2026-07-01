@@ -1,3 +1,12 @@
+# redcapmissing 0.7.0
+
+## 2026-07-01
+
+- Replaced the `summary.redcapmissing()` interface with a `tidy.redcapmissing()`
+  method and re-exported `tidy()` for focused validation-summary tibbles. This
+  is a breaking change: `summary(report)` is no longer a supported
+  redcapmissing API.
+
 # redcapmissing 0.6.1
 
 ## 2026-07-01

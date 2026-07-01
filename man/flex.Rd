@@ -7,9 +7,7 @@
 flex(x, ...)
 }
 \arguments{
-\item{x}{A \code{redcapmissing} object created by \code{\link[=find_missing]{find_missing()}}, or a
-\code{"summary.redcapmissing"} object returned by \code{summary()} for a
-\code{redcapmissing} report.}
+\item{x}{A \code{redcapmissing} object created by \code{\link[=find_missing]{find_missing()}}.}
 
 \item{...}{Unused.}
 }
@@ -19,12 +17,9 @@ display. This function requires the optional \code{flextable} and \code{glue}
 packages.
 }
 \description{
-\code{flex()} formats the validation summary from a REDCap missingness report as a
-\code{flextable} for reporting workflows. It accepts either a \code{redcapmissing}
-object returned by \code{\link[=find_missing]{find_missing()}} or the \code{"summary.redcapmissing"} object
-returned by \code{summary()} for that report. Calling \code{flex(report)} is equivalent
-to formatting \code{summary(report)}.
+\code{flex()} formats the tidy validation summary from a REDCap missingness
+report as a \code{flextable} for reporting workflows.
 }
 \seealso{
-\code{\link[=find_missing]{find_missing()}}, \code{\link[=summary.redcapmissing]{summary.redcapmissing()}}, \code{\link[=flex_html]{flex_html()}}
+\code{\link[=find_missing]{find_missing()}}, \code{\link[=tidy.redcapmissing]{tidy.redcapmissing()}}, \code{\link[=flex_html]{flex_html()}}
 }

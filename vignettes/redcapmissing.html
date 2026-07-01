@@ -612,16 +612,15 @@ agent itself</li>
 separate from the full validation context and from the scope-specific
 helper tables.</p>
 </div>
-<div id="summary-tables" class="section level2">
-<h2>Summary tables</h2>
-<p><code>summary(report)</code> returns the unmodified
-<code>pointblank</code> validation summary from
-<code>report$agent$validation_set</code>, including
+<div id="tidy-summary-tables" class="section level2">
+<h2>Tidy summary tables</h2>
+<p><code>tidy(report)</code> returns a focused validation summary tibble
+with one row per validation step and REDCap context, including
 <code>validation_context</code> and the REDCap event/repeat columns used
 for stratified denominators. If optional formatting packages are
 installed, you can also format that validation summary for reporting
 workflows:</p>
-<pre class="r"><code>summary_tbl &lt;- summary(report)
+<pre class="r"><code>tidy_tbl &lt;- tidy(report)
 ft &lt;- flex(report)
 html &lt;- flex_html(ft)</code></pre>
 </div>
