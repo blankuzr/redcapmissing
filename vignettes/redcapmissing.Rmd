@@ -138,7 +138,7 @@ report$missing[, c("record_id", "field_name", "missing_scope")]
 ## Restricting a form to selected events
 
 Some REDCap projects use many events of the same general type. In those cases,
-`desired_events` lets you keep the assessment focused on the specific events that
+`events` lets you keep the assessment focused on the specific events that
 should count for the current review.
 
 ```{r, eval = FALSE}
@@ -146,7 +146,7 @@ followup_report <- find_missing(
   data = records,
   rcon = rcon,
   form = "patient_status",
-  desired_events = c(
+  events = c(
     "follow_up_1_arm_1",
     "follow_up_2_arm_1",
     "follow_up_3_arm_1"
@@ -154,7 +154,7 @@ followup_report <- find_missing(
 )
 ```
 
-If `desired_events` is omitted, the function defaults to all offered events for
+If `events` is omitted, the function defaults to all offered events for
 that form. If the form is only offered on one event, the argument is ignored.
 
 ## Forms that are regular on some events and repeating on others
@@ -180,7 +180,7 @@ Operationally, that means:
   contexts
 - if you request a mixture of repeating and non-repeating events, the function
   applies the appropriate scope model per event
-- if `expected_repeats` is omitted and at least one requested event is repeating
+- if `instances` is omitted and at least one requested event is repeating
   for that form, the function assumes `1L` only for those requested repeating
   contexts
 
@@ -189,7 +189,7 @@ mixed_report <- find_missing(
   data = records,
   rcon = rcon,
   form = "patient_status",
-  desired_events = c(
+  events = c(
     "event_a_arm_1",
     "event_b_arm_1",
     "event_c_arm_1"
@@ -202,7 +202,7 @@ form events, while `event_b_arm_1` would be checked with repeat-instance logic.
 
 ## Repeat expectations
 
-`expected_repeats` exists because REDCap does not export nonexistent repeat rows.
+`instances` exists because REDCap does not export nonexistent repeat rows.
 If instance 2 should exist but was never created, there is no row in the export
 for the package to inspect unless it first creates the expected repeat contexts.
 
@@ -239,7 +239,7 @@ repeat_report <- find_missing(
   data = repeat_records,
   rcon = fake_rcon(repeat_metadata, mapping = mapping, repeat_instrument_event = repeat_map),
   form = "repeat_form",
-  expected_repeats = 2L
+  instances = 2L
 )
 
 repeat_report$repeat_missing[, c("record_id", "redcap_repeat_instance", "missing_scope")]

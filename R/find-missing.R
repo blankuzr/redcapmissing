@@ -88,13 +88,13 @@
 #'   information are also read from the connection object.
 #' @param form Required. A single REDCap form/instrument name to assess. No
 #'   default is supplied so callers must choose the form deliberately.
-#' @param desired_events Character vector of REDCap event names to assess for
+#' @param events Character vector of REDCap event names to assess for
 #'   the requested form, or `NULL`. When a form is offered on multiple REDCap
 #'   events, this argument can restrict the report to a selected subset of those
 #'   events. If `NULL`, all offered events are assessed. If the form is offered
 #'   on only one event, this argument is ignored. If the form is regular on
-#'   some events and repeating on others, `desired_events` also determines
-#'   whether repeat-instance logic is activated. Defaults to `NULL`.
+#'   some events and repeating on others, `events` also determines whether
+#'   repeat-instance logic is activated. Defaults to `NULL`.
 #' @param required_fields Logical scalar. When `TRUE`, only fields marked as
 #'   required in the REDCap metadata `required_field` column are assessed. When
 #'   `FALSE`, all fields on the form are assessed after `exclude_types` and
@@ -110,13 +110,13 @@
 #' @param exclude_types Character vector of REDCap field types to exclude from
 #'   assessment. Defaults to `"descriptive"` because descriptive fields do not
 #'   capture values. These types are excluded regardless of `required_fields`.
-#' @param expected_repeats Positive whole-number scalar, or `NULL`. When `form`
+#' @param instances Positive whole-number scalar, or `NULL`. When `form`
 #'   is assessed in a REDCap repeating event or as a repeating instrument, this
 #'   is the minimum number of repeat instances expected for every assessed
-#'   record/event context. For example, `expected_repeats = 2L` checks that
-#'   repeat instances `1` and `2` exist. If the form is repeating and this
-#'   argument is `NULL`, the function warns and assumes `1L` for the requested
-#'   repeating contexts. If the requested events do not include any repeating
+#'   record/event context. For example, `instances = 2L` checks that repeat
+#'   instances `1` and `2` exist. If the form is repeating and this argument is
+#'   `NULL`, the function warns and assumes `1L` for the requested repeating
+#'   contexts. If the requested events do not include any repeating
 #'   contexts for the form, this argument is ignored.
 #'
 #' @return A list with class `"redcapmissing"` containing:
@@ -148,10 +148,10 @@
 #'     form, including checkbox child export columns.}
 #'   \item{`required_fields`}{Whether the report was limited to REDCap-required
 #'     fields.}
-#'   \item{`desired_events`}{The REDCap events actually used for assessment, or
+#'   \item{`events`}{The REDCap events actually used for assessment, or
 #'     `character(0)` when no event restriction applied.}
-#'   \item{`expected_repeats`}{The repeat-instance count used for repeating
-#'     forms, or `NULL` for non-repeating forms.}
+#'   \item{`instances`}{The repeat-instance count used for repeating forms, or
+#'     `NULL` for non-repeating forms.}
 #'   \item{`ignored_fields`}{Root field names skipped because of
 #'     `ignore_fields`.}
 #'   \item{`ignored_ids`}{Record IDs skipped because of `ignore_ids`.}
@@ -192,7 +192,7 @@
 #'   data = records,
 #'   rcon = rcon,
 #'   form = "baseline_form",
-#'   desired_events = c("baseline_event", "followup_event"),
+#'   events = c("baseline_event", "followup_event"),
 #'   ignore_fields = c("status_flag", "screening_code")
 #' )
 #'
@@ -203,7 +203,7 @@
 #'   data = records,
 #'   rcon = rcon,
 #'   form = "repeat_form",
-#'   expected_repeats = 2L
+#'   instances = 2L
 #' )
 #' }
 #'
@@ -212,12 +212,12 @@ find_missing <- function(
   data,
   rcon,
   form,
-  desired_events = NULL,
+  events = NULL,
   required_fields = TRUE,
   ignore_fields = NULL,
   ignore_ids = NULL,
   exclude_types = "descriptive",
-  expected_repeats = NULL
+  instances = NULL
 ) {
   if (missing(form)) {
     stop("Provide `form`; this argument has no default.", call. = FALSE)
@@ -245,13 +245,13 @@ find_missing <- function(
   .miss_check_metadata(meta)
 
   project <- .miss_get_project(rcon = rcon, meta = meta, form = form)
-  project <- .miss_resolve_desired_events(
+  project <- .miss_resolve_events(
     project = project,
-    desired_events = desired_events,
+    events = events,
     form = form
   )
-  expected_repeats <- .miss_resolve_expected_repeats(
-    expected_repeats = expected_repeats,
+  instances <- .miss_resolve_instances(
+    instances = instances,
     project = project,
     form = form
   )
@@ -354,7 +354,7 @@ find_missing <- function(
     form_records = records,
     project = project,
     form = form,
-    expected_repeats = expected_repeats
+    instances = instances
   )
   repeat_checks <- .miss_add_validation_context(repeat_checks)
   repeat_missing <- repeat_checks[repeat_checks$missing_scope == "repeat_absent", , drop = FALSE]
@@ -508,8 +508,8 @@ find_missing <- function(
     any_field_missing = any_field_missing,
     field_plan = field_plan,
     required_fields = required_fields,
-    desired_events = project$desired_events %||% character(),
-    expected_repeats = expected_repeats,
+    events = project$events %||% character(),
+    instances = instances,
     ignored_fields = ignore_roots,
     ignored_ids = ignore_ids,
     project = project,
