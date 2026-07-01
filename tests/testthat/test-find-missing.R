@@ -1,5 +1,7 @@
 test_that("public report API is stable", {
   report_args <- formals(find_missing)
+  old_event_arg <- paste0("desired", "_events")
+  old_instance_arg <- paste0("expected", "_repeats")
 
   expect_setequal(
     names(report_args),
@@ -7,23 +9,64 @@ test_that("public report API is stable", {
       "data",
       "rcon",
       "form",
-      "desired_events",
+      "events",
       "required_fields",
       "ignore_fields",
       "ignore_ids",
       "exclude_types",
-      "expected_repeats"
+      "instances"
     )
   )
   expect_identical(report_args$form, quote(expr = ))
-  expect_null(report_args$desired_events)
+  expect_null(report_args$events)
   expect_true(report_args$required_fields)
   expect_null(report_args$ignore_fields)
   expect_null(report_args$ignore_ids)
-  expect_null(report_args$expected_repeats)
+  expect_null(report_args$instances)
+  expect_false(old_event_arg %in% names(report_args))
+  expect_false(old_instance_arg %in% names(report_args))
   expect_true("find_missing" %in% getNamespaceExports("redcapmissing"))
   expect_false("redcap_missing_report" %in% getNamespaceExports("redcapmissing"))
   expect_false("redcap_missing_summary" %in% getNamespaceExports("redcapmissing"))
+})
+
+test_that("old report argument and return names are not supported", {
+  old_event_arg <- paste0("desired", "_events")
+  old_instance_arg <- paste0("expected", "_repeats")
+  records <- tibble::tibble(
+    record_id = "r1",
+    branch_flag = "0",
+    required_note = "entered",
+    optional_note = "",
+    checkbox_field___1 = "1",
+    checkbox_field___2 = "0",
+    checkbox_other = "",
+    conditional_note = ""
+  )
+  report_args <- list(
+    data = records,
+    rcon = fake_rcon(baseline_form_meta()),
+    form = "baseline_form"
+  )
+
+  expect_error(
+    do.call(
+      find_missing,
+      c(report_args, stats::setNames(list(NULL), old_event_arg))
+    ),
+    "unused argument"
+  )
+  expect_error(
+    do.call(
+      find_missing,
+      c(report_args, stats::setNames(list(1L), old_instance_arg))
+    ),
+    "unused argument"
+  )
+
+  report <- do.call(find_missing, report_args)
+  expect_true(all(c("events", "instances") %in% names(report)))
+  expect_false(any(c(old_event_arg, old_instance_arg) %in% names(report)))
 })
 
 test_that("branch-open fields fail and branch-closed fields are not expected", {
@@ -318,7 +361,7 @@ test_that("repeat expectations create repeat-instance checks with scoped denomin
       repeat_instrument_event = repeat_instrument_event
     ),
     form = "repeat_form",
-    expected_repeats = 2L
+    instances = 2L
   )
 
   expect_warning(
@@ -331,7 +374,7 @@ test_that("repeat expectations create repeat-instance checks with scoped denomin
       ),
       form = "repeat_form"
     ),
-    "Assuming `expected_repeats = 1L`"
+    "Assuming `instances = 1L`"
   )
 
   repeat_summary <- explicit_report$agent$validation_set[
@@ -341,7 +384,7 @@ test_that("repeat expectations create repeat-instance checks with scoped denomin
   ]
   repeat_summary <- repeat_summary[order(repeat_summary$redcap_repeat_instance), , drop = FALSE]
 
-  expect_equal(explicit_report$expected_repeats, 2L)
+  expect_equal(explicit_report$instances, 2L)
   expect_equal(nrow(explicit_report$repeat_checks), 4)
   expect_equal(nrow(explicit_report$repeat_missing), 1)
   expect_true(any(explicit_report$missing$record_id == "r1" & explicit_report$missing$redcap_repeat_instance == "2" & explicit_report$missing$missing_scope == "repeat_absent"))
@@ -351,7 +394,7 @@ test_that("repeat expectations create repeat-instance checks with scoped denomin
   ))
   expect_equal(repeat_summary$n, c(2, 2))
   expect_equal(repeat_summary$n_failed, c(0, 1))
-  expect_equal(default_report$expected_repeats, 1L)
+  expect_equal(default_report$instances, 1L)
 })
 
 test_that("repeating events create repeat-instance checks with blank repeat instruments", {
@@ -387,7 +430,7 @@ test_that("repeating events create repeat-instance checks with blank repeat inst
       repeat_instrument_event = repeat_instrument_event
     ),
     form = "repeat_event_form",
-    expected_repeats = 2L
+    instances = 2L
   )
   repeat_summary <- report$agent$validation_set[
     report$agent$validation_set$step_id == "repeat_event_form_repeat_instance_missing",
@@ -396,7 +439,7 @@ test_that("repeating events create repeat-instance checks with blank repeat inst
   ]
   repeat_summary <- repeat_summary[order(repeat_summary$redcap_repeat_instance), , drop = FALSE]
 
-  expect_equal(report$expected_repeats, 2L)
+  expect_equal(report$instances, 2L)
   expect_equal(nrow(report$repeat_checks), 4)
   expect_true(all(report$repeat_checks$redcap_repeat_instrument == ""))
   expect_equal(nrow(report$repeat_missing), 1)
@@ -611,7 +654,7 @@ test_that("checkbox roots are present when any child is selected", {
 })
 
 
-test_that("desired_events restrict multi-event assessment and defaults to all offered events", {
+test_that("events restrict multi-event assessment and defaults to all offered events", {
   status_meta <- dplyr::bind_rows(
     meta_row("record_id", "status_form", field_label = "Record ID", required = "y"),
     meta_row("status_started", "status_form", field_label = "Status started", required = "y"),
@@ -642,15 +685,15 @@ test_that("desired_events restrict multi-event assessment and defaults to all of
     data = records,
     rcon = fake_rcon(status_meta, mapping = mapping),
     form = "status_form",
-    desired_events = c("follow_up_1_arm_1", "follow_up_2_arm_1")
+    events = c("follow_up_1_arm_1", "follow_up_2_arm_1")
   )
 
   expect_setequal(
-    report_all$desired_events,
+    report_all$events,
     c("follow_up_1_arm_1", "follow_up_2_arm_1", "follow_up_3_arm_1")
   )
   expect_setequal(
-    report_subset$desired_events,
+    report_subset$events,
     c("follow_up_1_arm_1", "follow_up_2_arm_1")
   )
   expect_true(any(report_all$event_missing$redcap_event_name == "follow_up_3_arm_1"))
@@ -658,7 +701,7 @@ test_that("desired_events restrict multi-event assessment and defaults to all of
   expect_true(any(report_subset$missing$redcap_event_name == "follow_up_2_arm_1" & report_subset$missing$field_name == "status_value"))
 })
 
-test_that("desired_events is ignored for single-event forms", {
+test_that("events is ignored for single-event forms", {
   status_meta <- dplyr::bind_rows(
     meta_row("record_id", "status_form", field_label = "Record ID", required = "y"),
     meta_row("status_started", "status_form", field_label = "Status started", required = "y"),
@@ -685,14 +728,14 @@ test_that("desired_events is ignored for single-event forms", {
     data = records,
     rcon = fake_rcon(status_meta, mapping = mapping),
     form = "status_form",
-    desired_events = "not_an_offered_event"
+    events = "not_an_offered_event"
   )
 
   expect_identical(report_default$missing, report_ignored$missing)
-  expect_identical(report_ignored$desired_events, "baseline_event")
+  expect_identical(report_ignored$events, "baseline_event")
 })
 
-test_that("desired_events must match offered events for multi-event forms", {
+test_that("events must match offered events for multi-event forms", {
   status_meta <- dplyr::bind_rows(
     meta_row("record_id", "status_form", field_label = "Record ID", required = "y"),
     meta_row("status_started", "status_form", field_label = "Status started", required = "y")
@@ -713,7 +756,7 @@ test_that("desired_events must match offered events for multi-event forms", {
       data = records,
       rcon = fake_rcon(status_meta, mapping = mapping),
       form = "status_form",
-      desired_events = "not_offered_event"
+      events = "not_offered_event"
     ),
     "subset of the REDCap events"
   )
@@ -753,10 +796,10 @@ test_that("mixed repeat and non-repeat forms only apply repeat logic on repeatin
       ),
       form = "mixed_form"
     ),
-    "Assuming `expected_repeats = 1L`"
+    "Assuming `instances = 1L`"
   )
 
-  expect_equal(report$expected_repeats, 1L)
+  expect_equal(report$instances, 1L)
   expect_true(all(report$repeat_checks$redcap_event_name == "repeat_b_arm_1"))
   expect_false(any(report$event_checks$redcap_event_name == "repeat_b_arm_1"))
   expect_true(any(report$repeat_missing$redcap_event_name == "repeat_b_arm_1"))
@@ -803,7 +846,7 @@ test_that("mixed repeat and non-repeat summaries separate upstream and field sco
       repeat_instrument_event = repeat_instrument_event
     ),
     form = "mixed_form",
-    expected_repeats = 2L
+    instances = 2L
   )
   validation_set <- report$agent$validation_set
 
@@ -885,7 +928,7 @@ test_that("mixed repeat and non-repeat summaries separate upstream and field sco
   expect_equal(any_extract$field_label, rep("Any expected field is missing", 2))
 })
 
-test_that("non-repeating desired events do not trigger repeat-instance logic for mixed forms", {
+test_that("non-repeating events do not trigger repeat-instance logic for mixed forms", {
   mixed_meta <- dplyr::bind_rows(
     meta_row("record_id", "mixed_form", field_label = "Record ID", required = "y"),
     meta_row("mixed_started", "mixed_form", field_label = "Mixed started", required = "y"),
@@ -916,17 +959,17 @@ test_that("non-repeating desired events do not trigger repeat-instance logic for
       repeat_instrument_event = repeat_instrument_event
     ),
     form = "mixed_form",
-    desired_events = c("regular_a_arm_1", "regular_c_arm_1")
+    events = c("regular_a_arm_1", "regular_c_arm_1")
   )
 
-  expect_identical(report$expected_repeats, NULL)
+  expect_identical(report$instances, NULL)
   expect_equal(nrow(report$repeat_checks), 0)
   expect_equal(nrow(report$repeat_missing), 0)
-  expect_setequal(report$desired_events, c("regular_a_arm_1", "regular_c_arm_1"))
+  expect_setequal(report$events, c("regular_a_arm_1", "regular_c_arm_1"))
   expect_false(any(report$event_checks$redcap_event_name == "repeat_b_arm_1"))
 })
 
-test_that("expected_repeats is ignored when desired events exclude repeating contexts", {
+test_that("instances is ignored when events exclude repeating contexts", {
   mixed_meta <- dplyr::bind_rows(
     meta_row("record_id", "mixed_form", field_label = "Record ID", required = "y"),
     meta_row("mixed_started", "mixed_form", field_label = "Mixed started", required = "y")
@@ -956,12 +999,12 @@ test_that("expected_repeats is ignored when desired events exclude repeating con
         repeat_instrument_event = repeat_instrument_event
       ),
       form = "mixed_form",
-      desired_events = "regular_a_arm_1",
-      expected_repeats = 2L
+      events = "regular_a_arm_1",
+      instances = 2L
     ),
     "does not include any REDCap repeating event or instrument contexts"
   )
 
-  expect_identical(report$expected_repeats, NULL)
+  expect_identical(report$instances, NULL)
   expect_equal(nrow(report$repeat_checks), 0)
 })

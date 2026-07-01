@@ -458,9 +458,9 @@
   form_records,
   project,
   form,
-  expected_repeats
+  instances
 ) {
-  if (is.null(expected_repeats) || !isTRUE(project$form_repeats)) {
+  if (is.null(instances) || !isTRUE(project$form_repeats)) {
     return(.miss_empty_expected())
   }
 
@@ -474,7 +474,7 @@
     records = records,
     project = project,
     form = form,
-    expected_repeats = expected_repeats
+    instances = instances
   )
   if (nrow(contexts) == 0) {
     return(.miss_empty_expected())
@@ -544,10 +544,10 @@
   records,
   project,
   form,
-  expected_repeats
+  instances
 ) {
   fields <- project$system_fields
-  instances <- as.character(seq_len(expected_repeats))
+  repeat_instances <- as.character(seq_len(instances))
 
   if (fields$event_col %in% names(records)) {
     repeat_event_contexts <- .miss_form_repeating_events(project)
@@ -610,7 +610,7 @@
 
   out <- merge(
     record_events,
-    tibble::tibble(redcap_repeat_instance = instances),
+    tibble::tibble(redcap_repeat_instance = repeat_instances),
     all = TRUE
   )
   out <- out[, c(

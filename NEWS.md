@@ -1,3 +1,11 @@
+# redcapmissing 0.6.0
+
+## 2026-07-01
+
+- Renamed the `find_missing()` selected-event and repeat-instance arguments to
+  `events` and `instances`, and aligned the corresponding returned report
+  fields with those names.
+
 # redcapmissing 0.5.1
 
 ## 2026-07-01

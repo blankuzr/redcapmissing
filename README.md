@@ -209,9 +209,9 @@ Why this exists:
 - REDCap only exports repeat instances that actually exist.
 - If instance 2 should exist but was never created, there is no exported
   row to inspect.
-- `expected_repeats` therefore acts as an expected-row rule: the
-  function builds the expected record-event-repeat contexts and compares
-  them to what REDCap exported.
+- `instances` therefore acts as an expected-row rule: the function
+  builds the expected record-event-repeat contexts and compares them to
+  what REDCap exported.
 - When an expected repeat row is absent, the report returns one row for
   that missing repeat context.
 
@@ -264,16 +264,15 @@ Why this exists:
 ## Restricting assessment to selected events
 
 When a form is offered on many REDCap events, you can restrict
-assessment to a chosen subset with `desired_events`. If you do not
-supply it, the function defaults to all REDCap events where the form is
-offered.
+assessment to a chosen subset with `events`. If you do not supply it,
+the function defaults to all REDCap events where the form is offered.
 
 ``` r
 followup_report <- find_missing(
   data = records,
   rcon = rcon,
   form = "patient_status",
-  desired_events = c(
+  events = c(
     "follow_up_1_arm_1",
     "follow_up_2_arm_1",
     "follow_up_3_arm_1"
@@ -295,28 +294,28 @@ the package applies scopes by event type:
 - both regular and repeating contexts use `any_field_missing` to roll
   expected field rows up to patient-context counts
 
-When `expected_repeats` is omitted, the default `1L` assumption is only
-applied for the requested events where the form actually repeats.
+When `instances` is omitted, the default `1L` assumption is only applied
+for the requested events where the form actually repeats.
 
 ## Repeat expectations
 
-For repeating events and instruments, `expected_repeats` applies a
-uniform expectation to all assessed record/event contexts.
+For repeating events and instruments, `instances` applies a uniform
+expectation to all assessed record/event contexts.
 
 ``` r
 repeat_report <- find_missing(
   data = records,
   rcon = rcon,
   form = "repeat_form",
-  expected_repeats = 2L
+  instances = 2L
 )
 ```
 
 This checks that repeat instances `1` and `2` exist everywhere that
 `repeat_form` is expected. The key REDCap detail is that missing repeat
-instances are absent as rows, not merely blank as values.
-`expected_repeats` lets `redcapmissing` create those expected row
-contexts explicitly before comparing them to the export.
+instances are absent as rows, not merely blank as values. `instances`
+lets `redcapmissing` create those expected row contexts explicitly
+before comparing them to the export.
 
 ## Acknowledgement and citation
 

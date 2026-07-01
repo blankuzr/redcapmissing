@@ -8,12 +8,12 @@ find_missing(
   data,
   rcon,
   form,
-  desired_events = NULL,
+  events = NULL,
   required_fields = TRUE,
   ignore_fields = NULL,
   ignore_ids = NULL,
   exclude_types = "descriptive",
-  expected_repeats = NULL
+  instances = NULL
 )
 }
 \arguments{
@@ -32,13 +32,13 @@ information are also read from the connection object.}
 \item{form}{Required. A single REDCap form/instrument name to assess. No
 default is supplied so callers must choose the form deliberately.}
 
-\item{desired_events}{Character vector of REDCap event names to assess for
+\item{events}{Character vector of REDCap event names to assess for
 the requested form, or \code{NULL}. When a form is offered on multiple REDCap
 events, this argument can restrict the report to a selected subset of those
 events. If \code{NULL}, all offered events are assessed. If the form is offered
 on only one event, this argument is ignored. If the form is regular on
-some events and repeating on others, \code{desired_events} also determines
-whether repeat-instance logic is activated. Defaults to \code{NULL}.}
+some events and repeating on others, \code{events} also determines whether
+repeat-instance logic is activated. Defaults to \code{NULL}.}
 
 \item{required_fields}{Logical scalar. When \code{TRUE}, only fields marked as
 required in the REDCap metadata \code{required_field} column are assessed. When
@@ -59,13 +59,13 @@ report is built. Defaults to \code{NULL}, which means no records are ignored.}
 assessment. Defaults to \code{"descriptive"} because descriptive fields do not
 capture values. These types are excluded regardless of \code{required_fields}.}
 
-\item{expected_repeats}{Positive whole-number scalar, or \code{NULL}. When \code{form}
+\item{instances}{Positive whole-number scalar, or \code{NULL}. When \code{form}
 is assessed in a REDCap repeating event or as a repeating instrument, this
 is the minimum number of repeat instances expected for every assessed
-record/event context. For example, \code{expected_repeats = 2L} checks that
-repeat instances \code{1} and \code{2} exist. If the form is repeating and this
-argument is \code{NULL}, the function warns and assumes \code{1L} for the requested
-repeating contexts. If the requested events do not include any repeating
+record/event context. For example, \code{instances = 2L} checks that repeat
+instances \code{1} and \code{2} exist. If the form is repeating and this argument is
+\code{NULL}, the function warns and assumes \code{1L} for the requested repeating
+contexts. If the requested events do not include any repeating
 contexts for the form, this argument is ignored.}
 }
 \value{
@@ -98,10 +98,10 @@ and failed evaluable contexts.}
 form, including checkbox child export columns.}
 \item{\code{required_fields}}{Whether the report was limited to REDCap-required
 fields.}
-\item{\code{desired_events}}{The REDCap events actually used for assessment, or
+\item{\code{events}}{The REDCap events actually used for assessment, or
 \code{character(0)} when no event restriction applied.}
-\item{\code{expected_repeats}}{The repeat-instance count used for repeating
-forms, or \code{NULL} for non-repeating forms.}
+\item{\code{instances}}{The repeat-instance count used for repeating forms, or
+\code{NULL} for non-repeating forms.}
 \item{\code{ignored_fields}}{Root field names skipped because of
 \code{ignore_fields}.}
 \item{\code{ignored_ids}}{Record IDs skipped because of \code{ignore_ids}.}
@@ -210,7 +210,7 @@ baseline_missing <- find_missing(
   data = records,
   rcon = rcon,
   form = "baseline_form",
-  desired_events = c("baseline_event", "followup_event"),
+  events = c("baseline_event", "followup_event"),
   ignore_fields = c("status_flag", "screening_code")
 )
 
@@ -221,7 +221,7 @@ repeat_missing <- find_missing(
   data = records,
   rcon = rcon,
   form = "repeat_form",
-  expected_repeats = 2L
+  instances = 2L
 )
 }
 
