@@ -44,6 +44,7 @@
 
 .miss_get_project <- function(rcon, meta, form) {
   system_fields <- .miss_system_fields()
+  form_label <- .miss_get_form_label(rcon = rcon, form = form)
   mapping <- .miss_normalize_mapping(.miss_get_rcon_table(
     rcon,
     c("mapping", "mappings")
@@ -73,6 +74,7 @@
 
   list(
     id_col = meta$field_name[[1]],
+    form_label = form_label,
     system_fields = system_fields,
     mapping = mapping,
     repeat_instrument_event = repeat_instrument_event,
@@ -84,6 +86,50 @@
       length(intersect(form_events, repeating_events)) > 0,
     events = NULL
   )
+}
+
+.miss_get_form_label <- function(rcon, form) {
+  if (is.null(rcon$instruments) || !is.function(rcon$instruments)) {
+    stop(
+      "`rcon` must provide instrument labels through `rcon$instruments()`.",
+      call. = FALSE
+    )
+  }
+
+  instruments <- tibble::as_tibble(rcon$instruments())
+  needed <- c("instrument_name", "instrument_label")
+  missing_cols <- setdiff(needed, names(instruments))
+  if (length(missing_cols) > 0) {
+    stop(
+      "`rcon$instruments()` is missing required column(s): ",
+      paste(missing_cols, collapse = ", "),
+      ".",
+      call. = FALSE
+    )
+  }
+
+  matches <- instruments[.miss_chr_vec(instruments$instrument_name) == form, , drop = FALSE]
+  if (nrow(matches) != 1) {
+    stop(
+      "`rcon$instruments()` must contain exactly one row for form `",
+      form,
+      "`.",
+      call. = FALSE
+    )
+  }
+
+  form_label <- .miss_chr(matches$instrument_label[[1]])
+  if (.miss_is_blank_scalar(form_label)) {
+    stop(
+      "`rcon$instruments()` must provide a non-blank `instrument_label` ",
+      "for form `",
+      form,
+      "`.",
+      call. = FALSE
+    )
+  }
+
+  form_label
 }
 
 

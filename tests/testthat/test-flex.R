@@ -31,11 +31,19 @@ test_that("flex returns a formatted table when optional packages are available",
 
   expect_s3_class(flex_out, "flextable")
   expect_equal(flex_out$body$dataset$Assessed, tidy_tbl$assessed)
-  expect_true("Context" %in% names(flex_out$body$dataset))
-  expect_true(any(flex_out$body$dataset$Context == "overall"))
+  expect_true(all(c(
+    "Form",
+    "Form Label",
+    "Validation",
+    "Event",
+    "Repeat Instrument",
+    "Repeat Instance"
+  ) %in% names(flex_out$body$dataset)))
+  expect_true(any(flex_out$body$dataset$Form == "baseline_form"))
+  expect_true(any(flex_out$body$dataset$`Form Label` == "baseline_form label"))
   expect_true(any(
-    flex_out$body$dataset$Evaluation ==
-      "Offered REDCap event row exists for the form" &
+    flex_out$body$dataset$Validation ==
+      "Event row for record exists" &
       flex_out$body$dataset$Passed == "0 (0%)" &
       flex_out$body$dataset$Failed == "0 (0%)"
   ))

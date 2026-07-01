@@ -14,17 +14,15 @@
 \value{
 A tibble with one row per validation step/context and columns:
 \describe{
-\item{\code{validation_id}}{The validation step identifier.}
+\item{\code{form}}{The REDCap instrument/form name assessed by the report.}
+\item{\code{form_label}}{The REDCap instrument label for \code{form}.}
 \item{\code{validation}}{The validation label.}
-\item{\code{validation_context}}{The REDCap context used for stratified
-denominators.}
 \item{\code{redcap_event_name}}{The REDCap event name for the validation
 context, or \code{""} when not applicable.}
 \item{\code{redcap_repeat_instrument}}{The REDCap repeat instrument for the
 validation context, or \code{""} when not applicable.}
 \item{\code{redcap_repeat_instance}}{The REDCap repeat instance for the
 validation context, or \code{""} when not applicable.}
-\item{\code{all_passed}}{Whether all assessed rows passed.}
 \item{\code{assessed}}{The number of rows assessed.}
 \item{\code{passed}}{The number of rows that passed.}
 \item{\code{failed}}{The number of rows that failed.}

@@ -10,17 +10,15 @@
 #'
 #' @return A tibble with one row per validation step/context and columns:
 #' \describe{
-#'   \item{`validation_id`}{The validation step identifier.}
+#'   \item{`form`}{The REDCap instrument/form name assessed by the report.}
+#'   \item{`form_label`}{The REDCap instrument label for `form`.}
 #'   \item{`validation`}{The validation label.}
-#'   \item{`validation_context`}{The REDCap context used for stratified
-#'     denominators.}
 #'   \item{`redcap_event_name`}{The REDCap event name for the validation
 #'     context, or `""` when not applicable.}
 #'   \item{`redcap_repeat_instrument`}{The REDCap repeat instrument for the
 #'     validation context, or `""` when not applicable.}
 #'   \item{`redcap_repeat_instance`}{The REDCap repeat instance for the
 #'     validation context, or `""` when not applicable.}
-#'   \item{`all_passed`}{Whether all assessed rows passed.}
 #'   \item{`assessed`}{The number of rows assessed.}
 #'   \item{`passed`}{The number of rows that passed.}
 #'   \item{`failed`}{The number of rows that failed.}
@@ -38,13 +36,12 @@ tidy.redcapmissing <- function(x, ...) {
   .redcapmissing_check_tidy_validation_set(validation_set)
 
   tibble::tibble(
-    validation_id = validation_set$step_id,
+    form = validation_set$form,
+    form_label = validation_set$form_label,
     validation = validation_set$label,
-    validation_context = validation_set$validation_context,
     redcap_event_name = validation_set$redcap_event_name,
     redcap_repeat_instrument = validation_set$redcap_repeat_instrument,
     redcap_repeat_instance = validation_set$redcap_repeat_instance,
-    all_passed = validation_set$all_passed,
     assessed = validation_set$n,
     passed = validation_set$n_passed,
     failed = validation_set$n_failed,
@@ -61,13 +58,12 @@ generics::tidy
 
 .redcapmissing_tidy_validation_set_columns <- function() {
   c(
-    "step_id",
+    "form",
+    "form_label",
     "label",
-    "validation_context",
     "redcap_event_name",
     "redcap_repeat_instrument",
     "redcap_repeat_instance",
-    "all_passed",
     "n",
     "n_passed",
     "n_failed",

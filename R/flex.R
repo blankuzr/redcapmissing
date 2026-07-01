@@ -7,9 +7,9 @@
 #' @param x A `redcapmissing` object created by [find_missing()].
 #' @param ... Unused.
 #'
-#' @return A `flextable` object with context-stratified pass/fail counts for
-#'   display. This function requires the optional `flextable` and `glue`
-#'   packages.
+#' @return A `flextable` object with form metadata, REDCap context columns, and
+#'   pass/fail counts for display. This function requires the optional
+#'   `flextable` and `glue` packages.
 #'
 #' @seealso [find_missing()], [tidy.redcapmissing()], [flex_html()]
 #'
@@ -31,13 +31,27 @@ flex.redcapmissing <- function(x, ...) {
       failed = glue::glue("{failed} ({round(fail_rate * 100, 1)}%)")
     ) |>
     dplyr::select(dplyr::all_of(c(
+      "form",
+      "form_label",
       "validation",
-      "validation_context",
+      "redcap_event_name",
+      "redcap_repeat_instrument",
+      "redcap_repeat_instance",
       "assessed",
       "passed",
       "failed"
     ))) |>
-    stats::setNames(c("Evaluation", "Context", "Assessed", "Passed", "Failed")) |>
+    stats::setNames(c(
+      "Form",
+      "Form Label",
+      "Validation",
+      "Event",
+      "Repeat Instrument",
+      "Repeat Instance",
+      "Assessed",
+      "Passed",
+      "Failed"
+    )) |>
     flextable::flextable() |>
     flextable::align(align = "left", part = "all") |>
     flextable::bold(part = "header") |>

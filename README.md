@@ -39,8 +39,8 @@ argument is expected to be created with
 `redcapAPI::exportRecordsTyped()`.
 
 This package depends on `redcapAPI` for REDCap metadata access,
-form-event mapping, repeating event/instrument structure, and
-REDCap-style blank-value handling.
+instrument labels, form-event mapping, repeating event/instrument
+structure, and REDCap-style blank-value handling.
 
 ## Recommended typed export
 
@@ -71,12 +71,12 @@ extend this same pattern so those fields are also kept in code space.
 metadata and works around REDCap export behavior to produce informative
 missingness reports from REDCap projects:
 
-- `redcapmissing` extends missingness assessment to five scopes: missing
-  field, any field missing, missing form, missing event, and missing
-  repeat instance.
+- `redcapmissing` reports five positive validation checks: event row for
+  record exists, repeat instance row for record exists, form started,
+  form complete, and fields complete.
 - `redcapmissing` uses the `pointblank` package for validation plans and
   summary output.
-- `redcapmissing` returns both row-level failures and scope-level
+- `redcapmissing` returns both row-level failures and validation-level
   summary output.
 
 ## Installation
@@ -109,20 +109,19 @@ standard `pointblank` agent. The most commonly used components are:
   - the interrogated `pointblank` agent, including validation metadata
     and underlying summary counts
 - `report$missing`
-  - the row-level dataset detailing all failed validation scopes
-- `report$form_missing`, `report$event_missing`, `report$repeat_missing`
-  - the row-level datasets for the three whole-context missingness
-    scopes
-- `report$any_field_missing`
-  - the row-level patient-context roll-up for contexts with at least one
-    missing expected field
+  - the row-level dataset detailing all failed validation checks
+- `report$event_row_exists_failures`,
+  `report$repeat_instance_row_exists_failures`,
+  `report$form_started_failures`, `report$form_complete_failures`, and
+  `report$fields_complete_failures`
+  - the row-level failure datasets for each validation check
 
 ## Tidy and formatted output
 
 `tidy(report)` returns a focused validation summary tibble with one row
-per validation step and REDCap context. It includes `validation_context`
-plus the REDCap event and repeat columns used to stratify `assessed`,
-`passed`, `failed`, `pass_rate`, and `fail_rate`.
+per validation step and REDCap context. It includes the assessed form
+name, form label, validation label, REDCap event and repeat columns,
+`assessed`, `passed`, `failed`, `pass_rate`, and `fail_rate`.
 
 For reporting workflows, `flex()` formats that validation summary as a
 `flextable` with a Context column, and `flex_html()` renders the
@@ -155,7 +154,15 @@ metadata <- tibble::tibble(
   required_field = c("y", "y", "y", "y")
 )
 
-rcon <- list(metadata = function() metadata)
+instruments <- tibble::tibble(
+  instrument_name = "baseline_form",
+  instrument_label = "Baseline form"
+)
+
+rcon <- list(
+  metadata = function() metadata,
+  instruments = function() instruments
+)
 
 records <- tibble::tibble(
   record_id = c("r1", "r2"),
@@ -170,22 +177,22 @@ report <- find_missing(
   form = "baseline_form"
 )
 
-report$missing[, c("record_id", "field_name", "missing_scope")]
+report$missing[, c("record_id", "field_name", "validation_scope")]
 ```
 
-## Missingness scopes
+## Validation checks
 
 REDCap exports make it important to distinguish between a missing
 **value** and a missing **row context**. In longitudinal and repeating
 projects, a record can be missing because REDCap exported no row at all
 for the relevant event or repeat instance. In other contexts, REDCap
 does export a row, but every field on the form is still blank.
-`redcapmissing` separates those cases into five scopes.
+`redcapmissing` separates those cases into five validation checks.
 
-### `event_absent`
+### `event_row_exists`
 
-Use this scope when a form is offered on a longitudinal event, but the
-export has no row at all for that record-event context.
+This check passes when a form is offered on a longitudinal event and the
+export has a row for that record-event context.
 
 Why this exists:
 
@@ -194,14 +201,14 @@ Why this exists:
 - The package therefore uses the project form-event mapping from `rcon`
   to build expected record-event contexts before any field-level check
   can happen.
-- When an expected event row is absent, the report returns one row for
-  the missing event context instead of many synthetic field failures.
+- When an expected event row is absent, the failed rows identify that
+  event context instead of creating many synthetic field failures.
 
-### `repeat_absent`
+### `repeat_instance_row_exists`
 
-Use this scope when a form is assessed in a repeating event or as a
-repeating instrument and an expected repeat instance row does not exist
-in the export.
+This check passes when a form is assessed in a repeating event or as a
+repeating instrument and the expected repeat instance row exists in the
+export.
 
 Why this exists:
 
@@ -211,13 +218,14 @@ Why this exists:
 - `instances` therefore acts as an expected-row rule: the function
   builds the expected record-event-repeat contexts and compares them to
   what REDCap exported.
-- When an expected repeat row is absent, the report returns one row for
-  that missing repeat context.
+- When an expected repeat row is absent, the failed rows identify that
+  repeat context.
 
-### `form_blank`
+### `form_started`
 
-Use this scope when REDCap exported the row for the form context, but
-every data-capturing field on that form is blank or unchecked.
+This check passes when REDCap exported the row for the form context and
+at least one data-capturing field on that form is not blank or
+unchecked.
 
 Why this exists:
 
@@ -225,30 +233,30 @@ Why this exists:
   real data entry started.
 - REDCap may still export the record/event/repeat row even though every
   form field is empty.
-- Reporting each field separately would overstate the problem, so the
-  package records a single form-level failure for that context.
+- Reporting each field separately would overstate the problem, so failed
+  `form_started` rows are kept as a single form-level failure for that
+  context.
 
-### `any_field_missing`
+### `form_complete`
 
-Use this scope when the row context exists, the form is not wholly
-blank, and at least one expected field is blank for the
-record/event/repeat context.
+This check passes when the row context exists, the form is started, and
+every expected field is complete for the record/event/repeat context.
 
 Why this exists:
 
 - Granular field-level counts can be much larger than the patient count
   because every expected patient-field combination is assessed.
 - This roll-up reports one pass/fail result per evaluable patient
-  context, so users can see how many records have any missing expected
-  field.
-- Records that fail `event_absent`, `repeat_absent`, or `form_blank` are
-  not counted in this scope because those failures are owned by upstream
-  scopes.
+  context, so users can see how many records have fully complete
+  expected fields.
+- Records that fail `event_row_exists`, `repeat_instance_row_exists`, or
+  `form_started` are not counted in this check because those failures
+  are owned by upstream checks.
 
-### `field`
+### `fields_complete`
 
-Use this scope when the row context exists, the form is not wholly
-blank, and a specific field is expected after REDCap branching logic is
+This check passes when the row context exists, the form is started, and
+a specific expected field is complete after REDCap branching logic is
 evaluated.
 
 Why this exists:
@@ -284,13 +292,14 @@ events play the same conceptual role but only a subset should count
 toward the current missingness review.
 
 If a form is regular on some requested events and repeating on others,
-the package applies scopes by event type:
+the package applies validation checks by event type:
 
-- regular-form events use the standard `field`, `form_blank`, and
-  `event_absent` logic
-- repeating events and repeating-instrument events use `field`,
-  `form_blank`, and `repeat_absent` logic
-- both regular and repeating contexts use `any_field_missing` to roll
+- regular-form events use the standard `fields_complete`,
+  `form_started`, and `event_row_exists` logic
+- repeating events and repeating-instrument events use
+  `fields_complete`, `form_started`, and `repeat_instance_row_exists`
+  logic
+- both regular and repeating contexts use `form_complete` to roll
   expected field rows up to patient-context counts
 
 When `instances` is omitted, the default `1L` assumption is only applied
