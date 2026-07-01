@@ -7,13 +7,17 @@ test_that("startup message includes banner and release metadata", {
   message <- cli::ansi_strip(build_message(version = "1.2.3"))
   message_lines <- strsplit(message, "\n", fixed = TRUE)[[1]]
 
-  expect_length(message_lines, 8)
-  expect_true(any(grepl("\u2588", message_lines[seq_len(7)], fixed = TRUE)))
-  expect_true(any(grepl("v1.2.3", message_lines, fixed = TRUE)))
-  expect_true(any(grepl("Release:", message_lines, fixed = TRUE)))
-  expect_true(any(grepl("Forever-searching", message_lines, fixed = TRUE)))
-  expect_true(any(grepl("Latest:", message_lines, fixed = TRUE)))
-  expect_true(any(grepl("Improved scope reporting", message_lines, fixed = TRUE)))
+  expect_identical(
+    message_lines,
+    c(
+      "> redcapmissing",
+      "  Forever-searching  {v1.2.3}",
+      "  :: Improved scope reporting"
+    )
+  )
+  expect_false(any(grepl("\u2588", message_lines, fixed = TRUE)))
+  expect_false(any(grepl("Release:", message_lines, fixed = TRUE)))
+  expect_false(any(grepl("Latest:", message_lines, fixed = TRUE)))
 })
 
 test_that("startup version helper resolves package versions safely", {

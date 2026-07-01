@@ -1,3 +1,10 @@
+# redcapmissing 0.7.1
+
+## 2026-07-01
+
+- Replaced the startup banner with a quieter three-line console splash that
+  shows the package name, release name, version, and release update.
+
 # redcapmissing 0.7.0
 
 ## 2026-07-01
