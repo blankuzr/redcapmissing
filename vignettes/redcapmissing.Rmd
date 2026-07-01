@@ -262,16 +262,16 @@ useful components to inspect first:
 This design keeps the correction queue (`report$missing`) separate from the
 full validation context and from the scope-specific helper tables.
 
-## Summary tables
+## Tidy summary tables
 
-`summary(report)` returns the unmodified `pointblank` validation summary from
-`report$agent$validation_set`, including `validation_context` and the REDCap
-event/repeat columns used for stratified denominators. If optional formatting
-packages are installed, you can also format that validation summary for
-reporting workflows:
+`tidy(report)` returns a focused validation summary tibble with one row per
+validation step and REDCap context, including `validation_context` and the
+REDCap event/repeat columns used for stratified denominators. If optional
+formatting packages are installed, you can also format that validation summary
+for reporting workflows:
 
 ```{r, eval = FALSE}
-summary_tbl <- summary(report)
+tidy_tbl <- tidy(report)
 ft <- flex(report)
 html <- flex_html(ft)
 ```

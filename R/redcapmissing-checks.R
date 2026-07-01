@@ -1,4 +1,4 @@
-# Internal report and dependency checks shared by summary and flex helpers.
+# Internal report and dependency checks shared by tidy and flex helpers.
 
 .redcapmissing_check_report <- function(x, arg = "x") {
   if (!inherits(x, "redcapmissing")) {

@@ -92,8 +92,8 @@ Installing `redcapmissing` also installs `redcapAPI` as a package dependency.
 
 - `find_missing()`
   - build a missingness report for one REDCap form/instrument
-- `summary()`
-  - return the unmodified `pointblank` validation summary from a report object
+- `tidy()`
+  - return a focused validation summary tibble from a report object
 - `flex()`
   - format the validation summary as a `flextable`
 - `flex_html()`
@@ -115,19 +115,19 @@ standard `pointblank` agent. The most commonly used components are:
   - the row-level patient-context roll-up for contexts with at least one missing
     expected field
 
-## Summary and formatted output
+## Tidy and formatted output
 
-`summary(report)` returns the `pointblank` validation summary stored inside
-`report$agent$validation_set`. It includes `validation_context` plus the REDCap
-event and repeat columns used to stratify `n`, `n_passed`, `n_failed`,
-`f_passed`, and `f_failed`.
+`tidy(report)` returns a focused validation summary tibble with one row per
+validation step and REDCap context. It includes `validation_context` plus the
+REDCap event and repeat columns used to stratify `assessed`, `passed`, `failed`,
+`pass_rate`, and `fail_rate`.
 
 For reporting workflows, `flex()` formats that validation summary as a
 `flextable` with a Context column, and `flex_html()` renders the `flextable` as
 an HTML string for email or report insertion.
 
 ```{r, eval = FALSE}
-summary_tbl <- summary(report)
+tidy_tbl <- tidy(report)
 ft <- flex(report)
 html <- flex_html(ft)
 ```

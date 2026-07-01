@@ -16,7 +16,7 @@
 #' but current public stewardship and development resources now live under the
 #' VUMC Biostatistics `vubiostat/redcapAPI` project.
 #'
-#' @seealso [find_missing()], [summary.redcapmissing()], [flex()],
+#' @seealso [find_missing()], [tidy.redcapmissing()], [flex()],
 #'   [flex_html()],
 #'   [redcapAPI::redcapConnection()], [redcapAPI::exportRecordsTyped()]
 #' @references
