@@ -1,5 +1,7 @@
 ---
-output: github_document
+output:
+  github_document:
+    md_extensions: -smart
 ---
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
@@ -91,7 +93,7 @@ Installing `redcapmissing` also installs `redcapAPI` as a package dependency.
 ## Core functions
 
 - `find_missing()`
-  - build a missingness report for one REDCap form/instrument
+  - build a missingness report for one or more REDCap forms/instruments
 - `tidy()`
   - return a focused validation summary tibble from a report object
 - `flex()`
@@ -102,7 +104,9 @@ Installing `redcapmissing` also installs `redcapAPI` as a package dependency.
 ## What the report returns
 
 `find_missing()` returns a structured report object centered on a
-standard `pointblank` agent. The most commonly used components are:
+standard `pointblank` agent. When multiple forms are requested, the report
+combines all validation rows into one object and keeps the assessed form in the
+`form` column. The most commonly used components are:
 
 - `report$agent`
   - the interrogated `pointblank` agent, including validation metadata and
@@ -114,6 +118,10 @@ standard `pointblank` agent. The most commonly used components are:
   `report$form_started_failures`,
   `report$form_complete_failures`, and `report$fields_complete_failures`
   - the row-level failure datasets for each validation check
+- `report$forms`, `report$form_labels`, `report$events`, and
+  `report$instances`
+  - the normalized form list, labels, selected events, and expanded repeat
+    instance IDs used to build the report
 
 ## Tidy and formatted output
 
@@ -173,7 +181,7 @@ records <- tibble::tibble(
 report <- find_missing(
   data = records,
   rcon = rcon,
-  form = "baseline_form"
+  forms = "baseline_form"
 )
 
 report$missing[, c("record_id", "field_name", "validation_scope")]
@@ -261,13 +269,15 @@ Why this exists:
 
 When a form is offered on many REDCap events, you can restrict assessment to a
 chosen subset with `events`. If you do not supply it, the function
-defaults to all REDCap events where the form is offered.
+defaults to all REDCap events where the form is offered. With multiple forms,
+pass either one event vector for all forms or a named list by form. Omitted list
+entries use that form's default offered events.
 
 ```r
 followup_report <- find_missing(
   data = records,
   rcon = rcon,
-  form = "patient_status",
+  forms = "patient_status",
   events = c(
     "follow_up_1_arm_1",
     "follow_up_2_arm_1",
@@ -293,15 +303,37 @@ package applies validation checks by event type:
 When `instances` is omitted, the default `1L` assumption is only applied
 for the requested events where the form actually repeats.
 
+For form-specific event settings, use a named list:
+
+```r
+multi_form_report <- find_missing(
+  data = records,
+  rcon = rcon,
+  forms = c("imaging", "demographics"),
+  events = list(
+    imaging = c("event_2_arm_1", "event_3_arm_1")
+  )
+)
+```
+
+In this example, `imaging` is assessed only on the two listed events, while
+`demographics` uses all events where REDCap offers that form. If `imaging`
+repeats on one requested event and no `instances` entry is supplied, the report
+assumes instance `1` for that repeating context and records the expanded value
+in `report$instances$imaging`.
+
 ## Repeat expectations
 
-For repeating events and instruments, `instances` applies a uniform expectation to all assessed record/event contexts.
+For repeating events and instruments, scalar `instances` values apply a count to
+all requested repeating contexts. A value of `2L` means instances `1` and `2`.
+Vectors with length greater than one are treated as exact repeat-instance IDs.
+With multiple forms, pass a named list for form-specific expectations.
 
 ```r
 repeat_report <- find_missing(
   data = records,
   rcon = rcon,
-  form = "repeat_form",
+  forms = "repeat_form",
   instances = 2L
 )
 ```

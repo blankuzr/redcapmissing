@@ -179,47 +179,65 @@
   project
 }
 
-.miss_resolve_instances <- function(instances, project, form) {
+.miss_resolve_instances <- function(instances, project, form, explicit = FALSE) {
   if (!isTRUE(project$form_repeats)) {
-    if (!is.null(instances)) {
-      warning(
-        "`instances` was supplied, but the requested assessment for form `",
+    if (isTRUE(explicit) && !is.null(instances)) {
+      stop(
+        "`instances` was supplied for form `",
         form,
-        "` does not include any REDCap repeating event or instrument contexts. ",
-        "Repeat-instance missingness will not be assessed.",
+        "`, but that form does not include any requested REDCap repeating ",
+        "event or instrument contexts.",
         call. = FALSE
       )
     }
-    return(NULL)
+    return(list(values = NULL, defaulted = FALSE))
   }
 
   if (is.null(instances)) {
-    warning(
-      "Form `",
-      form,
-      "` is repeating on at least one requested REDCap event, but ",
-      "`instances` was not provided. Assuming `instances = 1L` ",
-      "for the requested repeating-event contexts.",
-      call. = FALSE
-    )
-    return(1L)
+    return(list(values = "1", defaulted = TRUE))
   }
 
-  if (
-    !is.numeric(instances) ||
-      length(instances) != 1 ||
-      is.na(instances) ||
-      !is.finite(instances) ||
-      instances < 1 ||
-      instances != floor(instances)
-  ) {
+  list(
+    values = .miss_expand_instances(instances),
+    defaulted = FALSE
+  )
+}
+
+.miss_expand_instances <- function(instances) {
+  if (!is.numeric(instances) && !is.character(instances)) {
     stop(
-      "`instances` must be a positive whole-number scalar, such as 1L or 2L.",
+      "`instances` must be a positive whole-number scalar count or ",
+      "a vector of positive whole-number instance IDs.",
       call. = FALSE
     )
   }
 
-  as.integer(instances)
+  instance_values <- .miss_chr_vec(instances)
+  instance_values <- instance_values[!.miss_is_blank_vec(instance_values)]
+  if (length(instance_values) == 0) {
+    stop(
+      "`instances` must contain at least one positive whole-number value.",
+      call. = FALSE
+    )
+  }
+
+  numeric_values <- suppressWarnings(as.numeric(instance_values))
+  invalid <- is.na(numeric_values) |
+    !is.finite(numeric_values) |
+    numeric_values < 1 |
+    numeric_values != floor(numeric_values)
+  if (any(invalid)) {
+    stop(
+      "`instances` must contain only positive whole-number values.",
+      call. = FALSE
+    )
+  }
+
+  if (length(numeric_values) == 1) {
+    return(as.character(seq_len(numeric_values[[1]])))
+  }
+
+  as.character(as.integer(numeric_values))
 }
 
 .miss_system_fields <- function() {

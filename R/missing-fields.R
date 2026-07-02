@@ -100,7 +100,7 @@
 
     tibble::tibble(
       field_name = field,
-      form_name = form_meta$form_name[[i]],
+      form = form_meta$form_name[[i]],
       field_type = form_meta$field_type[[i]],
       field_label = form_meta$field_label[[i]],
       branching_logic = .miss_chr(form_meta$branching_logic[[i]]),
@@ -218,7 +218,7 @@
     dplyr::bind_cols(
       row_base[keep, , drop = FALSE],
       tibble::tibble(
-        form_name = rep(form, n_keep),
+        form = rep(form, n_keep),
         field_name = rep(field_plan$field_name[[field_i]], n_keep),
         field_label = rep(field_plan$field_label[[field_i]], n_keep),
         field_type = rep(field_plan$field_type[[field_i]], n_keep),
@@ -249,7 +249,7 @@
     redcap_event_name = character(),
     redcap_repeat_instrument = character(),
     redcap_repeat_instance = character(),
-    form_name = character(),
+    form = character(),
     field_name = character(),
     field_label = character(),
     field_type = character(),
@@ -540,7 +540,7 @@
   instances
 ) {
   fields <- project$system_fields
-  repeat_instances <- as.character(seq_len(instances))
+  repeat_instances <- .miss_chr_vec(instances)
 
   if (fields$event_col %in% names(records)) {
     repeat_event_contexts <- .miss_form_repeating_events(project)
@@ -824,13 +824,14 @@
   }
 
   n <- nrow(contexts)
+  form_value <- form
   tibble::tibble(
     record_id = .miss_chr_vec(contexts$record_id),
     redcap_event_name = .miss_chr_vec(contexts$redcap_event_name),
     redcap_repeat_instrument = .miss_chr_vec(contexts$redcap_repeat_instrument),
     redcap_repeat_instance = .miss_chr_vec(contexts$redcap_repeat_instance),
-    form_name = rep(form, n),
-    field_name = rep(form, n),
+    form = rep(form_value, n),
+    field_name = rep(form_value, n),
     field_label = rep(field_label, n),
     field_type = rep("form", n),
     validation_scope = rep(validation_scope, length.out = n),
@@ -885,9 +886,13 @@
   column,
   step_id,
   label,
-  keep_zero = FALSE
+  keep_zero = FALSE,
+  form = NULL
 ) {
-  preconditions <- .miss_scope_precondition(validation_scope)
+  preconditions <- .miss_scope_precondition(
+    validation_scope = validation_scope,
+    form = form
+  )
   if (nrow(rows) > 0) {
     return(pointblank::col_vals_equal(
       x = agent,
@@ -914,18 +919,22 @@
   agent
 }
 
-.miss_scope_precondition <- function(validation_scope) {
+.miss_scope_precondition <- function(validation_scope, form = NULL) {
   force(validation_scope)
+  force(form)
   function(tbl) {
-    tbl[tbl$validation_scope == validation_scope, , drop = FALSE]
+    keep <- tbl$validation_scope == validation_scope
+    if (!is.null(form) && "form" %in% names(tbl)) {
+      keep <- keep & tbl$form == form
+    }
+    tbl[keep, , drop = FALSE]
   }
 }
 
 .miss_annotate_agent_validation_set <- function(
   agent,
   validation_rows,
-  form,
-  form_label
+  form_labels
 ) {
   validation_set <- agent$validation_set
   if (nrow(validation_set) == 0) {
@@ -936,6 +945,7 @@
   }
 
   lookup_cols <- c(
+    "form",
     "validation_context",
     "redcap_event_name",
     "redcap_repeat_instrument",
@@ -944,26 +954,41 @@
   lookup <- unique(validation_rows[, lookup_cols, drop = FALSE])
   if (nrow(lookup) == 0) {
     lookup <- tibble::tibble(
-      validation_context = "overall",
-      redcap_event_name = "",
-      redcap_repeat_instrument = "",
-      redcap_repeat_instance = ""
+      form = names(form_labels),
+      validation_context = rep("overall", length(form_labels)),
+      redcap_event_name = rep("", length(form_labels)),
+      redcap_repeat_instrument = rep("", length(form_labels)),
+      redcap_repeat_instance = rep("", length(form_labels))
     )
   }
 
   validation_context <- .miss_chr_vec(validation_set$seg_val)
   blank_context <- .miss_is_blank_vec(validation_context)
   validation_context[blank_context] <- "overall"
-  context_match <- match(validation_context, lookup$validation_context)
+  validation_form <- .miss_form_from_step_id(
+    step_id = validation_set$step_id,
+    forms = names(form_labels)
+  )
+  context_match <- match(
+    paste(validation_form, validation_context, sep = "\r"),
+    paste(lookup$form, lookup$validation_context, sep = "\r")
+  )
 
   validation_set$validation_context <- validation_context
-  validation_set$form <- form
-  validation_set$form_label <- form_label
+  validation_set$form <- validation_form
+  validation_set$form_label <- unname(form_labels[validation_form])
   validation_set$redcap_event_name <- lookup$redcap_event_name[context_match]
   validation_set$redcap_repeat_instrument <-
     lookup$redcap_repeat_instrument[context_match]
   validation_set$redcap_repeat_instance <-
     lookup$redcap_repeat_instance[context_match]
+  validation_set$redcap_event_name[is.na(validation_set$redcap_event_name)] <- ""
+  validation_set$redcap_repeat_instrument[
+    is.na(validation_set$redcap_repeat_instrument)
+  ] <- ""
+  validation_set$redcap_repeat_instance[
+    is.na(validation_set$redcap_repeat_instance)
+  ] <- ""
 
   zero_n <- !is.na(validation_set$n) & validation_set$n == 0
   validation_set$f_passed[zero_n] <- 0
@@ -971,6 +996,23 @@
 
   agent$validation_set <- validation_set
   agent
+}
+
+.miss_form_from_step_id <- function(step_id, forms) {
+  vapply(step_id, function(step) {
+    matches <- forms[vapply(
+      forms,
+      function(form) {
+        startsWith(step, paste0(form, "_"))
+      },
+      logical(1)
+    )]
+    if (length(matches) == 0) {
+      return(NA_character_)
+    }
+
+    matches[which.max(nchar(matches))]
+  }, character(1), USE.NAMES = FALSE)
 }
 
 .miss_drop_unstarted_form_records <- function(records, form_started_failures, project) {
