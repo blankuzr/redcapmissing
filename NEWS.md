@@ -1,3 +1,15 @@
+# redcapmissing 0.9.0
+
+## 2026-07-02
+
+- Changed `find_missing()` to use required `forms` instead of `form` and to
+  support one combined report across multiple requested REDCap forms.
+- Added form-specific `events` and `instances` list support, including partial
+  named lists, scalar repeat-instance counts, exact repeat-instance vectors, and
+  one warning when omitted repeating forms default to instance 1.
+- Updated validation rows, pointblank summaries, tidy output, and formatted
+  reporting to keep form as a first-class output column in combined reports.
+
 # redcapmissing 0.8.0
 
 ## 2026-07-01

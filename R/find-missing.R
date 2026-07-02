@@ -2,7 +2,7 @@
 #'
 #' @description
 #' `find_missing()` checks whether expected REDCap fields are present
-#' for a single instrument/form. Expected fields are determined from REDCap
+#' for one or more instruments/forms. Expected fields are determined from REDCap
 #' project metadata and project structure supplied through a
 #' `redcapAPI::redcapConnection()` workflow.
 #'
@@ -80,13 +80,16 @@
 #'   through `rcon$instruments()`. When available, form-event mapping,
 #'   repeating instrument/event metadata, and project information are also read
 #'   from the connection object.
-#' @param form Required. A single REDCap form/instrument name to assess. No
-#'   default is supplied so callers must choose the form deliberately.
-#' @param events Character vector of REDCap event names to assess for
-#'   the requested form, or `NULL`. When a form is offered on multiple REDCap
-#'   events, this argument can restrict the report to a selected subset of those
-#'   events. If `NULL`, all offered events are assessed. If the form is offered
-#'   on only one event, this argument is ignored. If the form is regular on
+#' @param forms Required character vector of REDCap form/instrument names to
+#'   assess. No default is supplied so callers must choose the form or forms
+#'   deliberately. Duplicate form names are not allowed.
+#' @param events Character vector of REDCap unique event names to apply to all
+#'   requested forms, a named list of event vectors by form, or `NULL`. When a
+#'   form is offered on multiple REDCap events, this argument can restrict the
+#'   report to a selected subset of those events. If `NULL`, all offered events
+#'   are assessed. Named lists may omit forms or use `NULL` entries to request a
+#'   form's default offered events. If a form is offered on only one event,
+#'   supplied event values are ignored for that form. If a form is regular on
 #'   some events and repeating on others, `events` also determines whether
 #'   repeat-instance logic is activated. Defaults to `NULL`.
 #' @param required_fields Logical scalar. When `TRUE`, only fields marked as
@@ -104,14 +107,17 @@
 #' @param exclude_types Character vector of REDCap field types to exclude from
 #'   assessment. Defaults to `"descriptive"` because descriptive fields do not
 #'   capture values. These types are excluded regardless of `required_fields`.
-#' @param instances Positive whole-number scalar, or `NULL`. When `form`
-#'   is assessed in a REDCap repeating event or as a repeating instrument, this
-#'   is the minimum number of repeat instances expected for every assessed
-#'   record/event context. For example, `instances = 2L` checks that repeat
-#'   instances `1` and `2` exist. If the form is repeating and this argument is
-#'   `NULL`, the function warns and assumes `1L` for the requested repeating
-#'   contexts. If the requested events do not include any repeating
-#'   contexts for the form, this argument is ignored.
+#' @param instances Positive whole-number scalar count, vector of positive
+#'   whole-number repeat-instance IDs, named list by form, or `NULL`. When a
+#'   requested form is assessed in a REDCap repeating event or as a repeating
+#'   instrument, a scalar such as `2L` checks that repeat instances `1` and `2`
+#'   exist. A vector with length greater than one, such as `c(2L, 3L)`, checks
+#'   exactly those repeat-instance IDs. Named lists may omit forms or use `NULL`
+#'   entries to request defaults. If a requested form repeats and no instance
+#'   setting is supplied for it, the function warns once and assumes instance
+#'   `1`. Global `instances` values apply only to forms with requested repeating
+#'   contexts; named non-`NULL` entries for non-repeating requested contexts
+#'   error.
 #'
 #' @return A list with class `"redcapmissing"` containing:
 #' \describe{
@@ -133,20 +139,20 @@
 #'   \item{`fields_complete_checks`, `fields_complete_failures`}{All
 #'     field-complete validation rows and their failed rows.}
 #'   \item{`field_plan`}{The metadata-derived field plan for the requested
-#'     form, including checkbox child export columns.}
+#'     forms, including checkbox child export columns and a `form` column.}
 #'   \item{`required_fields`}{Whether the report was limited to REDCap-required
 #'     fields.}
-#'   \item{`events`}{The REDCap events actually used for assessment, or
-#'     `character(0)` when no event restriction applied.}
-#'   \item{`instances`}{The repeat-instance count used for repeating forms, or
-#'     `NULL` for non-repeating forms.}
+#'   \item{`events`}{Named list of REDCap events actually used for assessment
+#'     by form, or `character(0)` for forms where no event restriction applied.}
+#'   \item{`instances`}{Named list of expanded repeat-instance IDs by form, or
+#'     `NULL` for forms without requested repeating contexts.}
 #'   \item{`ignored_fields`}{Root field names skipped because of
 #'     `ignore_fields`.}
 #'   \item{`ignored_ids`}{Record IDs skipped because of `ignore_ids`.}
-#'   \item{`project`}{A compact list of REDCap project structure inferred from
-#'     `rcon`.}
-#'   \item{`form`}{The assessed form name.}
-#'   \item{`form_label`}{The REDCap instrument label for `form`.}
+#'   \item{`project`}{Named list of compact REDCap project structures inferred
+#'     from `rcon`, one per requested form.}
+#'   \item{`forms`}{The assessed form names.}
+#'   \item{`form_labels`}{Named REDCap instrument labels for `forms`.}
 #'   \item{`id_col`}{The REDCap record identifier field.}
 #'   \item{`system_fields`}{The REDCap system field names used internally.}
 #' }
@@ -180,7 +186,7 @@
 #' baseline_missing <- find_missing(
 #'   data = records,
 #'   rcon = rcon,
-#'   form = "baseline_form",
+#'   forms = "baseline_form",
 #'   events = c("baseline_event", "followup_event"),
 #'   ignore_fields = c("status_flag", "screening_code")
 #' )
@@ -191,8 +197,17 @@
 #' repeat_missing <- find_missing(
 #'   data = records,
 #'   rcon = rcon,
-#'   form = "repeat_form",
+#'   forms = "repeat_form",
 #'   instances = 2L
+#' )
+#'
+#' multi_form_missing <- find_missing(
+#'   data = records,
+#'   rcon = rcon,
+#'   forms = c("imaging", "demographics"),
+#'   events = list(
+#'     imaging = c("event_2_arm_1", "event_3_arm_1")
+#'   )
 #' )
 #' }
 #'
@@ -200,7 +215,7 @@
 find_missing <- function(
   data,
   rcon,
-  form,
+  forms,
   events = NULL,
   required_fields = TRUE,
   ignore_fields = NULL,
@@ -208,8 +223,12 @@ find_missing <- function(
   exclude_types = "descriptive",
   instances = NULL
 ) {
-  if (missing(form)) {
-    stop("Provide `form`; this argument has no default.", call. = FALSE)
+  call_arg_names <- names(as.list(sys.call()))[-1]
+  if ("form" %in% call_arg_names) {
+    stop("unused argument `form`; use `forms`.", call. = FALSE)
+  }
+  if (missing(forms)) {
+    stop("Provide `forms`; this argument has no default.", call. = FALSE)
   }
   if (
     !is.logical(required_fields) ||
@@ -226,28 +245,27 @@ find_missing <- function(
     )
   }
 
+  forms <- .miss_resolve_forms(forms)
+  event_settings <- .miss_resolve_form_events_arg(
+    events = events,
+    forms = forms
+  )
+  instance_settings <- .miss_resolve_form_instances_arg(
+    instances = instances,
+    forms = forms
+  )
+
   # Normalize inputs and derive project context from the redcapAPI connection.
   records <- tibble::as_tibble(data)
   all_records <- records
 
   meta <- .miss_get_metadata(rcon)
   .miss_check_metadata(meta)
-
-  project <- .miss_get_project(rcon = rcon, meta = meta, form = form)
-  project <- .miss_resolve_events(
-    project = project,
-    events = events,
-    form = form
-  )
-  instances <- .miss_resolve_instances(
-    instances = instances,
-    project = project,
-    form = form
-  )
-  if (!project$id_col %in% names(records)) {
+  id_col <- meta$field_name[[1]]
+  if (!id_col %in% names(records)) {
     stop(
       "The REDCap record identifier column `",
-      project$id_col,
+      id_col,
       "` is not present in `data`.",
       call. = FALSE
     )
@@ -257,16 +275,174 @@ find_missing <- function(
   ignore_ids <- unique(.miss_chr_vec(ignore_ids %||% character()))
   if (length(ignore_ids) > 0) {
     records <- records[
-      !.miss_chr_vec(records[[project$id_col]]) %in% ignore_ids,
+      !.miss_chr_vec(records[[id_col]]) %in% ignore_ids,
       ,
       drop = FALSE
     ]
     all_records <- all_records[
-      !.miss_chr_vec(all_records[[project$id_col]]) %in% ignore_ids,
+      !.miss_chr_vec(all_records[[id_col]]) %in% ignore_ids,
       ,
       drop = FALSE
     ]
   }
+
+  form_reports <- lapply(forms, function(form) {
+    .miss_build_form_report(
+      records = records,
+      all_records = all_records,
+      meta = meta,
+      rcon = rcon,
+      form = form,
+      events = event_settings$values[[form]],
+      required_fields = required_fields,
+      ignore_fields = ignore_fields,
+      exclude_types = exclude_types,
+      instances = instance_settings$values[[form]],
+      instances_explicit = instance_settings$explicit[[form]]
+    )
+  })
+  names(form_reports) <- forms
+
+  defaulted_instance_forms <- forms[vapply(
+    form_reports,
+    `[[`,
+    logical(1),
+    "instances_defaulted"
+  )]
+  if (length(defaulted_instance_forms) > 0) {
+    warning(
+      "`instances` was not provided for repeating form(s): ",
+      paste(defaulted_instance_forms, collapse = ", "),
+      ". Assuming instance 1 for the requested repeating contexts.",
+      call. = FALSE
+    )
+  }
+
+  validation_rows <- .miss_bind_report_component(
+    reports = form_reports,
+    component = "validation_rows"
+  )
+  form_labels <- stats::setNames(
+    vapply(form_reports, `[[`, character(1), "form_label"),
+    forms
+  )
+
+  # Let pointblank own the validation object and failed-row extract.
+  agent <- pointblank::create_agent(
+    tbl = validation_rows,
+    tbl_name = "redcapmissing_expected_fields",
+    label = "Branch-aware missing fields"
+  )
+  for (form_report in form_reports) {
+    agent <- .miss_add_form_validation_steps(agent, form_report)
+  }
+  agent <- pointblank::interrogate(
+    agent,
+    extract_failed = TRUE,
+    progress = FALSE
+  )
+  agent <- .miss_annotate_agent_validation_set(
+    agent = agent,
+    validation_rows = validation_rows,
+    form_labels = form_labels
+  )
+
+  missing <- .miss_get_failed_rows(agent)
+  ignored_fields <- unique(unlist(.miss_named_report_component(
+    form_reports,
+    "ignored_fields"
+  ), use.names = FALSE))
+  ignored_fields <- ignored_fields %||% character()
+
+  out <- list(
+    agent = agent,
+    missing = missing,
+    validation_rows = validation_rows,
+    event_row_exists_checks = .miss_bind_report_component(
+      form_reports,
+      "event_row_exists_checks"
+    ),
+    event_row_exists_failures = .miss_bind_report_component(
+      form_reports,
+      "event_row_exists_failures"
+    ),
+    repeat_instance_row_exists_checks = .miss_bind_report_component(
+      form_reports,
+      "repeat_instance_row_exists_checks"
+    ),
+    repeat_instance_row_exists_failures = .miss_bind_report_component(
+      form_reports,
+      "repeat_instance_row_exists_failures"
+    ),
+    form_started_checks = .miss_bind_report_component(
+      form_reports,
+      "form_started_checks"
+    ),
+    form_started_failures = .miss_bind_report_component(
+      form_reports,
+      "form_started_failures"
+    ),
+    form_complete_checks = .miss_bind_report_component(
+      form_reports,
+      "form_complete_checks"
+    ),
+    form_complete_failures = .miss_bind_report_component(
+      form_reports,
+      "form_complete_failures"
+    ),
+    fields_complete_checks = .miss_bind_report_component(
+      form_reports,
+      "fields_complete_checks"
+    ),
+    fields_complete_failures = .miss_bind_report_component(
+      form_reports,
+      "fields_complete_failures"
+    ),
+    field_plan = .miss_bind_report_component(form_reports, "field_plan"),
+    required_fields = required_fields,
+    events = .miss_named_report_component(form_reports, "events"),
+    instances = .miss_named_report_component(form_reports, "instances"),
+    ignored_fields = ignored_fields,
+    ignored_ids = ignore_ids,
+    project = .miss_named_report_component(form_reports, "project"),
+    forms = forms,
+    form_labels = form_labels,
+    id_col = id_col,
+    system_fields = form_reports[[1]]$system_fields
+  )
+  class(out) <- "redcapmissing"
+  out
+}
+
+# Internal helpers ---------------------------------------------------------
+
+.miss_build_form_report <- function(
+  records,
+  all_records,
+  meta,
+  rcon,
+  form,
+  events,
+  required_fields,
+  ignore_fields,
+  exclude_types,
+  instances,
+  instances_explicit
+) {
+
+  project <- .miss_get_project(rcon = rcon, meta = meta, form = form)
+  project <- .miss_resolve_events(
+    project = project,
+    events = events,
+    form = form
+  )
+  resolved_instances <- .miss_resolve_instances(
+    instances = instances,
+    project = project,
+    form = form,
+    explicit = instances_explicit
+  )
+  instances <- resolved_instances$values
 
   # Whole-form startedness uses every metadata field on the form, regardless of
   # required/excluded/ignored status. The REDCap record ID is excluded because
@@ -433,77 +609,7 @@ find_missing <- function(
   )
   validation_rows <- .miss_add_validation_context(validation_rows)
 
-  # Let pointblank own the validation object and failed-row extract.
-  agent <- pointblank::create_agent(
-    tbl = validation_rows,
-    tbl_name = paste0(form, "_expected_fields"),
-    label = paste0("Branch-aware missing fields for ", form)
-  )
-
-  agent <- .miss_add_validation_step(
-    agent = agent,
-    rows = event_checks,
-    validation_scope = "event_row_exists",
-    column = "event_row_exists",
-    step_id = paste0(form, "_event_row_exists"),
-    label = "Event row for record exists",
-    keep_zero = TRUE
-  )
-
-  if (nrow(repeat_checks) > 0) {
-    agent <- .miss_add_validation_step(
-      agent = agent,
-      rows = repeat_checks,
-      validation_scope = "repeat_instance_row_exists",
-      column = "repeat_instance_row_exists",
-      step_id = paste0(form, "_repeat_instance_row_exists"),
-      label = "Repeat instance row for record exists"
-    )
-  }
-
-  agent <- .miss_add_validation_step(
-    agent = agent,
-    rows = form_checks,
-    validation_scope = "form_started",
-    column = "form_started",
-    step_id = paste0(form, "_form_started"),
-    label = "Form started",
-    keep_zero = TRUE
-  )
-
-  if (nrow(form_complete_checks) > 0) {
-    agent <- .miss_add_validation_step(
-      agent = agent,
-      rows = form_complete_checks,
-      validation_scope = "form_complete",
-      column = "form_complete",
-      step_id = paste0(form, "_form_complete"),
-      label = "Form complete"
-    )
-  }
-
-  agent <- .miss_add_validation_step(
-    agent = agent,
-    rows = expected,
-    validation_scope = "fields_complete",
-    column = "field_complete",
-    step_id = paste0(form, "_fields_complete"),
-    label = "Fields complete",
-    keep_zero = TRUE
-  ) |>
-    pointblank::interrogate(extract_failed = TRUE, progress = FALSE)
-  agent <- .miss_annotate_agent_validation_set(
-    agent = agent,
-    validation_rows = validation_rows,
-    form = form,
-    form_label = project$form_label
-  )
-
-  missing <- .miss_get_failed_rows(agent)
-
-  out <- list(
-    agent = agent,
-    missing = missing,
+  list(
     validation_rows = validation_rows,
     event_row_exists_checks = event_checks,
     event_row_exists_failures = event_row_exists_failures,
@@ -516,17 +622,238 @@ find_missing <- function(
     fields_complete_checks = expected,
     fields_complete_failures = fields_complete_failures,
     field_plan = field_plan,
-    required_fields = required_fields,
     events = project$events %||% character(),
     instances = instances,
+    instances_defaulted = resolved_instances$defaulted,
     ignored_fields = ignore_roots,
-    ignored_ids = ignore_ids,
     project = project,
     form = form,
     form_label = project$form_label,
     id_col = project$id_col,
     system_fields = project$system_fields
   )
-  class(out) <- "redcapmissing"
-  out
+}
+
+.miss_add_form_validation_steps <- function(agent, form_report) {
+  form <- form_report$form
+
+  agent <- .miss_add_validation_step(
+    agent = agent,
+    rows = form_report$event_row_exists_checks,
+    validation_scope = "event_row_exists",
+    column = "event_row_exists",
+    step_id = .miss_step_id(form, "event_row_exists"),
+    label = "Event row for record exists",
+    keep_zero = TRUE,
+    form = form
+  )
+
+  if (nrow(form_report$repeat_instance_row_exists_checks) > 0) {
+    agent <- .miss_add_validation_step(
+      agent = agent,
+      rows = form_report$repeat_instance_row_exists_checks,
+      validation_scope = "repeat_instance_row_exists",
+      column = "repeat_instance_row_exists",
+      step_id = .miss_step_id(form, "repeat_instance_row_exists"),
+      label = "Repeat instance row for record exists",
+      form = form
+    )
+  }
+
+  agent <- .miss_add_validation_step(
+    agent = agent,
+    rows = form_report$form_started_checks,
+    validation_scope = "form_started",
+    column = "form_started",
+    step_id = .miss_step_id(form, "form_started"),
+    label = "Form started",
+    keep_zero = TRUE,
+    form = form
+  )
+
+  if (nrow(form_report$form_complete_checks) > 0) {
+    agent <- .miss_add_validation_step(
+      agent = agent,
+      rows = form_report$form_complete_checks,
+      validation_scope = "form_complete",
+      column = "form_complete",
+      step_id = .miss_step_id(form, "form_complete"),
+      label = "Form complete",
+      form = form
+    )
+  }
+
+  .miss_add_validation_step(
+    agent = agent,
+    rows = form_report$fields_complete_checks,
+    validation_scope = "fields_complete",
+    column = "field_complete",
+    step_id = .miss_step_id(form, "fields_complete"),
+    label = "Fields complete",
+    keep_zero = TRUE,
+    form = form
+  )
+}
+
+.miss_resolve_forms <- function(forms) {
+  if (!is.character(forms)) {
+    stop("`forms` must be a character vector of REDCap form names.", call. = FALSE)
+  }
+
+  forms <- .miss_chr_vec(forms)
+  forms <- forms[!.miss_is_blank_vec(forms)]
+  if (length(forms) == 0) {
+    stop("`forms` must contain at least one non-blank REDCap form name.", call. = FALSE)
+  }
+  duplicated_forms <- unique(forms[duplicated(forms)])
+  if (length(duplicated_forms) > 0) {
+    stop(
+      "`forms` must not contain duplicate form names. Duplicate form(s): ",
+      paste(duplicated_forms, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  forms
+}
+
+.miss_resolve_form_events_arg <- function(events, forms) {
+  values <- stats::setNames(vector("list", length(forms)), forms)
+  if (is.null(events)) {
+    return(list(values = values))
+  }
+
+  if (is.list(events)) {
+    .miss_check_named_setting_list(events, forms = forms, arg = "events")
+    for (form in intersect(names(events), forms)) {
+      value <- events[[form]]
+      .miss_check_nonempty_setting_value(value, arg = "events", form = form)
+      if (!is.null(value) && !is.character(value)) {
+        stop(
+          "`events` list entry `",
+          form,
+          "` must be NULL or a character vector of REDCap event names.",
+          call. = FALSE
+        )
+      }
+      values[[form]] <- value
+    }
+    return(list(values = values))
+  }
+
+  .miss_check_nonempty_setting_value(events, arg = "events")
+  if (!is.character(events)) {
+    stop(
+      "`events` must be NULL, a character vector of REDCap event names, ",
+      "or a named list by form.",
+      call. = FALSE
+    )
+  }
+
+  for (form in forms) {
+    values[[form]] <- events
+  }
+  list(values = values)
+}
+
+.miss_resolve_form_instances_arg <- function(instances, forms) {
+  values <- stats::setNames(vector("list", length(forms)), forms)
+  explicit <- stats::setNames(as.list(rep(FALSE, length(forms))), forms)
+  if (is.null(instances)) {
+    return(list(values = values, explicit = explicit))
+  }
+
+  if (is.list(instances)) {
+    .miss_check_named_setting_list(instances, forms = forms, arg = "instances")
+    for (form in intersect(names(instances), forms)) {
+      value <- instances[[form]]
+      .miss_check_nonempty_setting_value(value, arg = "instances", form = form)
+      if (!is.null(value)) {
+        .miss_expand_instances(value)
+      }
+      values[[form]] <- value
+      explicit[[form]] <- !is.null(value)
+    }
+    return(list(values = values, explicit = explicit))
+  }
+
+  .miss_check_nonempty_setting_value(instances, arg = "instances")
+  .miss_expand_instances(instances)
+  for (form in forms) {
+    values[[form]] <- instances
+  }
+  list(values = values, explicit = explicit)
+}
+
+.miss_check_named_setting_list <- function(x, forms, arg) {
+  setting_names <- names(x)
+  if (
+    is.null(setting_names) ||
+      length(setting_names) != length(x) ||
+      any(.miss_is_blank_vec(setting_names))
+  ) {
+    stop(
+      "`",
+      arg,
+      "` lists must be named by requested form.",
+      call. = FALSE
+    )
+  }
+
+  duplicated_names <- unique(setting_names[duplicated(setting_names)])
+  if (length(duplicated_names) > 0) {
+    stop(
+      "`",
+      arg,
+      "` list names must not be duplicated. Duplicate name(s): ",
+      paste(duplicated_names, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  unknown_names <- setdiff(setting_names, forms)
+  if (length(unknown_names) > 0) {
+    stop(
+      "`",
+      arg,
+      "` list names must match requested `forms`. Unknown name(s): ",
+      paste(unknown_names, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  invisible(x)
+}
+
+.miss_check_nonempty_setting_value <- function(value, arg, form = NULL) {
+  if (is.null(value)) {
+    return(invisible(value))
+  }
+
+  if (length(value) == 0) {
+    target <- if (is.null(form)) {
+      paste0("`", arg, "`")
+    } else {
+      paste0("`", arg, "` list entry `", form, "`")
+    }
+    stop(
+      target,
+      " must not be an empty vector. Use NULL to request the default.",
+      call. = FALSE
+    )
+  }
+
+  invisible(value)
+}
+
+.miss_bind_report_component <- function(reports, component) {
+  dplyr::bind_rows(lapply(reports, `[[`, component))
+}
+
+.miss_named_report_component <- function(reports, component) {
+  stats::setNames(lapply(reports, `[[`, component), names(reports))
+}
+
+.miss_step_id <- function(form, validation_scope) {
+  paste0(form, "_", validation_scope)
 }

@@ -24,11 +24,39 @@ test_that("flex_html renders formatted summary HTML when optional packages are a
   report <- find_missing(
     data = records,
     rcon = fake_rcon(baseline_form_meta()),
-    form = "baseline_form"
+    forms = "baseline_form"
   )
 
   html_out <- flex_html(flex(report))
 
   expect_type(html_out, "character")
   expect_true(nchar(html_out) > 0)
+})
+
+test_that("flex_html renders multi-form formatted summaries", {
+  testthat::skip_if_not_installed("flextable")
+  testthat::skip_if_not_installed("glue")
+  testthat::skip_if_not_installed("htmltools")
+
+  metadata <- dplyr::bind_rows(
+    meta_row("record_id", "alpha_form", field_label = "Record ID", required = "y"),
+    meta_row("alpha_value", "alpha_form", field_label = "Alpha value", required = "y"),
+    meta_row("beta_value", "beta_form", field_label = "Beta value", required = "y")
+  )
+  records <- tibble::tibble(
+    record_id = c("r1", "r2"),
+    alpha_value = c("entered", ""),
+    beta_value = c("", "entered")
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(metadata),
+    forms = c("alpha_form", "beta_form")
+  )
+  html_out <- flex_html(flex(report))
+
+  expect_type(html_out, "character")
+  expect_true(grepl("alpha_form", html_out, fixed = TRUE))
+  expect_true(grepl("beta_form", html_out, fixed = TRUE))
 })

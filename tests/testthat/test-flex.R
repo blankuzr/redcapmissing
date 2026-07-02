@@ -23,7 +23,7 @@ test_that("flex returns a formatted table when optional packages are available",
   report <- find_missing(
     data = records,
     rcon = fake_rcon(baseline_form_meta()),
-    form = "baseline_form"
+    forms = "baseline_form"
   )
 
   flex_out <- flex(report)
@@ -47,6 +47,36 @@ test_that("flex returns a formatted table when optional packages are available",
       flex_out$body$dataset$Passed == "0 (0%)" &
       flex_out$body$dataset$Failed == "0 (0%)"
   ))
+})
+
+test_that("flex keeps multi-form summaries in one flat table", {
+  testthat::skip_if_not_installed("flextable")
+  testthat::skip_if_not_installed("glue")
+
+  metadata <- dplyr::bind_rows(
+    meta_row("record_id", "alpha_form", field_label = "Record ID", required = "y"),
+    meta_row("alpha_value", "alpha_form", field_label = "Alpha value", required = "y"),
+    meta_row("beta_value", "beta_form", field_label = "Beta value", required = "y")
+  )
+  records <- tibble::tibble(
+    record_id = c("r1", "r2"),
+    alpha_value = c("entered", ""),
+    beta_value = c("", "entered")
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(metadata),
+    forms = c("alpha_form", "beta_form")
+  )
+  flex_out <- flex(report)
+
+  expect_s3_class(flex_out, "flextable")
+  expect_setequal(flex_out$body$dataset$Form, c("alpha_form", "beta_form"))
+  expect_setequal(
+    flex_out$body$dataset$`Form Label`,
+    c("alpha_form label", "beta_form label")
+  )
 })
 
 test_that("flex no longer accepts summary objects", {

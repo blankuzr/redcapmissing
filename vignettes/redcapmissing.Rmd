@@ -108,7 +108,7 @@ records <- redcapAPI::exportRecordsTyped(
 report <- find_missing(
   data = records,
   rcon = rcon,
-  form = "baseline_form"
+  forms = "baseline_form"
 )
 ```
 
@@ -136,23 +136,24 @@ records <- tibble::tibble(
 report <- find_missing(
   data = records,
   rcon = fake_rcon(metadata),
-  form = "baseline_form"
+  forms = "baseline_form"
 )
 
 report$missing[, c("record_id", "field_name", "validation_scope")]
 ```
 
-## Restricting a form to selected events
+## Restricting forms to selected events
 
 Some REDCap projects use many events of the same general type. In those cases,
 `events` lets you keep the assessment focused on the specific events that
-should count for the current review.
+should count for the current review. With multiple forms, pass either one event
+vector for all requested forms or a named list by form.
 
 ```{r, eval = FALSE}
 followup_report <- find_missing(
   data = records,
   rcon = rcon,
-  form = "patient_status",
+  forms = "patient_status",
   events = c(
     "follow_up_1_arm_1",
     "follow_up_2_arm_1",
@@ -161,8 +162,26 @@ followup_report <- find_missing(
 )
 ```
 
-If `events` is omitted, the function defaults to all offered events for
-that form. If the form is only offered on one event, the argument is ignored.
+If `events` is omitted, the function defaults to all offered events for each
+form. If a form is only offered on one event, the argument is ignored for that
+form.
+
+For form-specific event settings, omit any form that should use its default
+offered-event set:
+
+```{r, eval = FALSE}
+multi_form_report <- find_missing(
+  data = records,
+  rcon = rcon,
+  forms = c("imaging", "demographics"),
+  events = list(
+    imaging = c("event_2_arm_1", "event_3_arm_1")
+  )
+)
+```
+
+In this example, `imaging` is assessed only on the two listed events, while
+`demographics` uses all events where REDCap offers that form.
 
 ## Forms that are regular on some events and repeating on others
 
@@ -188,14 +207,14 @@ Operationally, that means:
 - if you request a mixture of repeating and non-repeating events, the function
   applies the appropriate validation model per event
 - if `instances` is omitted and at least one requested event is repeating
-  for that form, the function assumes `1L` only for those requested repeating
-  contexts
+  for that form, the function assumes instance `1` only for those requested
+  repeating contexts
 
 ```{r, eval = FALSE}
 mixed_report <- find_missing(
   data = records,
   rcon = rcon,
-  form = "patient_status",
+  forms = "patient_status",
   events = c(
     "event_a_arm_1",
     "event_b_arm_1",
@@ -212,6 +231,9 @@ form events, while `event_b_arm_1` would be checked with repeat-instance logic.
 `instances` exists because REDCap does not export nonexistent repeat rows.
 If instance 2 should exist but was never created, there is no row in the export
 for the package to inspect unless it first creates the expected repeat contexts.
+Scalar `instances` values are counts, so `instances = 2L` means instances `1`
+and `2`. Vectors with length greater than one are treated as exact instance IDs,
+and named lists can set different expectations by form.
 
 ```{r}
 repeat_metadata <- dplyr::bind_rows(
@@ -245,7 +267,7 @@ repeat_records <- tibble::tibble(
 repeat_report <- find_missing(
   data = repeat_records,
   rcon = fake_rcon(repeat_metadata, mapping = mapping, repeat_instrument_event = repeat_map),
-  form = "repeat_form",
+  forms = "repeat_form",
   instances = 2L
 )
 
@@ -268,6 +290,9 @@ useful components to inspect first:
   evaluable contexts where not every expected field is complete
 - `report$fields_complete_checks`: the field-level expected rows that were
   actually assessed
+- `report$forms`, `report$form_labels`, `report$events`, and
+  `report$instances`: the normalized form, label, selected-event, and expanded
+  repeat-instance settings used for the report
 - `report$agent`: the interrogated `pointblank` agent itself
 
 This design keeps the correction queue (`report$missing`) separate from the

@@ -450,7 +450,7 @@ records &lt;- redcapAPI::exportRecordsTyped(
 report &lt;- find_missing(
   data = records,
   rcon = rcon,
-  form = &quot;baseline_form&quot;
+  forms = &quot;baseline_form&quot;
 )</code></pre>
 <p>If your project uses additional coded multiple-choice field types,
 extend this same pattern so those fields are also kept in code space for
@@ -475,7 +475,7 @@ records &lt;- tibble::tibble(
 report &lt;- find_missing(
   data = records,
   rcon = fake_rcon(metadata),
-  form = &quot;baseline_form&quot;
+  forms = &quot;baseline_form&quot;
 )
 
 report$missing[, c(&quot;record_id&quot;, &quot;field_name&quot;, &quot;validation_scope&quot;)]
@@ -485,15 +485,17 @@ report$missing[, c(&quot;record_id&quot;, &quot;field_name&quot;, &quot;validati
 #&gt; 1 r1        baseline_form    form_complete
 #&gt; 2 r1        conditional_note fields_complete</code></pre>
 </div>
-<div id="restricting-a-form-to-selected-events" class="section level2">
-<h2>Restricting a form to selected events</h2>
+<div id="restricting-forms-to-selected-events" class="section level2">
+<h2>Restricting forms to selected events</h2>
 <p>Some REDCap projects use many events of the same general type. In
 those cases, <code>events</code> lets you keep the assessment focused on
-the specific events that should count for the current review.</p>
+the specific events that should count for the current review. With
+multiple forms, pass either one event vector for all requested forms or
+a named list by form.</p>
 <pre class="r"><code>followup_report &lt;- find_missing(
   data = records,
   rcon = rcon,
-  form = &quot;patient_status&quot;,
+  forms = &quot;patient_status&quot;,
   events = c(
     &quot;follow_up_1_arm_1&quot;,
     &quot;follow_up_2_arm_1&quot;,
@@ -501,8 +503,21 @@ the specific events that should count for the current review.</p>
   )
 )</code></pre>
 <p>If <code>events</code> is omitted, the function defaults to all
-offered events for that form. If the form is only offered on one event,
-the argument is ignored.</p>
+offered events for each form. If a form is only offered on one event,
+the argument is ignored for that form.</p>
+<p>For form-specific event settings, omit any form that should use its
+default offered-event set:</p>
+<pre class="r"><code>multi_form_report &lt;- find_missing(
+  data = records,
+  rcon = rcon,
+  forms = c(&quot;imaging&quot;, &quot;demographics&quot;),
+  events = list(
+    imaging = c(&quot;event_2_arm_1&quot;, &quot;event_3_arm_1&quot;)
+  )
+)</code></pre>
+<p>In this example, <code>imaging</code> is assessed only on the two
+listed events, while <code>demographics</code> uses all events where
+REDCap offers that form.</p>
 </div>
 <div id="forms-that-are-regular-on-some-events-and-repeating-on-others" class="section level2">
 <h2>Forms that are regular on some events and repeating on others</h2>
@@ -530,13 +545,13 @@ for those repeating contexts</li>
 <li>if you request a mixture of repeating and non-repeating events, the
 function applies the appropriate validation model per event</li>
 <li>if <code>instances</code> is omitted and at least one requested
-event is repeating for that form, the function assumes <code>1L</code>
-only for those requested repeating contexts</li>
+event is repeating for that form, the function assumes instance
+<code>1</code> only for those requested repeating contexts</li>
 </ul>
 <pre class="r"><code>mixed_report &lt;- find_missing(
   data = records,
   rcon = rcon,
-  form = &quot;patient_status&quot;,
+  forms = &quot;patient_status&quot;,
   events = c(
     &quot;event_a_arm_1&quot;,
     &quot;event_b_arm_1&quot;,
@@ -553,7 +568,11 @@ logic.</p>
 <p><code>instances</code> exists because REDCap does not export
 nonexistent repeat rows. If instance 2 should exist but was never
 created, there is no row in the export for the package to inspect unless
-it first creates the expected repeat contexts.</p>
+it first creates the expected repeat contexts. Scalar
+<code>instances</code> values are counts, so <code>instances = 2L</code>
+means instances <code>1</code> and <code>2</code>. Vectors with length
+greater than one are treated as exact instance IDs, and named lists can
+set different expectations by form.</p>
 <pre class="r"><code>repeat_metadata &lt;- dplyr::bind_rows(
   meta_row(&quot;record_id&quot;, &quot;screen_form&quot;, required = &quot;y&quot;),
   meta_row(&quot;screen_started&quot;, &quot;screen_form&quot;, required = &quot;y&quot;),
@@ -585,7 +604,7 @@ repeat_records &lt;- tibble::tibble(
 repeat_report &lt;- find_missing(
   data = repeat_records,
   rcon = fake_rcon(repeat_metadata, mapping = mapping, repeat_instrument_event = repeat_map),
-  form = &quot;repeat_form&quot;,
+  forms = &quot;repeat_form&quot;,
   instances = 2L
 )
 
@@ -616,6 +635,10 @@ roll-up failures for evaluable contexts where not every expected field
 is complete</li>
 <li><code>report$fields_complete_checks</code>: the field-level expected
 rows that were actually assessed</li>
+<li><code>report$forms</code>, <code>report$form_labels</code>,
+<code>report$events</code>, and <code>report$instances</code>: the
+normalized form, label, selected-event, and expanded repeat-instance
+settings used for the report</li>
 <li><code>report$agent</code>: the interrogated <code>pointblank</code>
 agent itself</li>
 </ul>

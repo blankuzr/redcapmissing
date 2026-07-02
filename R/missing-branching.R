@@ -446,25 +446,25 @@
   }
 
   out <- dplyr::bind_rows(extracts, .id = "pointblank_extract")
-  if (all(c("validation_scope", "form_name") %in% names(out))) {
+  if (all(c("validation_scope", "form") %in% names(out))) {
     out$pointblank_step <- dplyr::case_when(
       out$validation_scope == "form_started" ~ paste0(
-        out$form_name,
+        out$form,
         "_form_started"
       ),
       out$validation_scope == "event_row_exists" ~ paste0(
-        out$form_name,
+        out$form,
         "_event_row_exists"
       ),
       out$validation_scope == "repeat_instance_row_exists" ~ paste0(
-        out$form_name,
+        out$form,
         "_repeat_instance_row_exists"
       ),
       out$validation_scope == "form_complete" ~ paste0(
-        out$form_name,
+        out$form,
         "_form_complete"
       ),
-      TRUE ~ paste0(out$form_name, "_fields_complete")
+      TRUE ~ paste0(out$form, "_fields_complete")
     )
   } else {
     out$pointblank_step <- out$pointblank_extract
@@ -478,7 +478,7 @@
     "redcap_repeat_instrument",
     "redcap_repeat_instance",
     "validation_context",
-    "form_name",
+    "form",
     "field_name",
     "field_label",
     "field_type",

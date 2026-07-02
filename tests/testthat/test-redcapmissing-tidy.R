@@ -13,7 +13,7 @@ tidy_baseline_report <- function() {
   find_missing(
     data = records,
     rcon = fake_rcon(baseline_form_meta()),
-    form = "baseline_form"
+    forms = "baseline_form"
   )
 }
 
@@ -73,6 +73,39 @@ test_that("tidy returns a focused validation-summary tibble", {
   ) %in% names(tidy_tbl)))
 })
 
+test_that("tidy returns focused summaries for combined multi-form reports", {
+  metadata <- dplyr::bind_rows(
+    meta_row("record_id", "alpha_form", field_label = "Record ID", required = "y"),
+    meta_row("alpha_value", "alpha_form", field_label = "Alpha value", required = "y"),
+    meta_row("beta_value", "beta_form", field_label = "Beta value", required = "y")
+  )
+  records <- tibble::tibble(
+    record_id = c("r1", "r2"),
+    alpha_value = c("entered", ""),
+    beta_value = c("", "entered")
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(metadata),
+    forms = c("alpha_form", "beta_form")
+  )
+  tidy_tbl <- tidy(report)
+
+  expect_identical(names(tidy_tbl), tidy_expected_columns())
+  expect_identical(unique(tidy_tbl$form), c("alpha_form", "beta_form"))
+  expect_setequal(tidy_tbl$form_label, c("alpha_form label", "beta_form label"))
+  expect_false("validation_context" %in% names(tidy_tbl))
+  expect_true(any(
+    tidy_tbl$form == "alpha_form" &
+      tidy_tbl$validation == "Fields complete"
+  ))
+  expect_true(any(
+    tidy_tbl$form == "beta_form" &
+      tidy_tbl$validation == "Fields complete"
+  ))
+})
+
 test_that("tidy dispatch is available from redcapmissing", {
   report <- tidy_baseline_report()
 
@@ -123,7 +156,7 @@ test_that("tidy returns multi-event context denominators", {
   report <- find_missing(
     data = records,
     rcon = fake_rcon(status_meta, mapping = mapping),
-    form = "status_form"
+    forms = "status_form"
   )
   tidy_tbl <- tidy(report)
 
@@ -189,7 +222,7 @@ test_that("tidy returns repeating context denominators", {
       mapping = mapping,
       repeat_instrument_event = repeat_instrument_event
     ),
-    form = "repeat_form",
+    forms = "repeat_form",
     instances = 2L
   )
   repeat_summary <- tidy(report)[

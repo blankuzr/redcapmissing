@@ -7,7 +7,7 @@
 find_missing(
   data,
   rcon,
-  form,
+  forms,
   events = NULL,
   required_fields = TRUE,
   ignore_fields = NULL,
@@ -30,14 +30,17 @@ through \code{rcon$instruments()}. When available, form-event mapping,
 repeating instrument/event metadata, and project information are also read
 from the connection object.}
 
-\item{form}{Required. A single REDCap form/instrument name to assess. No
-default is supplied so callers must choose the form deliberately.}
+\item{forms}{Required character vector of REDCap form/instrument names to
+assess. No default is supplied so callers must choose the form or forms
+deliberately. Duplicate form names are not allowed.}
 
-\item{events}{Character vector of REDCap event names to assess for
-the requested form, or \code{NULL}. When a form is offered on multiple REDCap
-events, this argument can restrict the report to a selected subset of those
-events. If \code{NULL}, all offered events are assessed. If the form is offered
-on only one event, this argument is ignored. If the form is regular on
+\item{events}{Character vector of REDCap unique event names to apply to all
+requested forms, a named list of event vectors by form, or \code{NULL}. When a
+form is offered on multiple REDCap events, this argument can restrict the
+report to a selected subset of those events. If \code{NULL}, all offered events
+are assessed. Named lists may omit forms or use \code{NULL} entries to request a
+form's default offered events. If a form is offered on only one event,
+supplied event values are ignored for that form. If a form is regular on
 some events and repeating on others, \code{events} also determines whether
 repeat-instance logic is activated. Defaults to \code{NULL}.}
 
@@ -60,14 +63,17 @@ report is built. Defaults to \code{NULL}, which means no records are ignored.}
 assessment. Defaults to \code{"descriptive"} because descriptive fields do not
 capture values. These types are excluded regardless of \code{required_fields}.}
 
-\item{instances}{Positive whole-number scalar, or \code{NULL}. When \code{form}
-is assessed in a REDCap repeating event or as a repeating instrument, this
-is the minimum number of repeat instances expected for every assessed
-record/event context. For example, \code{instances = 2L} checks that repeat
-instances \code{1} and \code{2} exist. If the form is repeating and this argument is
-\code{NULL}, the function warns and assumes \code{1L} for the requested repeating
-contexts. If the requested events do not include any repeating
-contexts for the form, this argument is ignored.}
+\item{instances}{Positive whole-number scalar count, vector of positive
+whole-number repeat-instance IDs, named list by form, or \code{NULL}. When a
+requested form is assessed in a REDCap repeating event or as a repeating
+instrument, a scalar such as \code{2L} checks that repeat instances \code{1} and \code{2}
+exist. A vector with length greater than one, such as \code{c(2L, 3L)}, checks
+exactly those repeat-instance IDs. Named lists may omit forms or use \code{NULL}
+entries to request defaults. If a requested form repeats and no instance
+setting is supplied for it, the function warns once and assumes instance
+\code{1}. Global \code{instances} values apply only to forms with requested repeating
+contexts; named non-\code{NULL} entries for non-repeating requested contexts
+error.}
 }
 \value{
 A list with class \code{"redcapmissing"} containing:
@@ -90,27 +96,27 @@ validation rows and their failed rows.}
 \item{\code{fields_complete_checks}, \code{fields_complete_failures}}{All
 field-complete validation rows and their failed rows.}
 \item{\code{field_plan}}{The metadata-derived field plan for the requested
-form, including checkbox child export columns.}
+forms, including checkbox child export columns and a \code{form} column.}
 \item{\code{required_fields}}{Whether the report was limited to REDCap-required
 fields.}
-\item{\code{events}}{The REDCap events actually used for assessment, or
-\code{character(0)} when no event restriction applied.}
-\item{\code{instances}}{The repeat-instance count used for repeating forms, or
-\code{NULL} for non-repeating forms.}
+\item{\code{events}}{Named list of REDCap events actually used for assessment
+by form, or \code{character(0)} for forms where no event restriction applied.}
+\item{\code{instances}}{Named list of expanded repeat-instance IDs by form, or
+\code{NULL} for forms without requested repeating contexts.}
 \item{\code{ignored_fields}}{Root field names skipped because of
 \code{ignore_fields}.}
 \item{\code{ignored_ids}}{Record IDs skipped because of \code{ignore_ids}.}
-\item{\code{project}}{A compact list of REDCap project structure inferred from
-\code{rcon}.}
-\item{\code{form}}{The assessed form name.}
-\item{\code{form_label}}{The REDCap instrument label for \code{form}.}
+\item{\code{project}}{Named list of compact REDCap project structures inferred
+from \code{rcon}, one per requested form.}
+\item{\code{forms}}{The assessed form names.}
+\item{\code{form_labels}}{Named REDCap instrument labels for \code{forms}.}
 \item{\code{id_col}}{The REDCap record identifier field.}
 \item{\code{system_fields}}{The REDCap system field names used internally.}
 }
 }
 \description{
 \code{find_missing()} checks whether expected REDCap fields are present
-for a single instrument/form. Expected fields are determined from REDCap
+for one or more instruments/forms. Expected fields are determined from REDCap
 project metadata and project structure supplied through a
 \code{redcapAPI::redcapConnection()} workflow.
 }
@@ -198,7 +204,7 @@ records <- redcapAPI::exportRecordsTyped(
 baseline_missing <- find_missing(
   data = records,
   rcon = rcon,
-  form = "baseline_form",
+  forms = "baseline_form",
   events = c("baseline_event", "followup_event"),
   ignore_fields = c("status_flag", "screening_code")
 )
@@ -209,8 +215,17 @@ baseline_missing$missing
 repeat_missing <- find_missing(
   data = records,
   rcon = rcon,
-  form = "repeat_form",
+  forms = "repeat_form",
   instances = 2L
+)
+
+multi_form_missing <- find_missing(
+  data = records,
+  rcon = rcon,
+  forms = c("imaging", "demographics"),
+  events = list(
+    imaging = c("event_2_arm_1", "event_3_arm_1")
+  )
 )
 }
 
