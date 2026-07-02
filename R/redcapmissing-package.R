@@ -36,9 +36,3 @@
 #' @importFrom redcapAPI isNAorBlank
 #' @keywords internal
 "_PACKAGE"
-
-utils::globalVariables(c(
-  "validation_check",
-  "validation_context",
-  "validation_passed"
-))

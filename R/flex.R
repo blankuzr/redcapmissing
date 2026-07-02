@@ -26,12 +26,17 @@ flex.redcapmissing <- function(x, ...) {
 
   validation_set <- generics::tidy(x)
 
+  validation_set$validation_check <- .redcapmissing_flex_labels(
+    validation_set$validation_check
+  )
+  validation_set$passed <- glue::glue(
+    "{validation_set$passed} ({round(validation_set$pass_rate * 100, 1)}%)"
+  )
+  validation_set$failed <- glue::glue(
+    "{validation_set$failed} ({round(validation_set$fail_rate * 100, 1)}%)"
+  )
+
   validation_set |>
-    dplyr::mutate(
-      validation_check = .redcapmissing_flex_labels(validation_check),
-      passed = glue::glue("{passed} ({round(pass_rate * 100, 1)}%)"),
-      failed = glue::glue("{failed} ({round(fail_rate * 100, 1)}%)")
-    ) |>
     dplyr::select(dplyr::all_of(c(
       "form",
       "form_label",

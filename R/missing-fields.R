@@ -832,7 +832,7 @@
       columns = dplyr::all_of("validation_passed"),
       value = TRUE,
       preconditions = preconditions,
-      segments = pointblank::vars(validation_context),
+      segments = .miss_pointblank_vars("validation_context"),
       step_id = step_id,
       label = label
     ))
@@ -850,6 +850,10 @@
   }
 
   agent
+}
+
+.miss_pointblank_vars <- function(columns) {
+  do.call(pointblank::vars, lapply(columns, as.name))
 }
 
 .miss_scope_precondition <- function(validation_check, form = NULL) {
