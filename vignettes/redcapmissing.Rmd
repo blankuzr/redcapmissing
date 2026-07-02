@@ -11,38 +11,39 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
+library(redcapmissing)
 ```
 
-`redcapmissing` builds branching-aware missingness reports for REDCap record exports.
+`redcapmissing` builds branching-aware missingness reports for REDCap record
+exports. In real workflows, callers create a
+`redcapAPI::redcapConnection()`, export records with
+`redcapAPI::exportRecordsTyped()`, and pass both objects into `find_missing()`.
 
-This package is built on top of `redcapAPI`. In real workflows, callers create
-an `rcon` object with `redcapAPI::redcapConnection()`, export records with an
-explicit `redcapAPI::exportRecordsTyped()` cast strategy, and then pass both
-objects into `find_missing()`.
+The examples below are synthetic so the vignette can run without live REDCap
+credentials.
 
-The examples below are intentionally synthetic so the vignette remains runnable
-without live REDCap credentials or access to a specific REDCap project.
+## Validation registry
 
-## Why the package uses multiple validation checks
-
-REDCap exports are sparse by design. A field can be missing because a value is
-blank, but it can also be missing because REDCap exported no row at all for the
-needed event or repeat context. The package therefore separates:
-
-- `event_row_exists`: the expected longitudinal event row exists
-- `repeat_instance_row_exists`: the expected repeat-instance row exists
-- `form_started`: the row exists and the form has at least one entered field
-- `form_complete`: the row context is evaluable and all expected fields are complete
-- `fields_complete`: the row exists, the form is started, and each expected
-  field is complete
-
-This separation keeps the report aligned with how REDCap actually exports data.
-
-## A minimal synthetic REDCap example
+The package validation model is available through `registry()`:
 
 ```{r}
-library(redcapmissing)
+registry()
+```
 
+The checks are organized by validation level and validation-check type:
+
+- `row`: `event-row-started` and `instance-row-started`
+- `form`: `form-started` and `form-complete`
+- `field`: `field-complete`
+
+Failed `on-route` checks gate downstream assessment. Failed `detour` checks do
+not. This means a missing event row prevents form and field checks for that
+event context, while a failed `form-complete` check can still be followed by
+field-level failures for the same context.
+
+## Synthetic REDCap helpers
+
+```{r}
 meta_row <- function(
   field_name,
   form_name,
@@ -83,9 +84,8 @@ fake_rcon <- function(metadata, mapping = NULL, repeat_instrument_event = NULL) 
 
 ## Real `redcapAPI` workflow
 
-In routine use, the package expects a `redcapAPI` connection and a typed export
-that keeps coded branching-logic fields in REDCap code space while leaving
-checkbox and system fields raw:
+For real REDCap projects, keep branching-logic fields in REDCap code space and
+leave checkbox and system fields raw:
 
 ```{r, eval = FALSE}
 rcon <- redcapAPI::redcapConnection(
@@ -112,18 +112,19 @@ report <- find_missing(
 )
 ```
 
-If your project uses additional coded multiple-choice field types, extend this
-same pattern so those fields are also kept in code space for downstream
-branching-logic-aware missingness checks.
-
-## Required and branching-aware field checks
+## Branching-aware field checks
 
 ```{r}
 metadata <- dplyr::bind_rows(
   meta_row("record_id", "baseline_form", required = "y"),
   meta_row("branch_flag", "baseline_form", field_type = "yesno", required = "y"),
   meta_row("required_note", "baseline_form", required = "y"),
-  meta_row("conditional_note", "baseline_form", branching = "[branch_flag] = '1'", required = "y")
+  meta_row(
+    "conditional_note",
+    "baseline_form",
+    branching = "[branch_flag] = '1'",
+    required = "y"
+  )
 )
 
 records <- tibble::tibble(
@@ -139,101 +140,68 @@ report <- find_missing(
   forms = "baseline_form"
 )
 
-report$missing[, c("record_id", "field_name", "validation_scope")]
+report$missing[, c(
+  "record_id",
+  "validation_level",
+  "validation_check_type",
+  "validation_check",
+  "field_name"
+)]
 ```
 
-## Restricting forms to selected events
+Record `r1` is branch-open for `conditional_note`, so the missing value is a
+`field-complete` failure. Record `r2` is branch-closed, so the field is not in
+the assessment pool.
 
-Some REDCap projects use many events of the same general type. In those cases,
-`events` lets you keep the assessment focused on the specific events that
-should count for the current review. With multiple forms, pass either one event
-vector for all requested forms or a named list by form.
+## Event-row gating
 
-```{r, eval = FALSE}
-followup_report <- find_missing(
-  data = records,
-  rcon = rcon,
-  forms = "patient_status",
-  events = c(
-    "follow_up_1_arm_1",
-    "follow_up_2_arm_1",
-    "follow_up_3_arm_1"
-  )
+REDCap exports may omit entire event rows. `event-row-started` catches that
+before form and field checks run downstream.
+
+```{r}
+status_metadata <- dplyr::bind_rows(
+  meta_row("record_id", "status_form", required = "y"),
+  meta_row("status_started", "status_form", required = "y"),
+  meta_row("status_value", "status_form", required = "y")
 )
-```
 
-If `events` is omitted, the function defaults to all offered events for each
-form. If a form is only offered on one event, the argument is ignored for that
-form.
-
-For form-specific event settings, omit any form that should use its default
-offered-event set:
-
-```{r, eval = FALSE}
-multi_form_report <- find_missing(
-  data = records,
-  rcon = rcon,
-  forms = c("imaging", "demographics"),
-  events = list(
-    imaging = c("event_2_arm_1", "event_3_arm_1")
-  )
+mapping <- tibble::tibble(
+  arm_num = c(1, 1, 1),
+  unique_event_name = c("event_1_arm_1", "event_2_arm_1", "event_3_arm_1"),
+  form = c("status_form", "status_form", "status_form")
 )
-```
 
-In this example, `imaging` is assessed only on the two listed events, while
-`demographics` uses all events where REDCap offers that form.
-
-## Forms that are regular on some events and repeating on others
-
-Some REDCap projects offer the same form in mixed ways across events. For
-example, a form might be:
-
-- a regular form on `event_a`
-- repeating on `event_b`
-- a regular form again on `event_c`
-
-This matters because the package should not activate repeat-instance logic just
-because the form repeats somewhere in the project. It should only activate that
-logic for the requested events where the form actually repeats.
-
-Operationally, that means:
-
-- if you request only non-repeating events for that form, the function uses the
-  standard `fields_complete`, `form_complete`, `form_started`, and
-  `event_row_exists` checks
-- if you request repeating events for that form, the function uses
-  `fields_complete`, `form_complete`, `form_started`, and
-  `repeat_instance_row_exists` for those repeating contexts
-- if you request a mixture of repeating and non-repeating events, the function
-  applies the appropriate validation model per event
-- if `instances` is omitted and at least one requested event is repeating
-  for that form, the function assumes instance `1` only for those requested
-  repeating contexts
-
-```{r, eval = FALSE}
-mixed_report <- find_missing(
-  data = records,
-  rcon = rcon,
-  forms = "patient_status",
-  events = c(
-    "event_a_arm_1",
-    "event_b_arm_1",
-    "event_c_arm_1"
-  )
+event_records <- tibble::tibble(
+  record_id = c("r1", "r1", "r2", "r2"),
+  redcap_event_name = c(
+    "event_1_arm_1",
+    "event_2_arm_1",
+    "event_1_arm_1",
+    "event_2_arm_1"
+  ),
+  status_started = c("yes", "yes", "yes", "yes"),
+  status_value = c("entered", "", "entered", "entered")
 )
+
+event_report <- find_missing(
+  data = event_records,
+  rcon = fake_rcon(status_metadata, mapping = mapping),
+  forms = "status_form"
+)
+
+tidy(event_report)[
+  ,
+  c("validation_check", "redcap_event_name", "assessed", "failed")
+]
 ```
 
-In that example, `event_a_arm_1` and `event_c_arm_1` would be checked as regular
-form events, while `event_b_arm_1` would be checked with repeat-instance logic.
+`event_3_arm_1` fails `event-row-started`, so it is not assessed by
+`form-started`, `form-complete`, or `field-complete`.
 
 ## Repeat expectations
 
-`instances` exists because REDCap does not export nonexistent repeat rows.
-If instance 2 should exist but was never created, there is no row in the export
-for the package to inspect unless it first creates the expected repeat contexts.
-Scalar `instances` values are counts, so `instances = 2L` means instances `1`
-and `2`. Vectors with length greater than one are treated as exact instance IDs,
-and named lists can set different expectations by form.
+REDCap does not export nonexistent repeat rows. Use `instances` to declare the
+repeat instances expected for the report.
 
 ```{r}
 repeat_metadata <- dplyr::bind_rows(
@@ -243,7 +211,7 @@ repeat_metadata <- dplyr::bind_rows(
   meta_row("repeat_value", "repeat_form", required = "y")
 )
 
-mapping <- tibble::tibble(
+repeat_mapping <- tibble::tibble(
   arm_num = c(1, 1),
   unique_event_name = c("baseline_event", "baseline_event"),
   form = c("screen_form", "repeat_form")
@@ -266,51 +234,54 @@ repeat_records <- tibble::tibble(
 
 repeat_report <- find_missing(
   data = repeat_records,
-  rcon = fake_rcon(repeat_metadata, mapping = mapping, repeat_instrument_event = repeat_map),
+  rcon = fake_rcon(
+    repeat_metadata,
+    mapping = repeat_mapping,
+    repeat_instrument_event = repeat_map
+  ),
   forms = "repeat_form",
   instances = 2L
 )
 
-repeat_report$repeat_instance_row_exists_failures[
+repeat_report$instance_row_started_failures[
   ,
-  c("record_id", "redcap_repeat_instance", "validation_scope")
+  c("record_id", "redcap_repeat_instance", "validation_check")
 ]
 ```
 
-## Inspecting the return object
+The missing instance `2` for record `r1` fails `instance-row-started` and is
+removed from downstream form and field assessment.
 
-The report object is intentionally multi-part. In practice, these are the most
-useful components to inspect first:
+## Mixed regular and repeating contexts
 
-- `report$missing`: all failed rows extracted from the interrogated agent
-- `report$form_started_failures`: the form-level failures for unstarted form contexts
-- `report$event_row_exists_failures`: the failures for expected event rows that do not exist
-- `report$repeat_instance_row_exists_failures`: the failures for expected repeat rows that do not exist
-- `report$form_complete_failures`: the patient-context roll-up failures for
-  evaluable contexts where not every expected field is complete
-- `report$fields_complete_checks`: the field-level expected rows that were
-  actually assessed
-- `report$forms`, `report$form_labels`, `report$events`, and
-  `report$instances`: the normalized form, label, selected-event, and expanded
-  repeat-instance settings used for the report
-- `report$agent`: the interrogated `pointblank` agent itself
+Some REDCap projects offer the same form as regular on one event and repeating
+on another. The package activates row checks per context:
 
-This design keeps the correction queue (`report$missing`) separate from the
-full validation context and from the validation-specific helper tables.
+- regular event contexts use `event-row-started`
+- repeating contexts use `instance-row-started`
 
-## Tidy summary tables
+If `events` excludes the repeating event, `instances` is ignored for that form.
+If a requested repeating context omits `instances`, the package assumes
+instance `1` and warns once.
 
-`tidy(report)` returns a focused validation summary tibble with one row per
-validation step and REDCap context, including form metadata and the REDCap
-event/repeat columns used for stratified denominators. If optional formatting
-packages are installed, you can also format that validation summary for
-reporting workflows:
+## Inspecting results
+
+`tidy(report)` returns a focused summary with canonical validation metadata:
+
+```{r}
+tidy(report)
+```
+
+For reporting workflows, optional formatting helpers are available:
 
 ```{r, eval = FALSE}
-tidy_tbl <- tidy(report)
 ft <- flex(report)
 html <- flex_html(ft)
 ```
+
+`flex()` displays the canonical checks with human-readable labels, while
+`tidy()` and the `pointblank` agent keep the canonical hyphenated
+`validation_check` values.
 
 ## Citation and acknowledgement
 
@@ -319,10 +290,10 @@ html <- flex_html(ft)
 
 ### Foundational package citation
 
-> Nutter B, Garbett S, Obregon S, Obadia T, Lehr M, High B, Lane S, Beasley W,
-> Gray W, Kennedy N, Hsi-Nien T, Horner J, Stephens J, Beck C, Johnson B,
-> Chase P, Tobias P (2026). *redcapAPI: Accessing data from REDCap projects
-> using the API*. R package version 2.12.0.
+> Nutter B, Garbett S, Obregon S, Obadia T, Lehr M, High B, Lane S,
+> Beasley W, Gray W, Kennedy N, Hsi-Nien T, Horner J, Stephens J, Beck C,
+> Johnson B, Chase P, Tobias P (2026). *redcapAPI: Accessing data from REDCap
+> projects using the API*. R package version 2.12.0.
 > <https://doi.org/10.5281/zenodo.10564837>
 
 ### Current stewardship and project resources

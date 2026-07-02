@@ -34,7 +34,9 @@ test_that("flex returns a formatted table when optional packages are available",
   expect_true(all(c(
     "Form",
     "Form Label",
-    "Validation",
+    "Validation Level",
+    "Check Type",
+    "Validation Check",
     "Event",
     "Repeat Instrument",
     "Repeat Instance"
@@ -42,11 +44,13 @@ test_that("flex returns a formatted table when optional packages are available",
   expect_true(any(flex_out$body$dataset$Form == "baseline_form"))
   expect_true(any(flex_out$body$dataset$`Form Label` == "baseline_form label"))
   expect_true(any(
-    flex_out$body$dataset$Validation ==
-      "Event row for record exists" &
+    flex_out$body$dataset$`Validation Check` ==
+      "Event row started" &
       flex_out$body$dataset$Passed == "0 (0%)" &
       flex_out$body$dataset$Failed == "0 (0%)"
   ))
+  expect_true(any(flex_out$body$dataset$`Validation Level` == "row"))
+  expect_true(any(flex_out$body$dataset$`Check Type` == "on-route"))
 })
 
 test_that("flex keeps multi-form summaries in one flat table", {

@@ -217,19 +217,15 @@
     n_keep <- length(keep)
     dplyr::bind_cols(
       row_base[keep, , drop = FALSE],
+      tibble::tibble(form = rep(form, n_keep)),
+      .redcapmissing_validation_metadata("field-complete", n_keep),
       tibble::tibble(
-        form = rep(form, n_keep),
+        validation_passed = present$field_complete[keep],
         field_name = rep(field_plan$field_name[[field_i]], n_keep),
         field_label = rep(field_plan$field_label[[field_i]], n_keep),
         field_type = rep(field_plan$field_type[[field_i]], n_keep),
-        validation_scope = rep("fields_complete", n_keep),
         branching_logic = rep(logic, n_keep),
         branch_satisfied = rep(TRUE, n_keep),
-        field_complete = present$field_complete[keep],
-        form_started = rep(TRUE, n_keep),
-        event_row_exists = rep(TRUE, n_keep),
-        repeat_instance_row_exists = rep(TRUE, n_keep),
-        form_complete = rep(TRUE, n_keep),
         value_summary = present$value_summary[keep],
         export_fields = rep(paste(child_fields, collapse = ", "), n_keep)
       )
@@ -250,17 +246,16 @@
     redcap_repeat_instrument = character(),
     redcap_repeat_instance = character(),
     form = character(),
+    validation_level = character(),
+    validation_check_type = character(),
+    validation_check = character(),
+    validation_label = character(),
+    validation_passed = logical(),
     field_name = character(),
     field_label = character(),
     field_type = character(),
-    validation_scope = character(),
     branching_logic = character(),
     branch_satisfied = logical(),
-    field_complete = logical(),
-    form_started = logical(),
-    event_row_exists = logical(),
-    repeat_instance_row_exists = logical(),
-    form_complete = logical(),
     value_summary = character(),
     export_fields = character(),
     validation_context = character()
@@ -352,12 +347,8 @@
   .miss_build_issue_rows(
     contexts = contexts,
     form = form,
-    validation_scope = "form_started",
-    field_label = "Form started",
-    value_summary = value_summary,
-    export_fields = paste(export_fields, collapse = ", "),
-    form_started = form_started,
-    event_row_exists = TRUE
+    validation_check = "form-started",
+    validation_passed = form_started
   )
 }
 
@@ -369,7 +360,7 @@
     form = form
   )
 
-  form_checks[!form_checks$form_started, , drop = FALSE]
+  form_checks[!form_checks$validation_passed, , drop = FALSE]
 }
 
 .miss_build_event_check_rows <- function(
@@ -410,7 +401,7 @@
     drop = FALSE
   ])
 
-  expected$.event_row_exists <- .miss_context_key(
+  expected$.event_row_started <- .miss_context_key(
     expected$record_id,
     expected$redcap_event_name,
     "",
@@ -427,28 +418,9 @@
   .miss_build_issue_rows(
     contexts = expected,
     form = form,
-    validation_scope = "event_row_exists",
-    field_label = "Event row for record exists",
-    value_summary = ifelse(
-      expected$.event_row_exists,
-      "An exported row exists for the REDCap event where this form is offered.",
-      "No exported row exists for the REDCap event where this form is offered."
-    ),
-    export_fields = "",
-    form_started = TRUE,
-    event_row_exists = expected$.event_row_exists
+    validation_check = "event-row-started",
+    validation_passed = expected$.event_row_started
   )
-}
-
-.miss_build_event_row_exists_failure_rows <- function(records, form_records, project, form) {
-  event_checks <- .miss_build_event_check_rows(
-    records = records,
-    form_records = form_records,
-    project = project,
-    form = form
-  )
-
-  event_checks[!event_checks$event_row_exists, , drop = FALSE]
 }
 
 .miss_build_repeat_check_rows <- function(
@@ -491,45 +463,14 @@
     drop = FALSE
   ])
 
-  contexts$.repeat_instance_row_exists <- .miss_report_context_key(contexts) %in%
+  contexts$.instance_row_started <- .miss_report_context_key(contexts) %in%
     .miss_report_context_key(existing)
-
-  fields <- project$system_fields
-  has_event <- fields$event_col %in% names(records)
-  if (has_event) {
-    event_rows <- unique(tibble::tibble(
-      record_id = .miss_chr_vec(records[[project$id_col]]),
-      redcap_event_name = .miss_chr_vec(records[[fields$event_col]])
-    ))
-    contexts$.event_row_exists <- .miss_context_key(
-      contexts$record_id,
-      contexts$redcap_event_name,
-      "",
-      ""
-    ) %in% .miss_context_key(
-      event_rows$record_id,
-      event_rows$redcap_event_name,
-      "",
-      ""
-    )
-  } else {
-    contexts$.event_row_exists <- TRUE
-  }
 
   .miss_build_issue_rows(
     contexts = contexts,
     form = form,
-    validation_scope = "repeat_instance_row_exists",
-    field_label = "Repeat instance row for record exists",
-    value_summary = ifelse(
-      contexts$.repeat_instance_row_exists,
-      "An exported row exists for this REDCap repeat instance.",
-      "No exported row exists for this expected REDCap repeat instance."
-    ),
-    export_fields = "",
-    form_started = TRUE,
-    event_row_exists = contexts$.event_row_exists,
-    repeat_instance_row_exists = contexts$.repeat_instance_row_exists
+    validation_check = "instance-row-started",
+    validation_passed = contexts$.instance_row_started
   )
 }
 
@@ -628,6 +569,16 @@
     "redcap_repeat_instrument",
     "redcap_repeat_instance"
   )
+  event_checks <- event_checks[
+    event_checks$validation_passed,
+    ,
+    drop = FALSE
+  ]
+  repeat_checks <- repeat_checks[
+    repeat_checks$validation_passed,
+    ,
+    drop = FALSE
+  ]
   contexts <- dplyr::bind_rows(
     event_checks[, context_cols, drop = FALSE],
     repeat_checks[, context_cols, drop = FALSE]
@@ -675,7 +626,7 @@
   any_missing <- vapply(
     context_keys,
     function(context_key) {
-      any(!expected$field_complete[expected_keys == context_key], na.rm = TRUE)
+      any(!expected$validation_passed[expected_keys == context_key], na.rm = TRUE)
     },
     logical(1)
   )
@@ -683,20 +634,9 @@
   out <- .miss_build_issue_rows(
     contexts = contexts,
     form = form,
-    validation_scope = "form_complete",
-    field_label = "Form complete",
-    value_summary = ifelse(
-      any_missing,
-      "At least one expected field is blank.",
-      "All expected fields are present."
-    ),
-    export_fields = "",
-    form_started = TRUE,
-    event_row_exists = TRUE,
-    repeat_instance_row_exists = TRUE
+    validation_check = "form-complete",
+    validation_passed = !any_missing
   )
-  out$form_complete <- !any_missing
-  out$field_complete <- !any_missing
   .miss_add_validation_context(out)
 }
 
@@ -808,15 +748,8 @@
 .miss_build_issue_rows <- function(
   contexts,
   form,
-  validation_scope,
-  field_label,
-  value_summary,
-  export_fields,
-  form_started,
-  event_row_exists,
-  repeat_instance_row_exists = TRUE,
-  form_complete = TRUE,
-  field_complete = TRUE
+  validation_check,
+  validation_passed
 ) {
   contexts <- tibble::as_tibble(contexts)
   if (nrow(contexts) == 0) {
@@ -830,21 +763,21 @@
     redcap_event_name = .miss_chr_vec(contexts$redcap_event_name),
     redcap_repeat_instrument = .miss_chr_vec(contexts$redcap_repeat_instrument),
     redcap_repeat_instance = .miss_chr_vec(contexts$redcap_repeat_instance),
-    form = rep(form_value, n),
-    field_name = rep(form_value, n),
-    field_label = rep(field_label, n),
-    field_type = rep("form", n),
-    validation_scope = rep(validation_scope, length.out = n),
-    branching_logic = rep("", n),
-    branch_satisfied = rep(TRUE, n),
-    field_complete = rep(field_complete, length.out = n),
-    form_started = rep(form_started, length.out = n),
-    event_row_exists = rep(event_row_exists, length.out = n),
-    repeat_instance_row_exists = rep(repeat_instance_row_exists, length.out = n),
-    form_complete = rep(form_complete, length.out = n),
-    value_summary = rep(value_summary, length.out = n),
-    export_fields = rep(export_fields, length.out = n)
-  )
+    form = rep(form_value, n)
+  ) |>
+    dplyr::bind_cols(
+      .redcapmissing_validation_metadata(validation_check, n),
+      tibble::tibble(
+        validation_passed = rep(validation_passed, length.out = n),
+        field_name = rep(NA_character_, n),
+        field_label = rep(NA_character_, n),
+        field_type = rep(NA_character_, n),
+        branching_logic = rep(NA_character_, n),
+        branch_satisfied = rep(NA, n),
+        value_summary = rep(NA_character_, n),
+        export_fields = rep(NA_character_, n)
+      )
+    )
 }
 
 .miss_add_validation_context <- function(rows) {
@@ -882,21 +815,21 @@
 .miss_add_validation_step <- function(
   agent,
   rows,
-  validation_scope,
-  column,
-  step_id,
-  label,
+  validation_check,
   keep_zero = FALSE,
   form = NULL
 ) {
   preconditions <- .miss_scope_precondition(
-    validation_scope = validation_scope,
+    validation_check = validation_check,
     form = form
   )
+  step_id <- .miss_step_id(form, validation_check)
+  label <- .redcapmissing_registry_row(validation_check)$validation_label
+
   if (nrow(rows) > 0) {
     return(pointblank::col_vals_equal(
       x = agent,
-      columns = dplyr::all_of(column),
+      columns = dplyr::all_of("validation_passed"),
       value = TRUE,
       preconditions = preconditions,
       segments = pointblank::vars(validation_context),
@@ -908,7 +841,7 @@
   if (isTRUE(keep_zero)) {
     return(pointblank::col_vals_equal(
       x = agent,
-      columns = dplyr::all_of(column),
+      columns = dplyr::all_of("validation_passed"),
       value = TRUE,
       preconditions = preconditions,
       step_id = step_id,
@@ -919,11 +852,11 @@
   agent
 }
 
-.miss_scope_precondition <- function(validation_scope, form = NULL) {
-  force(validation_scope)
+.miss_scope_precondition <- function(validation_check, form = NULL) {
+  force(validation_check)
   force(form)
   function(tbl) {
-    keep <- tbl$validation_scope == validation_scope
+    keep <- tbl$validation_check == validation_check
     if (!is.null(form) && "form" %in% names(tbl)) {
       keep <- keep & tbl$form == form
     }
@@ -938,6 +871,10 @@
 ) {
   validation_set <- agent$validation_set
   if (nrow(validation_set) == 0) {
+    validation_set$validation_level <- character()
+    validation_set$validation_check_type <- character()
+    validation_set$validation_check <- character()
+    validation_set$validation_label <- character()
     validation_set$form <- character()
     validation_set$form_label <- character()
     agent$validation_set <- validation_set
@@ -946,6 +883,7 @@
 
   lookup_cols <- c(
     "form",
+    "validation_check",
     "validation_context",
     "redcap_event_name",
     "redcap_repeat_instrument",
@@ -955,6 +893,7 @@
   if (nrow(lookup) == 0) {
     lookup <- tibble::tibble(
       form = names(form_labels),
+      validation_check = rep("event-row-started", length(form_labels)),
       validation_context = rep("overall", length(form_labels)),
       redcap_event_name = rep("", length(form_labels)),
       redcap_repeat_instrument = rep("", length(form_labels)),
@@ -969,11 +908,22 @@
     step_id = validation_set$step_id,
     forms = names(form_labels)
   )
+  validation_check <- .miss_validation_check_from_step_id(
+    step_id = validation_set$step_id,
+    forms = validation_form
+  )
+  registry <- .redcapmissing_registry_data()
+  registry_match <- match(validation_check, registry$validation_check)
   context_match <- match(
-    paste(validation_form, validation_context, sep = "\r"),
-    paste(lookup$form, lookup$validation_context, sep = "\r")
+    paste(validation_form, validation_check, validation_context, sep = "\r"),
+    paste(lookup$form, lookup$validation_check, lookup$validation_context, sep = "\r")
   )
 
+  validation_set$validation_level <- registry$validation_level[registry_match]
+  validation_set$validation_check_type <-
+    registry$validation_check_type[registry_match]
+  validation_set$validation_check <- validation_check
+  validation_set$validation_label <- registry$validation_label[registry_match]
   validation_set$validation_context <- validation_context
   validation_set$form <- validation_form
   validation_set$form_label <- unname(form_labels[validation_form])
@@ -996,6 +946,17 @@
 
   agent$validation_set <- validation_set
   agent
+}
+
+.miss_validation_check_from_step_id <- function(step_id, forms) {
+  vapply(seq_along(step_id), function(i) {
+    form <- forms[[i]]
+    if (is.na(form)) {
+      return(NA_character_)
+    }
+    prefix <- paste0(form, "_")
+    substring(step_id[[i]], nchar(prefix) + 1)
+  }, character(1), USE.NAMES = FALSE)
 }
 
 .miss_form_from_step_id <- function(step_id, forms) {
