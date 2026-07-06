@@ -12,9 +12,9 @@ flex(x, ...)
 \item{...}{Unused.}
 }
 \value{
-A \code{flextable} object with form metadata, validation level,
-validation-check type, human-readable validation check, REDCap context
-columns, and pass/fail counts for display. This function requires the
+A \code{flextable} object with form metadata, REDCap context columns,
+validation level, human-readable validation check, validation-check type,
+and pass/fail counts for display. This function requires the
 optional \code{flextable} and \code{glue} packages.
 }
 \description{

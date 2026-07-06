@@ -12,17 +12,17 @@
 #' \describe{
 #'   \item{`form`}{The REDCap instrument/form name assessed by the report.}
 #'   \item{`form_label`}{The REDCap instrument label for `form`.}
-#'   \item{`validation_level`}{The validation level: `"row"`, `"form"`, or
-#'     `"field"`.}
-#'   \item{`validation_check_type`}{The validation-check type: `"on-route"` or
-#'     `"detour"`.}
-#'   \item{`validation_check`}{The canonical validation-check code.}
 #'   \item{`redcap_event_name`}{The REDCap event name for the validation
 #'     context, or `""` when not applicable.}
 #'   \item{`redcap_repeat_instrument`}{The REDCap repeat instrument for the
 #'     validation context, or `""` when not applicable.}
 #'   \item{`redcap_repeat_instance`}{The REDCap repeat instance for the
 #'     validation context, or `""` when not applicable.}
+#'   \item{`validation_level`}{The validation level: `"row"`, `"form"`, or
+#'     `"field"`.}
+#'   \item{`validation_check`}{The canonical validation-check code.}
+#'   \item{`validation_check_type`}{The validation-check type: `"on-route"` or
+#'     `"detour"`.}
 #'   \item{`assessed`}{The number of rows assessed.}
 #'   \item{`passed`}{The number of rows that passed.}
 #'   \item{`failed`}{The number of rows that failed.}
@@ -42,12 +42,12 @@ tidy.redcapmissing <- function(x, ...) {
   tibble::tibble(
     form = validation_set$form,
     form_label = validation_set$form_label,
-    validation_level = validation_set$validation_level,
-    validation_check_type = validation_set$validation_check_type,
-    validation_check = validation_set$validation_check,
     redcap_event_name = validation_set$redcap_event_name,
     redcap_repeat_instrument = validation_set$redcap_repeat_instrument,
     redcap_repeat_instance = validation_set$redcap_repeat_instance,
+    validation_level = validation_set$validation_level,
+    validation_check = validation_set$validation_check,
+    validation_check_type = validation_set$validation_check_type,
     assessed = validation_set$n,
     passed = validation_set$n_passed,
     failed = validation_set$n_failed,
@@ -66,12 +66,12 @@ generics::tidy
   c(
     "form",
     "form_label",
-    "validation_level",
-    "validation_check_type",
-    "validation_check",
     "redcap_event_name",
     "redcap_repeat_instrument",
     "redcap_repeat_instance",
+    "validation_level",
+    "validation_check",
+    "validation_check_type",
     "n",
     "n_passed",
     "n_failed",

@@ -641,15 +641,15 @@ instance <code>1</code> and warns once.</p>
 validation metadata:</p>
 <pre class="r"><code>tidy(report)
 #&gt; # A tibble: 4 × 13
-#&gt;   form        form_label validation_level validation_check_type validation_check
-#&gt;   &lt;chr&gt;       &lt;chr&gt;      &lt;chr&gt;            &lt;chr&gt;                 &lt;chr&gt;
-#&gt; 1 baseline_f… baseline_… row              on-route              event-row-start…
-#&gt; 2 baseline_f… baseline_… form             on-route              form-started
-#&gt; 3 baseline_f… baseline_… form             detour                form-complete
-#&gt; 4 baseline_f… baseline_… field            on-route              field-complete
-#&gt; # ℹ 8 more variables: redcap_event_name &lt;chr&gt;, redcap_repeat_instrument &lt;chr&gt;,
-#&gt; #   redcap_repeat_instance &lt;chr&gt;, assessed &lt;dbl&gt;, passed &lt;dbl&gt;, failed &lt;dbl&gt;,
-#&gt; #   pass_rate &lt;dbl&gt;, fail_rate &lt;dbl&gt;</code></pre>
+#&gt;   form          form_label          redcap_event_name redcap_repeat_instrument
+#&gt;   &lt;chr&gt;         &lt;chr&gt;               &lt;chr&gt;             &lt;chr&gt;
+#&gt; 1 baseline_form baseline_form label &quot;&quot;                &quot;&quot;
+#&gt; 2 baseline_form baseline_form label &quot;&quot;                &quot;&quot;
+#&gt; 3 baseline_form baseline_form label &quot;&quot;                &quot;&quot;
+#&gt; 4 baseline_form baseline_form label &quot;&quot;                &quot;&quot;
+#&gt; # ℹ 9 more variables: redcap_repeat_instance &lt;chr&gt;, validation_level &lt;chr&gt;,
+#&gt; #   validation_check &lt;chr&gt;, validation_check_type &lt;chr&gt;, assessed &lt;dbl&gt;,
+#&gt; #   passed &lt;dbl&gt;, failed &lt;dbl&gt;, pass_rate &lt;dbl&gt;, fail_rate &lt;dbl&gt;</code></pre>
 <p>For reporting workflows, optional formatting helpers are
 available:</p>
 <pre class="r"><code>ft &lt;- flex(report)
