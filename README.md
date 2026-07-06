@@ -247,6 +247,8 @@ interrogated `pointblank` agent. Common outputs are:
   `report$form_started_failures`, `report$form_complete_failures`,
   `report$field_complete_failures`, and
   `report$event_complete_failures`: check-specific failure tables
+- `report$eligible_records`: normalized event-level record ID overrides
+  used by `records`
 - `tidy(report)`: one summary row per validation check and REDCap
   context
 
@@ -264,11 +266,31 @@ displays labeled event, form, repeat context, validation-check, and
 pass/fail columns. Use raw REDCap values in `flex(events = ...)` and
 `flex(forms = ...)` to subset rows before display labels are applied.
 
-## Events and repeats
+## Events, records, and repeats
 
 Use `events` to restrict multi-event forms to selected REDCap events.
-Use `instances` to declare expected repeat instances when REDCap would
-otherwise omit nonexistent repeat rows from the export.
+Use `records` to restrict which record IDs are eligible for assessment
+on specific events while leaving omitted events on the default
+data-derived denominator. Use `instances` to declare expected repeat
+instances when REDCap would otherwise omit nonexistent repeat rows from
+the export.
+
+`records` is a named list keyed by raw `redcap_event_name`. Non-empty
+entries override the record IDs assessed on that event. Empty or omitted
+events fall back to the existing behavior:
+
+``` r
+staged_report <- find_missing(
+  data = typed_records,
+  rcon = rcon,
+  forms = c("surgery", "demographics"),
+  records = list(
+    event_a_arm_1 = c("record_a", "record_b"),
+    event_b_arm_1 = c("record_a", "record_b"),
+    event_c_arm_1 = "record_b"
+  )
+)
+```
 
 For a repeating form, declare the expected repeat instances after
 exporting records and creating the REDCap connection object:

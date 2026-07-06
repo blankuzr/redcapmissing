@@ -142,6 +142,36 @@
   .miss_event_label_vector(event_data)
 }
 
+.miss_get_project_event_names <- function(rcon) {
+  event_data <- .miss_normalize_events(.miss_get_rcon_table(
+    rcon,
+    c("events", "exportEvents", "event_data", "eventData")
+  ))
+  mapping <- .miss_normalize_mapping(.miss_get_rcon_table(
+    rcon,
+    c("mapping", "mappings")
+  ))
+  repeat_instrument_event <- .miss_normalize_repeat(
+    .miss_get_rcon_table(
+      rcon,
+      c(
+        "repeatInstrumentEvent",
+        "repeat_instrument",
+        "repeatInstrumentsEvents",
+        "repeatingInstrumentsEvents",
+        "repeat_instruments_events"
+      )
+    )
+  )
+
+  event_names <- unique(c(
+    event_data$unique_event_name,
+    mapping$unique_event_name,
+    repeat_instrument_event$event_name
+  ))
+  event_names[!.miss_is_blank_vec(event_names)]
+}
+
 .miss_resolve_events <- function(project, events, form) {
   offered_events <- union(project$form_events, project$repeat_form_events)
   offered_events <- unique(offered_events[!.miss_is_blank_vec(offered_events)])
@@ -489,4 +519,32 @@
     ,
     drop = FALSE
   ]
+}
+
+.miss_filter_eligible_event_records <- function(
+  records,
+  project,
+  eligible_records
+) {
+  eligible_records <- eligible_records %||% list()
+  if (length(eligible_records) == 0 || nrow(records) == 0) {
+    return(records)
+  }
+
+  fields <- project$system_fields
+  if (!fields$event_col %in% names(records)) {
+    return(records)
+  }
+
+  event <- .miss_chr_vec(records[[fields$event_col]])
+  record_id <- .miss_chr_vec(records[[project$id_col]])
+  keep <- rep(TRUE, nrow(records))
+  overridden_events <- intersect(unique(event), names(eligible_records))
+
+  for (event_name in overridden_events) {
+    event_rows <- event == event_name
+    keep[event_rows] <- record_id[event_rows] %in% eligible_records[[event_name]]
+  }
+
+  records[keep, , drop = FALSE]
 }
