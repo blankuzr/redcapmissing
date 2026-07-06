@@ -73,24 +73,82 @@ context. The `event` level is a summary layer. `form-complete` and
 into the pass-only pipeline.
 
 ```mermaid
-flowchart TB
-  A["event-row-started<br/>non-repeating context<br/>on-route"] ==>|"PASS only"| C["form-started<br/>event:form / event:form:instance<br/>on-route"]
-  B["instance-row-started<br/>repeat-instance context<br/>on-route"] ==>|"PASS only"| C
-  C ==>|"PASS only"| E["field-complete<br/>event:form / event:form:instance<br/>on-route"]
-  C -. "detour: reports only" .-> D["form-complete<br/>event:form / event:form:instance<br/>detour"]
+flowchart LR
+  subgraph EV["same REDCap event"]
+    direction TB
 
-  A -. "on-route result" .-> O(("on-route<br/>results by event"))
-  B -. "on-route result" .-> O
-  C -. "on-route result" .-> O
-  E -. "on-route result" .-> O
-  O -. "detour rollup" .-> F["event-complete<br/>event / detour"]
+    subgraph F1["event:form context 1"]
+      direction LR
+      subgraph G1A["First gate"]
+        direction TB
+        A1["event-row-started<br/>non-repeating<br/>on-route"]
+        B1["instance-row-started<br/>repeat-instance<br/>on-route"]
+      end
+
+      subgraph G2A["Second gate"]
+        direction TB
+        C1["form-started<br/>on-route"]
+        D1["form-complete"]
+      end
+
+      subgraph G3A["Third gate"]
+        E1["field-complete<br/>on-route"]
+      end
+    end
+
+    H[" "]
+
+    subgraph F2["event:form context 2"]
+      direction LR
+      subgraph G1B["First gate"]
+        direction TB
+        A2["event-row-started<br/>non-repeating<br/>on-route"]
+        B2["instance-row-started<br/>repeat-instance<br/>on-route"]
+      end
+
+      subgraph G2B["Second gate"]
+        direction TB
+        C2["form-started<br/>on-route"]
+        D2["form-complete"]
+      end
+
+      subgraph G3B["Third gate"]
+        E2["field-complete<br/>on-route"]
+      end
+    end
+  end
+
+  subgraph G4["Summary"]
+    F["event-complete<br/>all forms in event"]
+  end
+
+  R["all event<br/>form contexts"]
+
+  A1 ==> C1
+  B1 ==> C1
+  C1 ==> E1
+  C1 -. "detours" .-> D1
+
+  A2 ==> C2
+  B2 ==> C2
+  C2 ==> E2
+  C2 -. "detours" .-> D2
+
+  E1 --> R
+  E2 --> R
+  R -. "detours" .-> F
+  E1 ~~~ H
+  H ~~~ A2
 
   classDef onRoute fill:#eaf5ee,stroke:#258457,color:#173b2b,stroke-width:2px;
   classDef detour fill:#fff4d7,stroke:#c77900,color:#513300,stroke-width:2px;
   classDef rollup fill:#e7f0ff,stroke:#3569a8,color:#183353,stroke-width:2px;
-  class A,B,C,E onRoute;
-  class D,F detour;
-  class O rollup;
+  classDef hidden fill:transparent,stroke:transparent,color:transparent;
+  class A1,B1,C1,E1,A2,B2,C2,E2 onRoute;
+  class D1,D2,F detour;
+  class R rollup;
+  class H hidden;
+  linkStyle 3,7,10 stroke:#c77900,stroke-width:2px;
 ```
 
 | validation_level | validation_check | validation_check_type | Meaning |
