@@ -88,6 +88,8 @@ test_that("report object uses validation-check canon and removes old names", {
     "form_started_failures",
     "form_complete_checks",
     "form_complete_failures",
+    "event_complete_checks",
+    "event_complete_failures",
     "field_complete_checks",
     "field_complete_failures"
   ) %in% names(report)))
@@ -116,10 +118,15 @@ test_that("report object uses validation-check canon and removes old names", {
   ) %in% names(report$validation_rows)))
   expect_setequal(
     unique(report$validation_rows$validation_check),
-    c("form-started", "form-complete", "field-complete")
+    c("form-started", "form-complete", "field-complete", "event-complete")
+  )
+  expect_setequal(
+    unique(report$validation_rows$validation_level),
+    c("event:form", "event")
   )
   expect_true(all(report$agent$validation_set$label %in% registry()$validation_check))
   expect_true(any(report$agent$validation_set$step_id == "baseline_form_event-row-started"))
+  expect_true(any(report$agent$validation_set$step_id == "event-complete"))
 })
 
 test_that("non-field validation rows use typed NA field columns", {
@@ -142,7 +149,7 @@ test_that("non-field validation rows use typed NA field columns", {
   )
 
   non_field_failures <- report$missing[
-    report$missing$validation_level != "field",
+    report$missing$validation_check != "field-complete",
     ,
     drop = FALSE
   ]
@@ -235,6 +242,26 @@ test_that("event-row-started strictly gates downstream checks", {
     report$missing$redcap_event_name == "event_2_arm_1" &
       report$missing$validation_check == "field-complete"
   ))
+  event_complete_summary <- report$agent$validation_set[
+    report$agent$validation_set$validation_check == "event-complete",
+    ,
+    drop = FALSE
+  ]
+  event_complete_summary <- event_complete_summary[
+    order(event_complete_summary$redcap_event_name),
+    ,
+    drop = FALSE
+  ]
+  expect_equal(
+    event_complete_summary$redcap_event_name,
+    paste0("event_", 1:3, "_arm_1")
+  )
+  expect_equal(event_complete_summary$n, c(2, 2, 2))
+  expect_equal(event_complete_summary$n_failed, c(0, 1, 2))
+  expect_true(any(
+    report$missing$redcap_event_name == "event_3_arm_1" &
+      report$missing$validation_check == "event-complete"
+  ))
 })
 
 test_that("instance-row-started gates downstream repeat checks", {
@@ -276,6 +303,10 @@ test_that("instance-row-started gates downstream repeat checks", {
 
   expect_equal(nrow(report$instance_row_started_checks), 4)
   expect_equal(nrow(report$instance_row_started_failures), 1)
+  expect_true(any(report$validation_rows$validation_level == "event:form:instance"))
+  expect_true(any(
+    report$agent$validation_set$validation_level == "event:form:instance"
+  ))
   expect_true(any(
     report$missing$record_id == "r1" &
       report$missing$redcap_repeat_instance == "2" &
@@ -286,6 +317,19 @@ test_that("instance-row-started gates downstream repeat checks", {
       report$form_started_checks$redcap_repeat_instance == "2"
   ))
   expect_equal(nrow(report$event_row_started_checks), 0)
+  event_complete_summary <- report$agent$validation_set[
+    report$agent$validation_set$validation_check == "event-complete",
+    ,
+    drop = FALSE
+  ]
+  expect_equal(event_complete_summary$redcap_event_name, "baseline_event")
+  expect_equal(event_complete_summary$n, 2)
+  expect_equal(event_complete_summary$n_failed, 1)
+  expect_true(any(
+    report$missing$record_id == "r1" &
+      report$missing$redcap_event_name == "baseline_event" &
+      report$missing$validation_check == "event-complete"
+  ))
 })
 
 test_that("mixed repeat and non-repeat forms activate row checks per context", {
@@ -347,6 +391,112 @@ test_that("mixed repeat and non-repeat forms activate row checks per context", {
     report$missing$redcap_event_name == "repeat_b_arm_1" &
       report$missing$validation_check == "field-complete"
   ))
+})
+
+test_that("event-complete rolls up on-route failures across requested forms", {
+  event_meta <- dplyr::bind_rows(
+    meta_row("record_id", "demographics", field_label = "Record ID", required = "y"),
+    meta_row("demographics_started", "demographics", required = "y"),
+    meta_row("demographics_value", "demographics", required = "y"),
+    meta_row("imaging_started", "imaging", required = "y"),
+    meta_row("imaging_value", "imaging", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1, 1, 1),
+    unique_event_name = c(
+      "baseline_event",
+      "followup_event",
+      "baseline_event",
+      "followup_event"
+    ),
+    form = c("demographics", "demographics", "imaging", "imaging")
+  )
+  records <- tibble::tibble(
+    record_id = c("r1", "r1", "r2", "r2"),
+    redcap_event_name = c(
+      "baseline_event",
+      "followup_event",
+      "baseline_event",
+      "followup_event"
+    ),
+    demographics_started = "yes",
+    demographics_value = "entered",
+    imaging_started = "yes",
+    imaging_value = c("", "entered", "entered", "entered")
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(event_meta, mapping = mapping),
+    forms = c("demographics", "imaging")
+  )
+  tidy_tbl <- tidy(report)
+  event_complete <- tidy_tbl[
+    tidy_tbl$validation_check == "event-complete",
+    ,
+    drop = FALSE
+  ]
+  event_complete <- event_complete[
+    order(event_complete$redcap_event_name),
+    ,
+    drop = FALSE
+  ]
+
+  expect_equal(event_complete$form, c("", ""))
+  expect_equal(event_complete$form_label, c("", ""))
+  expect_equal(event_complete$validation_level, c("event", "event"))
+  expect_equal(event_complete$validation_check_type, c("detour", "detour"))
+  expect_equal(
+    event_complete$redcap_event_name,
+    c("baseline_event", "followup_event")
+  )
+  expect_equal(event_complete$assessed, c(2, 2))
+  expect_equal(event_complete$failed, c(1, 0))
+  expect_true(any(
+    report$event_complete_failures$record_id == "r1" &
+      report$event_complete_failures$redcap_event_name == "baseline_event"
+  ))
+  expect_true(any(
+    report$missing$record_id == "r1" &
+      report$missing$redcap_event_name == "baseline_event" &
+      report$missing$validation_check == "event-complete"
+  ))
+  expect_equal(unique(report$event_complete_checks$form), "")
+  expect_true(all(is.na(report$event_complete_checks$field_name)))
+  expect_true(all(is.na(report$event_complete_checks$field_label)))
+  expect_true(all(is.na(report$event_complete_checks$field_type)))
+  expect_true(all(is.na(report$event_complete_checks$branching_logic)))
+  expect_true(all(is.na(report$event_complete_checks$value_summary)))
+  expect_true(all(is.na(report$event_complete_checks$export_fields)))
+})
+
+test_that("event-complete ignores detour-only validation failures", {
+  context <- tibble::tibble(
+    record_id = "r1",
+    redcap_event_name = "baseline_event",
+    redcap_repeat_instrument = "",
+    redcap_repeat_instance = ""
+  )
+  on_route_pass <- .miss_build_issue_rows(
+    contexts = context,
+    form = "status_form",
+    validation_check = "form-started",
+    validation_passed = TRUE
+  )
+  detour_fail <- .miss_build_issue_rows(
+    contexts = context,
+    form = "status_form",
+    validation_check = "form-complete",
+    validation_passed = FALSE
+  )
+
+  event_complete <- .miss_build_event_complete_check_rows(
+    dplyr::bind_rows(on_route_pass, detour_fail)
+  )
+
+  expect_equal(nrow(event_complete), 1)
+  expect_true(event_complete$validation_passed)
+  expect_equal(event_complete$validation_check, "event-complete")
 })
 
 test_that("multi-arm event denominators do not cross arms", {

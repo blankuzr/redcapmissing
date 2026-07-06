@@ -22,8 +22,10 @@ context, or \code{""} when not applicable.}
 validation context, or \code{""} when not applicable.}
 \item{\code{redcap_repeat_instance}}{The REDCap repeat instance for the
 validation context, or \code{""} when not applicable.}
-\item{\code{validation_level}}{The validation level: \code{"row"}, \code{"form"}, or
-\code{"field"}.}
+\item{\code{validation_level}}{The emitted context label. Event/form checks use
+\code{"event:form"} for non-repeating contexts and
+\code{"event:form:instance"} for repeat-instance contexts; event rollups use
+\code{"event"}.}
 \item{\code{validation_check}}{The canonical validation-check code.}
 \item{\code{validation_check_type}}{The validation-check type: \code{"on-route"} or
 \code{"detour"}.}

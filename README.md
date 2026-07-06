@@ -14,7 +14,7 @@
 `redcapmissing` builds branching-aware missingness reports for REDCap
 record exports. It combines `redcapAPI` project metadata with typed
 REDCap exports so missing values, absent event rows, absent repeat
-instances, blank forms, and field-level gaps stay separate in the
+instances, blank forms, and field-specific gaps stay separate in the
 report.
 
 ## Install
@@ -47,35 +47,46 @@ records <- redcapAPI::exportRecordsTyped(
 
 ## Validation model
 
-`redcapmissing` uses five validation checks. Failed `on-route` checks
-remove that record/event/repeat/form context from every downstream
-check. The row-level checks are sibling gates: regular event contexts
-use `event-row-started`, and repeating contexts use
-`instance-row-started`. The `form-complete` check is a `detour`: it can
-fail while the same context still flows into `field-complete`. In the
-diagram, only main-pipeline `PASS` paths continue downstream; the detour
-branch reports without feeding back into the pipeline.
+`redcapmissing` uses six validation checks across two conceptual
+validation-levels. Failed `on-route` checks remove that
+record/event/repeat/form context from every downstream check. The
+event/form validation-level is written
+`event:form / event:form:instance` because the emitted report row
+resolves to `event:form` when the requested form is assessed in a
+non-repeating event context and `event:form:instance` when it is
+assessed in a repeat-instance context. The `event` level is a summary
+layer. `form-complete` and `event-complete` are `detour` checks: they
+report failures without feeding back into the pass-only pipeline.
 
 ``` mermaid
 flowchart TB
-  A["event-row-started<br/>regular event rows<br/>row / on-route"] ==>|"PASS only"| C["form-started<br/>form / on-route"]
-  B["instance-row-started<br/>repeat instance rows<br/>row / on-route"] ==>|"PASS only"| C
-  C ==>|"PASS only"| E["field-complete<br/>field / on-route"]
-  C -. "detour: reports only" .-> D["form-complete<br/>form / detour"]
+  A["event-row-started<br/>non-repeating context<br/>on-route"] ==>|"PASS only"| C["form-started<br/>event:form / event:form:instance<br/>on-route"]
+  B["instance-row-started<br/>repeat-instance context<br/>on-route"] ==>|"PASS only"| C
+  C ==>|"PASS only"| E["field-complete<br/>event:form / event:form:instance<br/>on-route"]
+  C -. "detour: reports only" .-> D["form-complete<br/>event:form / event:form:instance<br/>detour"]
+
+  A -. "on-route result" .-> O(("on-route<br/>results by event"))
+  B -. "on-route result" .-> O
+  C -. "on-route result" .-> O
+  E -. "on-route result" .-> O
+  O -. "detour rollup" .-> F["event-complete<br/>event / detour"]
 
   classDef onRoute fill:#eaf5ee,stroke:#258457,color:#173b2b,stroke-width:2px;
   classDef detour fill:#fff4d7,stroke:#c77900,color:#513300,stroke-width:2px;
+  classDef rollup fill:#e7f0ff,stroke:#3569a8,color:#183353,stroke-width:2px;
   class A,B,C,E onRoute;
-  class D detour;
+  class D,F detour;
+  class O rollup;
 ```
 
 | validation_level | validation_check | validation_check_type | Meaning |
 |----|----|----|----|
-| row | `event-row-started` | `on-route` | The expected REDCap event row exists in the export. |
-| row | `instance-row-started` | `on-route` | The expected REDCap repeat instance row exists in the export. |
-| form | `form-started` | `on-route` | The exported form context has at least one entered data-capturing field. |
-| form | `form-complete` | `detour` | All expected fields are complete for an evaluable form context. |
-| field | `field-complete` | `on-route` | A specific expected field is complete after branching and filtering. |
+| event:form / event:form:instance | `event-row-started` | `on-route` | The expected REDCap event row exists in the export. |
+| event:form / event:form:instance | `instance-row-started` | `on-route` | The expected REDCap repeat instance row exists in the export. |
+| event:form / event:form:instance | `form-started` | `on-route` | The exported form context has at least one entered data-capturing field. |
+| event:form / event:form:instance | `form-complete` | `detour` | All expected fields are complete for an evaluable form context. |
+| event:form / event:form:instance | `field-complete` | `on-route` | A specific expected field is complete after branching and filtering. |
+| event | `event-complete` | `detour` | All on-route checks pass within the REDCap event context. |
 
 Call `registry()` to inspect the package registry that drives this
 model:
@@ -139,14 +150,16 @@ interrogated `pointblank` agent. Common outputs are:
 - `report$validation_rows`: all rows supplied to `pointblank`
 - `report$event_row_started_failures`,
   `report$instance_row_started_failures`,
-  `report$form_started_failures`, `report$form_complete_failures`, and
-  `report$field_complete_failures`: check-specific failure tables
+  `report$form_started_failures`, `report$form_complete_failures`,
+  `report$field_complete_failures`, and
+  `report$event_complete_failures`: check-specific failure tables
 - `tidy(report)`: one summary row per validation check and REDCap
   context
 - `flex(report)`: a formatted summary table for reporting workflows
 
 `tidy(report)` uses canonical validation columns: `validation_level`,
-`validation_check`, and `validation_check_type`. `flex(report)` displays
+`validation_check`, and `validation_check_type`. `validation_level` is
+`event:form`, `event:form:instance`, or `event`. `flex(report)` displays
 the same checks with human-readable labels.
 
 ## Events and repeats
@@ -165,9 +178,10 @@ repeat_report <- find_missing(
 ```
 
 For forms that are regular on some requested events and repeating on
-others, the package activates row-level checks per context: regular
-event contexts use `event-row-started`, and repeating contexts use
-`instance-row-started`.
+others, the package activates event/form checks per context: regular
+event contexts use `event-row-started`, repeating contexts use
+`instance-row-started`, and repeat instances roll up to their parent
+event for `event-complete`.
 
 ## Acknowledgement and citation
 
@@ -204,7 +218,7 @@ Useful current `redcapAPI` references:
 ### `pointblank`
 
 This package relies on `pointblank` for validating missingness,
-standardizing return summaries, and exposing row-level flags.
+standardizing return summaries, and exposing failed-row details.
 
 #### Current package resources
 

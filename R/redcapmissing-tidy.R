@@ -18,8 +18,10 @@
 #'     validation context, or `""` when not applicable.}
 #'   \item{`redcap_repeat_instance`}{The REDCap repeat instance for the
 #'     validation context, or `""` when not applicable.}
-#'   \item{`validation_level`}{The validation level: `"row"`, `"form"`, or
-#'     `"field"`.}
+#'   \item{`validation_level`}{The emitted context label. Event/form checks use
+#'     `"event:form"` for non-repeating contexts and
+#'     `"event:form:instance"` for repeat-instance contexts; event rollups use
+#'     `"event"`.}
 #'   \item{`validation_check`}{The canonical validation-check code.}
 #'   \item{`validation_check_type`}{The validation-check type: `"on-route"` or
 #'     `"detour"`.}

@@ -92,6 +92,8 @@ rows and their failed rows.}
 validation rows and their failed rows.}
 \item{\code{form_complete_checks}, \code{form_complete_failures}}{All form-complete
 validation rows and their failed rows.}
+\item{\code{event_complete_checks}, \code{event_complete_failures}}{All
+event-complete validation rows and their failed rows.}
 \item{\code{field_complete_checks}, \code{field_complete_failures}}{All
 field-complete validation rows and their failed rows.}
 \item{\code{field_plan}}{The metadata-derived field plan for the requested
@@ -139,10 +141,13 @@ as missing once the root question has at least one selected child.
 Validation is split between REDCap-specific R preprocessing and \code{pointblank}
 reporting. The package builds validation rows with:
 \describe{
-\item{\code{validation_level}}{\code{"row"}, \code{"form"}, or \code{"field"}.}
+\item{\code{validation_level}}{The emitted context label. Event/form checks use
+\code{"event:form"} for non-repeating contexts and
+\code{"event:form:instance"} for repeat-instance contexts; event rollups use
+\code{"event"}.}
 \item{\code{validation_check}}{One of \code{"event-row-started"},
 \code{"instance-row-started"}, \code{"form-started"}, \code{"form-complete"}, or
-\code{"field-complete"}.}
+\code{"field-complete"}, or \code{"event-complete"}.}
 \item{\code{validation_check_type}}{\code{"on-route"} or \code{"detour"}.}
 \item{\code{validation_passed}}{Whether that row passed its validation check.}
 }
@@ -152,9 +157,12 @@ the record/event/repeat/form context from every downstream assessment,
 regardless of the downstream validation level or check type. \code{form-complete}
 is a \code{"detour"} check: it reports whether all expected fields are complete,
 but a failed \code{form-complete} context still flows into \code{field-complete}.
+\code{event-complete} is an event-level \code{"detour"} rollup: it reports whether
+all on-route checks passed for each record/event context without gating any
+downstream assessment.
 
 The returned \code{pointblank} agent is interrogated with failed-row extraction
-enabled. The row-level extract is also returned as \code{missing} for easier
+enabled. The failed-row extract is also returned as \code{missing} for easier
 review and downstream correction workflows.
 }
 \examples{

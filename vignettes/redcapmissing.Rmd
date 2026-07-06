@@ -32,14 +32,26 @@ registry()
 
 The checks are organized by validation level and validation-check type:
 
-- `row`: `event-row-started` and `instance-row-started`
-- `form`: `form-started` and `form-complete`
-- `field`: `field-complete`
+- `event:form / event:form:instance`: one contextual event/form
+  validation-level. Report rows use `event:form` for non-repeating contexts and
+  `event:form:instance` for repeat-instance contexts.
+- `event`: event-level rollups.
 
-Failed `on-route` checks gate downstream assessment. Failed `detour` checks do
-not. This means a missing event row prevents form and field checks for that
-event context, while a failed `form-complete` check can still be followed by
-field-level failures for the same context.
+`event-row-started`, `instance-row-started`, `form-started`, and
+`field-complete` are `on-route`: failures remove that context from downstream
+assessment. `form-complete` and `event-complete` are `detour`: failures are
+reported without blocking later checks. `event-complete` summarizes whether all
+on-route checks passed for each record/event context across the forms and repeat
+instances requested in the report.
+
+| validation_level | validation_check | validation_check_type |
+|---|---|---|
+| event:form / event:form:instance | `event-row-started` | `on-route` |
+| event:form / event:form:instance | `instance-row-started` | `on-route` |
+| event:form / event:form:instance | `form-started` | `on-route` |
+| event:form / event:form:instance | `form-complete` | `detour` |
+| event:form / event:form:instance | `field-complete` | `on-route` |
+| event | `event-complete` | `detour` |
 
 ## Synthetic REDCap helpers
 
@@ -191,12 +203,14 @@ event_report <- find_missing(
 
 tidy(event_report)[
   ,
-  c("validation_check", "redcap_event_name", "assessed", "failed")
+  c("validation_level", "validation_check", "redcap_event_name", "assessed", "failed")
 ]
 ```
 
 `event_3_arm_1` fails `event-row-started`, so it is not assessed by
-`form-started`, `form-complete`, or `field-complete`.
+`form-started`, `form-complete`, or `field-complete`. Because `event-complete`
+rolls up on-route failures, the same record/event failures are also visible in
+the event-level summary.
 
 ## Repeat expectations
 
@@ -250,15 +264,18 @@ repeat_report$instance_row_started_failures[
 ```
 
 The missing instance `2` for record `r1` fails `instance-row-started` and is
-removed from downstream form and field assessment.
+removed from downstream form and field assessment. It also causes record `r1`
+to fail `event-complete` for `baseline_event` because repeat-instance on-route
+failures belong to the parent REDCap event.
 
 ## Mixed regular and repeating contexts
 
 Some REDCap projects offer the same form as regular on one event and repeating
-on another. The package activates row checks per context:
+on another. The package activates event/form checks per context:
 
 - regular event contexts use `event-row-started`
 - repeating contexts use `instance-row-started`
+- both context types roll up into `event-complete`
 
 If `events` excludes the repeating event, `instances` is ignored for that form.
 If a requested repeating context omits `instances`, the package assumes
@@ -281,7 +298,8 @@ html <- flex_html(ft)
 
 `flex()` displays the canonical checks with human-readable labels, while
 `tidy()` and the `pointblank` agent keep the canonical hyphenated
-`validation_check` values.
+`validation_check` values. The public `validation_level` values are
+`event:form`, `event:form:instance`, and `event`.
 
 ## Citation and acknowledgement
 

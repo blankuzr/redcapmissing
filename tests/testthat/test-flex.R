@@ -47,13 +47,20 @@ test_that("flex returns a formatted table when optional packages are available",
   expect_true(any(flex_out$body$dataset$Form == "baseline_form"))
   expect_true(any(flex_out$body$dataset$`Form Label` == "baseline_form label"))
   expect_true(any(
+    flex_out$body$dataset$Form == "" &
+      flex_out$body$dataset$`Form Label` == "" &
+      flex_out$body$dataset$`Validation Check` == "Event complete"
+  ))
+  expect_true(any(
     flex_out$body$dataset$`Validation Check` ==
       "Event row started" &
       flex_out$body$dataset$Passed == "0 (0%)" &
       flex_out$body$dataset$Failed == "0 (0%)"
   ))
-  expect_true(any(flex_out$body$dataset$`Validation Level` == "row"))
+  expect_true(any(flex_out$body$dataset$`Validation Level` == "event:form"))
+  expect_true(any(flex_out$body$dataset$`Validation Level` == "event"))
   expect_true(any(flex_out$body$dataset$`Check Type` == "on-route"))
+  expect_true(any(flex_out$body$dataset$`Check Type` == "detour"))
 })
 
 test_that("flex keeps multi-form summaries in one flat table", {
@@ -79,10 +86,10 @@ test_that("flex keeps multi-form summaries in one flat table", {
   flex_out <- flex(report)
 
   expect_s3_class(flex_out, "flextable")
-  expect_setequal(flex_out$body$dataset$Form, c("alpha_form", "beta_form"))
+  expect_setequal(flex_out$body$dataset$Form, c("alpha_form", "beta_form", ""))
   expect_setequal(
     flex_out$body$dataset$`Form Label`,
-    c("alpha_form label", "beta_form label")
+    c("alpha_form label", "beta_form label", "")
   )
 })
 

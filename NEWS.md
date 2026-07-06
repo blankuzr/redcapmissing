@@ -1,3 +1,19 @@
+# redcapmissing 2.0.0
+
+## 2026-07-06
+
+- Added the event-level `event-complete` detour validation-check, which reports
+  whether all on-route checks passed for each requested record/event context.
+- Updated `registry()` to show one row per validation-check, with the
+  contextual `event:form / event:form:instance` level displayed as one
+  registry level, and a compact meaning-focused `cli` table instead of verbose
+  grouped listings.
+- Replaced public `validation_level` values `row`, `form`, and `field` with
+  context levels: `event:form`, `event:form:instance`, and `event`.
+- Added `event_complete_checks` and `event_complete_failures` report
+  components and updated tidy, flex, README, vignette, and roxygen
+  documentation for the event-level validation canon.
+
 # redcapmissing 1.0.3
 
 ## 2026-07-06

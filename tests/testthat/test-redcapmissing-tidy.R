@@ -43,8 +43,11 @@ test_that("tidy returns the canonical validation summary contract", {
 
   expect_s3_class(tidy_tbl, "tbl_df")
   expect_identical(names(tidy_tbl), tidy_expected_columns())
-  expect_equal(unique(tidy_tbl$form), "baseline_form")
-  expect_equal(unique(tidy_tbl$form_label), "baseline_form label")
+  non_event <- tidy_tbl$validation_check != "event-complete"
+  expect_equal(unique(tidy_tbl$form[non_event]), "baseline_form")
+  expect_equal(unique(tidy_tbl$form_label[non_event]), "baseline_form label")
+  expect_equal(unique(tidy_tbl$form[!non_event]), "")
+  expect_equal(unique(tidy_tbl$form_label[!non_event]), "")
   expect_false(any(c("validation", "validation_context") %in% names(tidy_tbl)))
   expect_identical(tidy_tbl$form, validation_set$form)
   expect_identical(tidy_tbl$form_label, validation_set$form_label)
@@ -70,7 +73,7 @@ test_that("tidy preserves zero-denominator event-row-started rows", {
     drop = FALSE
   ]
 
-  expect_equal(event_summary$validation_level, "row")
+  expect_equal(event_summary$validation_level, "event:form")
   expect_equal(event_summary$validation_check_type, "on-route")
   expect_equal(event_summary$assessed, 0)
   expect_equal(event_summary$passed, 0)
@@ -78,6 +81,19 @@ test_that("tidy preserves zero-denominator event-row-started rows", {
   expect_equal(event_summary$pass_rate, 0)
   expect_equal(event_summary$fail_rate, 0)
   expect_equal(event_summary$redcap_event_name, "")
+
+  event_complete_summary <- tidy_tbl[
+    tidy_tbl$validation_check == "event-complete",
+    ,
+    drop = FALSE
+  ]
+  expect_equal(event_complete_summary$form, "")
+  expect_equal(event_complete_summary$form_label, "")
+  expect_equal(event_complete_summary$validation_level, "event")
+  expect_equal(event_complete_summary$validation_check_type, "detour")
+  expect_equal(event_complete_summary$redcap_event_name, "")
+  expect_equal(event_complete_summary$assessed, 1)
+  expect_equal(event_complete_summary$failed, 1)
 })
 
 test_that("tidy returns focused summaries for combined multi-form reports", {
@@ -100,8 +116,14 @@ test_that("tidy returns focused summaries for combined multi-form reports", {
   tidy_tbl <- tidy(report)
 
   expect_identical(names(tidy_tbl), tidy_expected_columns())
-  expect_identical(unique(tidy_tbl$form), c("alpha_form", "beta_form"))
-  expect_setequal(tidy_tbl$form_label, c("alpha_form label", "beta_form label"))
+  non_event <- tidy_tbl$validation_check != "event-complete"
+  expect_identical(unique(tidy_tbl$form[non_event]), c("alpha_form", "beta_form"))
+  expect_setequal(
+    tidy_tbl$form_label[non_event],
+    c("alpha_form label", "beta_form label")
+  )
+  expect_equal(unique(tidy_tbl$form[!non_event]), "")
+  expect_equal(unique(tidy_tbl$form_label[!non_event]), "")
   expect_true(any(
     tidy_tbl$form == "alpha_form" &
       tidy_tbl$validation_check == "field-complete"
@@ -154,6 +176,12 @@ test_that("tidy returns multi-event and repeating context denominators", {
     drop = FALSE
   ]
   field_summary <- field_summary[order(field_summary$redcap_event_name), , drop = FALSE]
+  event_complete <- tidy_tbl[
+    tidy_tbl$validation_check == "event-complete",
+    ,
+    drop = FALSE
+  ]
+  event_complete <- event_complete[order(event_complete$redcap_event_name), , drop = FALSE]
 
   expect_equal(event_summary$redcap_event_name, paste0("event_", 1:3, "_arm_1"))
   expect_equal(event_summary$assessed, c(2, 2, 2))
@@ -161,6 +189,9 @@ test_that("tidy returns multi-event and repeating context denominators", {
   expect_equal(field_summary$redcap_event_name, paste0("event_", 1:2, "_arm_1"))
   expect_equal(field_summary$assessed, c(6, 6))
   expect_equal(field_summary$failed, c(0, 1))
+  expect_equal(event_complete$redcap_event_name, paste0("event_", 1:3, "_arm_1"))
+  expect_equal(event_complete$assessed, c(2, 2, 2))
+  expect_equal(event_complete$failed, c(0, 1, 2))
 })
 
 test_that("tidy dispatch is available from redcapmissing", {

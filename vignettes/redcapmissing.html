@@ -365,41 +365,81 @@ REDCap credentials.</p>
 <p>The package validation model is available through
 <code>registry()</code>:</p>
 <pre class="r"><code>registry()
-#&gt;
-#&gt; ── redcapmissing validation registry ───────────────────────────────────────────
-#&gt;
-#&gt; ── row-level checks ──
-#&gt;
-#&gt; • `event-row-started` [on-route; gates downstream] - The expected REDCap event
-#&gt; row exists in the export.
-#&gt; • `instance-row-started` [on-route; gates downstream] - The expected REDCap
-#&gt; repeat instance row exists in the export.
-#&gt;
-#&gt; ── form-level checks ──
-#&gt;
-#&gt; • `form-started` [on-route; gates downstream] - The exported form context has
-#&gt; at least one entered data-capturing field.
-#&gt; • `form-complete` [detour; does not gate downstream] - All expected fields are
-#&gt; complete for an evaluable form context.
-#&gt;
-#&gt; ── field-level checks ──
-#&gt;
-#&gt; • `field-complete` [on-route; gates downstream] - A specific expected field is
-#&gt; complete after branching and filtering.</code></pre>
+#&gt; validation registry
+#&gt; 6 checks; 2 levels
+#&gt; +------------------------------------+-----------------------+----------+---------------------------------+
+#&gt; | level                              | check                 | type     | meaning                         |
+#&gt; +------------------------------------+-----------------------+----------+---------------------------------+
+#&gt; | event:form / event:form:instance   | event-row-started     | on-route | event row exists                |
+#&gt; | event:form / event:form:instance   | instance-row-started  | on-route | repeat row exists               |
+#&gt; | event:form / event:form:instance   | form-started          | on-route | form has data                   |
+#&gt; | event:form / event:form:instance   | form-complete         | detour   | fields complete                 |
+#&gt; | event:form / event:form:instance   | field-complete        | on-route | field complete after branching  |
+#&gt; | event                              | event-complete        | detour   | on-route checks pass in event   |
+#&gt; +------------------------------------+-----------------------+----------+---------------------------------+</code></pre>
 <p>The checks are organized by validation level and validation-check
 type:</p>
 <ul>
-<li><code>row</code>: <code>event-row-started</code> and
-<code>instance-row-started</code></li>
-<li><code>form</code>: <code>form-started</code> and
-<code>form-complete</code></li>
-<li><code>field</code>: <code>field-complete</code></li>
+<li><code>event:form / event:form:instance</code>: one contextual
+event/form validation-level. Report rows use <code>event:form</code> for
+non-repeating contexts and <code>event:form:instance</code> for
+repeat-instance contexts.</li>
+<li><code>event</code>: event-level rollups.</li>
 </ul>
-<p>Failed <code>on-route</code> checks gate downstream assessment.
-Failed <code>detour</code> checks do not. This means a missing event row
-prevents form and field checks for that event context, while a failed
-<code>form-complete</code> check can still be followed by field-level
-failures for the same context.</p>
+<p><code>event-row-started</code>, <code>instance-row-started</code>,
+<code>form-started</code>, and <code>field-complete</code> are
+<code>on-route</code>: failures remove that context from downstream
+assessment. <code>form-complete</code> and <code>event-complete</code>
+are <code>detour</code>: failures are reported without blocking later
+checks. <code>event-complete</code> summarizes whether all on-route
+checks passed for each record/event context across the forms and repeat
+instances requested in the report.</p>
+<table>
+<colgroup>
+<col width="33%" />
+<col width="33%" />
+<col width="33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>validation_level</th>
+<th>validation_check</th>
+<th>validation_check_type</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>event:form / event:form:instance</td>
+<td><code>event-row-started</code></td>
+<td><code>on-route</code></td>
+</tr>
+<tr class="even">
+<td>event:form / event:form:instance</td>
+<td><code>instance-row-started</code></td>
+<td><code>on-route</code></td>
+</tr>
+<tr class="odd">
+<td>event:form / event:form:instance</td>
+<td><code>form-started</code></td>
+<td><code>on-route</code></td>
+</tr>
+<tr class="even">
+<td>event:form / event:form:instance</td>
+<td><code>form-complete</code></td>
+<td><code>detour</code></td>
+</tr>
+<tr class="odd">
+<td>event:form / event:form:instance</td>
+<td><code>field-complete</code></td>
+<td><code>on-route</code></td>
+</tr>
+<tr class="even">
+<td>event</td>
+<td><code>event-complete</code></td>
+<td><code>detour</code></td>
+</tr>
+</tbody>
+</table>
 </div>
 <div id="synthetic-redcap-helpers" class="section level2">
 <h2>Synthetic REDCap helpers</h2>
@@ -501,11 +541,12 @@ report$missing[, c(
   &quot;validation_check&quot;,
   &quot;field_name&quot;
 )]
-#&gt; # A tibble: 2 × 5
+#&gt; # A tibble: 3 × 5
 #&gt;   record_id validation_level validation_check_type validation_check field_name
 #&gt;   &lt;chr&gt;     &lt;chr&gt;            &lt;chr&gt;                 &lt;chr&gt;            &lt;chr&gt;
-#&gt; 1 r1        form             detour                form-complete    &lt;NA&gt;
-#&gt; 2 r1        field            on-route              field-complete   conditional…</code></pre>
+#&gt; 1 r1        event:form       detour                form-complete    &lt;NA&gt;
+#&gt; 2 r1        event:form       on-route              field-complete   conditional…
+#&gt; 3 r1        event            detour                event-complete   &lt;NA&gt;</code></pre>
 <p>Record <code>r1</code> is branch-open for
 <code>conditional_note</code>, so the missing value is a
 <code>field-complete</code> failure. Record <code>r2</code> is
@@ -548,23 +589,28 @@ event_report &lt;- find_missing(
 
 tidy(event_report)[
   ,
-  c(&quot;validation_check&quot;, &quot;redcap_event_name&quot;, &quot;assessed&quot;, &quot;failed&quot;)
+  c(&quot;validation_level&quot;, &quot;validation_check&quot;, &quot;redcap_event_name&quot;, &quot;assessed&quot;, &quot;failed&quot;)
 ]
-#&gt; # A tibble: 9 × 4
-#&gt;   validation_check  redcap_event_name assessed failed
-#&gt;   &lt;chr&gt;             &lt;chr&gt;                &lt;dbl&gt;  &lt;dbl&gt;
-#&gt; 1 event-row-started event_1_arm_1            2      0
-#&gt; 2 event-row-started event_2_arm_1            2      0
-#&gt; 3 event-row-started event_3_arm_1            2      2
-#&gt; 4 form-started      event_1_arm_1            2      0
-#&gt; 5 form-started      event_2_arm_1            2      0
-#&gt; 6 form-complete     event_1_arm_1            2      0
-#&gt; 7 form-complete     event_2_arm_1            2      1
-#&gt; 8 field-complete    event_1_arm_1            6      0
-#&gt; 9 field-complete    event_2_arm_1            6      1</code></pre>
+#&gt; # A tibble: 12 × 5
+#&gt;    validation_level validation_check  redcap_event_name assessed failed
+#&gt;    &lt;chr&gt;            &lt;chr&gt;             &lt;chr&gt;                &lt;dbl&gt;  &lt;dbl&gt;
+#&gt;  1 event:form       event-row-started event_1_arm_1            2      0
+#&gt;  2 event:form       event-row-started event_2_arm_1            2      0
+#&gt;  3 event:form       event-row-started event_3_arm_1            2      2
+#&gt;  4 event:form       form-started      event_1_arm_1            2      0
+#&gt;  5 event:form       form-started      event_2_arm_1            2      0
+#&gt;  6 event:form       form-complete     event_1_arm_1            2      0
+#&gt;  7 event:form       form-complete     event_2_arm_1            2      1
+#&gt;  8 event:form       field-complete    event_1_arm_1            6      0
+#&gt;  9 event:form       field-complete    event_2_arm_1            6      1
+#&gt; 10 event            event-complete    event_1_arm_1            2      0
+#&gt; 11 event            event-complete    event_2_arm_1            2      1
+#&gt; 12 event            event-complete    event_3_arm_1            2      2</code></pre>
 <p><code>event_3_arm_1</code> fails <code>event-row-started</code>, so
 it is not assessed by <code>form-started</code>,
-<code>form-complete</code>, or <code>field-complete</code>.</p>
+<code>form-complete</code>, or <code>field-complete</code>. Because
+<code>event-complete</code> rolls up on-route failures, the same
+record/event failures are also visible in the event-level summary.</p>
 </div>
 <div id="repeat-expectations" class="section level2">
 <h2>Repeat expectations</h2>
@@ -620,15 +666,19 @@ repeat_report$instance_row_started_failures[
 #&gt; 1 r1        2                      instance-row-started</code></pre>
 <p>The missing instance <code>2</code> for record <code>r1</code> fails
 <code>instance-row-started</code> and is removed from downstream form
-and field assessment.</p>
+and field assessment. It also causes record <code>r1</code> to fail
+<code>event-complete</code> for <code>baseline_event</code> because
+repeat-instance on-route failures belong to the parent REDCap event.</p>
 </div>
 <div id="mixed-regular-and-repeating-contexts" class="section level2">
 <h2>Mixed regular and repeating contexts</h2>
 <p>Some REDCap projects offer the same form as regular on one event and
-repeating on another. The package activates row checks per context:</p>
+repeating on another. The package activates event/form checks per
+context:</p>
 <ul>
 <li>regular event contexts use <code>event-row-started</code></li>
 <li>repeating contexts use <code>instance-row-started</code></li>
+<li>both context types roll up into <code>event-complete</code></li>
 </ul>
 <p>If <code>events</code> excludes the repeating event,
 <code>instances</code> is ignored for that form. If a requested
@@ -640,13 +690,15 @@ instance <code>1</code> and warns once.</p>
 <p><code>tidy(report)</code> returns a focused summary with canonical
 validation metadata:</p>
 <pre class="r"><code>tidy(report)
-#&gt; # A tibble: 4 × 13
-#&gt;   form          form_label          redcap_event_name redcap_repeat_instrument
-#&gt;   &lt;chr&gt;         &lt;chr&gt;               &lt;chr&gt;             &lt;chr&gt;
-#&gt; 1 baseline_form baseline_form label &quot;&quot;                &quot;&quot;
-#&gt; 2 baseline_form baseline_form label &quot;&quot;                &quot;&quot;
-#&gt; 3 baseline_form baseline_form label &quot;&quot;                &quot;&quot;
-#&gt; 4 baseline_form baseline_form label &quot;&quot;                &quot;&quot;
+#&gt; # A tibble: 5 × 13
+#&gt;   form            form_label            redcap_event_name redcap_repeat_instru…¹
+#&gt;   &lt;chr&gt;           &lt;chr&gt;                 &lt;chr&gt;             &lt;chr&gt;
+#&gt; 1 &quot;baseline_form&quot; &quot;baseline_form label&quot; &quot;&quot;                &quot;&quot;
+#&gt; 2 &quot;baseline_form&quot; &quot;baseline_form label&quot; &quot;&quot;                &quot;&quot;
+#&gt; 3 &quot;baseline_form&quot; &quot;baseline_form label&quot; &quot;&quot;                &quot;&quot;
+#&gt; 4 &quot;baseline_form&quot; &quot;baseline_form label&quot; &quot;&quot;                &quot;&quot;
+#&gt; 5 &quot;&quot;              &quot;&quot;                    &quot;&quot;                &quot;&quot;
+#&gt; # ℹ abbreviated name: ¹​redcap_repeat_instrument
 #&gt; # ℹ 9 more variables: redcap_repeat_instance &lt;chr&gt;, validation_level &lt;chr&gt;,
 #&gt; #   validation_check &lt;chr&gt;, validation_check_type &lt;chr&gt;, assessed &lt;dbl&gt;,
 #&gt; #   passed &lt;dbl&gt;, failed &lt;dbl&gt;, pass_rate &lt;dbl&gt;, fail_rate &lt;dbl&gt;</code></pre>
@@ -656,7 +708,9 @@ available:</p>
 html &lt;- flex_html(ft)</code></pre>
 <p><code>flex()</code> displays the canonical checks with human-readable
 labels, while <code>tidy()</code> and the <code>pointblank</code> agent
-keep the canonical hyphenated <code>validation_check</code> values.</p>
+keep the canonical hyphenated <code>validation_check</code> values. The
+public <code>validation_level</code> values are <code>event:form</code>,
+<code>event:form:instance</code>, and <code>event</code>.</p>
 </div>
 <div id="citation-and-acknowledgement" class="section level2">
 <h2>Citation and acknowledgement</h2>

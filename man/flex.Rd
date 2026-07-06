@@ -13,8 +13,10 @@ flex(x, ...)
 }
 \value{
 A \code{flextable} object with form metadata, REDCap context columns,
-validation level, human-readable validation check, validation-check type,
-and pass/fail counts for display. This function requires the
+emitted validation context label (\code{"event:form"},
+\code{"event:form:instance"}, or \code{"event"}), human-readable validation check,
+validation-check type, and pass/fail counts for display. This function
+requires the
 optional \code{flextable} and \code{glue} packages.
 }
 \description{

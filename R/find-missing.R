@@ -26,10 +26,13 @@
 #' Validation is split between REDCap-specific R preprocessing and `pointblank`
 #' reporting. The package builds validation rows with:
 #' \describe{
-#'   \item{`validation_level`}{`"row"`, `"form"`, or `"field"`.}
+#'   \item{`validation_level`}{The emitted context label. Event/form checks use
+#'     `"event:form"` for non-repeating contexts and
+#'     `"event:form:instance"` for repeat-instance contexts; event rollups use
+#'     `"event"`.}
 #'   \item{`validation_check`}{One of `"event-row-started"`,
 #'     `"instance-row-started"`, `"form-started"`, `"form-complete"`, or
-#'     `"field-complete"`.}
+#'     `"field-complete"`, or `"event-complete"`.}
 #'   \item{`validation_check_type`}{`"on-route"` or `"detour"`.}
 #'   \item{`validation_passed`}{Whether that row passed its validation check.}
 #' }
@@ -39,9 +42,12 @@
 #' regardless of the downstream validation level or check type. `form-complete`
 #' is a `"detour"` check: it reports whether all expected fields are complete,
 #' but a failed `form-complete` context still flows into `field-complete`.
+#' `event-complete` is an event-level `"detour"` rollup: it reports whether
+#' all on-route checks passed for each record/event context without gating any
+#' downstream assessment.
 #'
 #' The returned `pointblank` agent is interrogated with failed-row extraction
-#' enabled. The row-level extract is also returned as `missing` for easier
+#' enabled. The failed-row extract is also returned as `missing` for easier
 #' review and downstream correction workflows.
 #'
 #' @param data A data frame or tibble of REDCap records, usually produced by
@@ -110,6 +116,8 @@
 #'     validation rows and their failed rows.}
 #'   \item{`form_complete_checks`, `form_complete_failures`}{All form-complete
 #'     validation rows and their failed rows.}
+#'   \item{`event_complete_checks`, `event_complete_failures`}{All
+#'     event-complete validation rows and their failed rows.}
 #'   \item{`field_complete_checks`, `field_complete_failures`}{All
 #'     field-complete validation rows and their failed rows.}
 #'   \item{`field_plan`}{The metadata-derived field plan for the requested
@@ -301,6 +309,18 @@ find_missing <- function(
     vapply(form_reports, `[[`, character(1), "form_label"),
     forms
   )
+  event_complete_checks <- .miss_build_event_complete_check_rows(
+    validation_rows
+  )
+  event_complete_failures <- event_complete_checks[
+    !event_complete_checks$validation_passed,
+    ,
+    drop = FALSE
+  ]
+  validation_rows <- dplyr::bind_rows(
+    validation_rows,
+    event_complete_checks
+  )
 
   # Let pointblank own the validation object and failed-row extract.
   agent <- pointblank::create_agent(
@@ -311,6 +331,10 @@ find_missing <- function(
   for (form_report in form_reports) {
     agent <- .miss_add_form_validation_steps(agent, form_report)
   }
+  agent <- .miss_add_report_validation_steps(
+    agent = agent,
+    validation_rows = validation_rows
+  )
   agent <- pointblank::interrogate(
     agent,
     extract_failed = TRUE,
@@ -365,6 +389,8 @@ find_missing <- function(
       form_reports,
       "form_complete_failures"
     ),
+    event_complete_checks = event_complete_checks,
+    event_complete_failures = event_complete_failures,
     field_complete_checks = .miss_bind_report_component(
       form_reports,
       "field_complete_checks"
@@ -612,6 +638,11 @@ find_missing <- function(
 .miss_add_form_validation_steps <- function(agent, form_report) {
   form <- form_report$form
   registry <- .redcapmissing_registry_data()
+  registry <- registry[
+    registry$validation_check != "event-complete",
+    ,
+    drop = FALSE
+  ]
 
   for (row in seq_len(nrow(registry))) {
     check <- registry[row, , drop = FALSE]
@@ -629,6 +660,34 @@ find_missing <- function(
         validation_check = check$validation_check,
         keep_zero = keep_zero,
         form = form
+      )
+    }
+  }
+
+  agent
+}
+
+.miss_add_report_validation_steps <- function(agent, validation_rows) {
+  registry <- .redcapmissing_registry_data()
+  registry <- registry[
+    registry$validation_check == "event-complete",
+    ,
+    drop = FALSE
+  ]
+
+  for (row in seq_len(nrow(registry))) {
+    check <- registry[row, , drop = FALSE]
+    rows <- validation_rows[
+      validation_rows$validation_check == check$validation_check,
+      ,
+      drop = FALSE
+    ]
+    if (nrow(rows) > 0) {
+      agent <- .miss_add_validation_step(
+        agent = agent,
+        rows = rows,
+        validation_check = check$validation_check,
+        form = ""
       )
     }
   }
@@ -796,5 +855,18 @@ find_missing <- function(
 }
 
 .miss_step_id <- function(form, validation_check) {
-  paste0(form, "_", validation_check)
+  form <- .miss_chr_vec(form %||% character())
+  validation_check <- .miss_chr_vec(validation_check)
+  n <- max(length(form), length(validation_check))
+  if (n == 0) {
+    return(character())
+  }
+
+  form <- rep(form, length.out = n)
+  validation_check <- rep(validation_check, length.out = n)
+  ifelse(
+    .miss_is_blank_vec(form),
+    validation_check,
+    paste0(form, "_", validation_check)
+  )
 }

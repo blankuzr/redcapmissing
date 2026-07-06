@@ -1,10 +1,10 @@
 Package: redcapmissing
 Title: Branching-Aware Missingness Reports for REDCap Exports
-Version: 1.0.3
+Version: 2.0.0
 Authors@R: person("blankuzr", email = "blankuzr@users.noreply.github.com", role = c("aut", "cre"))
 Description: Build branching-aware missingness reports for REDCap record
     exports using project metadata and structure exposed by the redcapAPI
-    package, organized by row-, form-, and field-level validation checks.
+    package, organized by event/form-context and event-level validation checks.
 License: MIT + file LICENSE
 URL: https://github.com/blankuzr/redcapmissing
 BugReports: https://github.com/blankuzr/redcapmissing/issues

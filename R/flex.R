@@ -8,8 +8,10 @@
 #' @param ... Unused.
 #'
 #' @return A `flextable` object with form metadata, REDCap context columns,
-#'   validation level, human-readable validation check, validation-check type,
-#'   and pass/fail counts for display. This function requires the
+#'   emitted validation context label (`"event:form"`,
+#'   `"event:form:instance"`, or `"event"`), human-readable validation check,
+#'   validation-check type, and pass/fail counts for display. This function
+#'   requires the
 #'   optional `flextable` and `glue` packages.
 #'
 #' @seealso [find_missing()], [tidy.redcapmissing()], [flex_html()]
