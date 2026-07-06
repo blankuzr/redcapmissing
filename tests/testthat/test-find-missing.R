@@ -266,6 +266,67 @@ test_that("event-row-started strictly gates downstream checks", {
   ))
 })
 
+test_that("failed event-row-started checks do not create blank-event downstream contexts", {
+  status_meta <- dplyr::bind_rows(
+    meta_row("record_id", "patient_status", field_label = "Record ID", required = "y"),
+    meta_row("patient_status_started", "patient_status", required = "y"),
+    meta_row("patient_status_value", "patient_status", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1, 1),
+    unique_event_name = c("baseline_event", "follow_up_1", "follow_up_2"),
+    form = c("enrollment", "patient_status", "patient_status")
+  )
+  records <- tibble::tibble(
+    record_id = c("r1", "r2", "r3"),
+    redcap_event_name = "baseline_event",
+    patient_status_started = "yes",
+    patient_status_value = "entered"
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(status_meta, mapping = mapping),
+    forms = "patient_status"
+  )
+
+  event_started <- report$agent$validation_set[
+    report$agent$validation_set$validation_check == "event-row-started",
+    ,
+    drop = FALSE
+  ]
+  event_started <- event_started[order(event_started$redcap_event_name), , drop = FALSE]
+  expect_equal(event_started$redcap_event_name, c("follow_up_1", "follow_up_2"))
+  expect_equal(event_started$n, c(3, 3))
+  expect_equal(event_started$n_failed, c(3, 3))
+
+  expect_equal(nrow(report$form_started_checks), 0)
+  expect_equal(nrow(report$form_complete_checks), 0)
+  expect_equal(nrow(report$field_complete_checks), 0)
+
+  form_started <- report$agent$validation_set[
+    report$agent$validation_set$validation_check == "form-started",
+    ,
+    drop = FALSE
+  ]
+  expect_equal(form_started$n, 0)
+  expect_equal(form_started$n_passed, 0)
+
+  event_complete <- report$agent$validation_set[
+    report$agent$validation_set$validation_check == "event-complete",
+    ,
+    drop = FALSE
+  ]
+  event_complete <- event_complete[order(event_complete$redcap_event_name), , drop = FALSE]
+  expect_equal(event_complete$redcap_event_name, c("follow_up_1", "follow_up_2"))
+  expect_equal(event_complete$n, c(3, 3))
+  expect_equal(event_complete$n_failed, c(3, 3))
+  expect_false(any(
+    event_complete$redcap_event_name == "" &
+      event_complete$n_passed > 0
+  ))
+})
+
 test_that("instance-row-started gates downstream repeat checks", {
   repeat_meta <- dplyr::bind_rows(
     meta_row("record_id", "screen_form", field_label = "Record ID", required = "y"),
