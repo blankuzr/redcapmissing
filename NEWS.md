@@ -1,3 +1,12 @@
+# redcapmissing 2.0.1
+
+## 2026-07-06
+
+- Improved README onboarding by clarifying GitHub installation, making the
+  first-use example executable during README rendering, moving optional
+  reporting helpers out of the minimal workflow, and centering the package logo
+  to avoid header overlap.
+
 # redcapmissing 2.0.0
 
 ## 2026-07-06
