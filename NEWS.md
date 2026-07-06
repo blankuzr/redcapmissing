@@ -1,3 +1,12 @@
+# redcapmissing 3.1.1
+
+## 2026-07-06
+
+- Fixed downstream validation summaries when all expected event or repeat rows
+  fail their upstream row-started checks. `find_missing()` no longer falls back
+  to blank-event record contexts that can appear as passing form-started or
+  event-complete rows.
+
 # redcapmissing 3.1.0
 
 ## 2026-07-06

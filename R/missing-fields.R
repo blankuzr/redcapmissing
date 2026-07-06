@@ -580,6 +580,7 @@
     "redcap_repeat_instrument",
     "redcap_repeat_instance"
   )
+  has_upstream_row_checks <- nrow(event_checks) > 0 || nrow(repeat_checks) > 0
   event_checks <- event_checks[
     event_checks$validation_passed,
     ,
@@ -597,6 +598,9 @@
   contexts <- unique(contexts)
   if (nrow(contexts) > 0) {
     return(tibble::as_tibble(contexts))
+  }
+  if (isTRUE(has_upstream_row_checks)) {
+    return(.miss_empty_expected()[, context_cols])
   }
 
   records <- tibble::as_tibble(records)
