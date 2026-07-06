@@ -73,82 +73,79 @@ context. The `event` level is a summary layer. `form-complete` and
 into the pass-only pipeline.
 
 ```mermaid
+%%{init: {"flowchart": {"curve": "monotoneX", "nodeSpacing": 44, "rankSpacing": 56}, "themeVariables": {"fontFamily": "Aptos, Segoe UI, Helvetica, Arial, sans-serif"}}}%%
 flowchart LR
-  subgraph EV["same REDCap event"]
+  subgraph EV["<span style='font-size:15px;font-weight:700'>Same REDCap event</span>"]
     direction TB
 
-    subgraph F1["event:form context 1"]
+    subgraph F1["<span style='font-size:14px;font-weight:700'>Form context 1</span>"]
       direction LR
-      subgraph G1A["First gate"]
+      subgraph G1A["<span style='font-size:12px;font-weight:700'>Gate 1</span>"]
         direction TB
-        A1["event-row-started<br/>non-repeating<br/>on-route"]
-        B1["instance-row-started<br/>repeat-instance<br/>on-route"]
+        A1("<span style='font-size:16px;font-weight:700'>Event row started</span><br/><span style='font-size:11px;color:#5f6f7c'>non-repeating</span>")
+        B1("<span style='font-size:16px;font-weight:700'>Instance row started</span><br/><span style='font-size:11px;color:#5f6f7c'>repeat instance</span>")
       end
 
-      subgraph G2A["Second gate"]
+      subgraph G2A["<span style='font-size:12px;font-weight:700'>Gate 2</span>"]
         direction TB
-        C1["form-started<br/>on-route"]
-        D1["form-complete"]
+        C1("<span style='font-size:16px;font-weight:700'>Form started</span>")
+        D1("<span style='font-size:16px;font-weight:700'>Form complete</span>")
       end
 
-      subgraph G3A["Third gate"]
-        E1["field-complete<br/>on-route"]
+      subgraph G3A["<span style='font-size:12px;font-weight:700'>Gate 3</span>"]
+        E1("<span style='font-size:16px;font-weight:700'>Field complete</span>")
       end
     end
 
-    H[" "]
-
-    subgraph F2["event:form context 2"]
+    subgraph F2["<span style='font-size:14px;font-weight:700'>Form context 2</span>"]
       direction LR
-      subgraph G1B["First gate"]
+      subgraph G1B["<span style='font-size:12px;font-weight:700'>Gate 1</span>"]
         direction TB
-        A2["event-row-started<br/>non-repeating<br/>on-route"]
-        B2["instance-row-started<br/>repeat-instance<br/>on-route"]
+        A2("<span style='font-size:16px;font-weight:700'>Event row started</span><br/><span style='font-size:11px;color:#5f6f7c'>non-repeating</span>")
+        B2("<span style='font-size:16px;font-weight:700'>Instance row started</span><br/><span style='font-size:11px;color:#5f6f7c'>repeat instance</span>")
       end
 
-      subgraph G2B["Second gate"]
+      subgraph G2B["<span style='font-size:12px;font-weight:700'>Gate 2</span>"]
         direction TB
-        C2["form-started<br/>on-route"]
-        D2["form-complete"]
+        C2("<span style='font-size:16px;font-weight:700'>Form started</span>")
+        D2("<span style='font-size:16px;font-weight:700'>Form complete</span>")
       end
 
-      subgraph G3B["Third gate"]
-        E2["field-complete<br/>on-route"]
+      subgraph G3B["<span style='font-size:12px;font-weight:700'>Gate 3</span>"]
+        E2("<span style='font-size:16px;font-weight:700'>Field complete</span>")
       end
     end
   end
 
-  subgraph G4["Summary"]
-    F["event-complete<br/>all forms in event"]
-  end
+  F("<span style='font-size:16px;font-weight:700'>Event complete</span>")
 
-  R["all event<br/>form contexts"]
+  G1A ==> G2A
+  G2A ==> G3A
 
-  A1 ==> C1
-  B1 ==> C1
-  C1 ==> E1
-  C1 -. "detours" .-> D1
+  G1B ==> G2B
+  G2B ==> G3B
 
-  A2 ==> C2
-  B2 ==> C2
-  C2 ==> E2
-  C2 -. "detours" .-> D2
+  F1 ~~~ F2
+  EV --> F
 
-  E1 --> R
-  E2 --> R
-  R -. "detours" .-> F
-  E1 ~~~ H
-  H ~~~ A2
-
-  classDef onRoute fill:#eaf5ee,stroke:#258457,color:#173b2b,stroke-width:2px;
-  classDef detour fill:#fff4d7,stroke:#c77900,color:#513300,stroke-width:2px;
-  classDef rollup fill:#e7f0ff,stroke:#3569a8,color:#183353,stroke-width:2px;
-  classDef hidden fill:transparent,stroke:transparent,color:transparent;
-  class A1,B1,C1,E1,A2,B2,C2,E2 onRoute;
-  class D1,D2,F detour;
-  class R rollup;
-  class H hidden;
-  linkStyle 3,7,10 stroke:#c77900,stroke-width:2px;
+  classDef check fill:#ffffff,stroke:#3d8b82,color:#102a26,stroke-width:1.7px;
+  classDef completion fill:#fff3df,stroke:#d68733,color:#4a2a0b,stroke-width:1.7px;
+  classDef final fill:#28343f,stroke:#28343f,color:#ffffff,stroke-width:1.7px;
+  class A1,B1,C1,E1,A2,B2,C2,E2 check;
+  class D1,D2 completion;
+  class F final;
+  style EV fill:#f8f4ed,stroke:#d8cabb,color:#28343f,rx:14,ry:14;
+  style F1 fill:#e8f3f2,stroke:#8bbab3,color:#163b45,rx:12,ry:12;
+  style F2 fill:#fff0d2,stroke:#d7b15a,color:#46320d,rx:12,ry:12;
+  style G1A fill:#ffffff,stroke:#d7dce2,color:#28343f,rx:10,ry:10;
+  style G2A fill:#ffffff,stroke:#d7dce2,color:#28343f,rx:10,ry:10;
+  style G3A fill:#ffffff,stroke:#d7dce2,color:#28343f,rx:10,ry:10;
+  style G1B fill:#ffffff,stroke:#d7dce2,color:#28343f,rx:10,ry:10;
+  style G2B fill:#ffffff,stroke:#d7dce2,color:#28343f,rx:10,ry:10;
+  style G3B fill:#ffffff,stroke:#d7dce2,color:#28343f,rx:10,ry:10;
+  linkStyle default stroke:#748292,stroke-width:1.5px;
+  linkStyle 4 stroke:transparent,stroke-width:0px;
+  linkStyle 5 stroke:#28343f,stroke-width:2px;
 ```
 
 | validation_level | validation_check | validation_check_type | Meaning |
