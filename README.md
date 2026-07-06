@@ -138,7 +138,7 @@ interrogated `pointblank` agent. Common outputs are:
 - `flex(report)`: a formatted summary table for reporting workflows
 
 `tidy(report)` uses canonical validation columns: `validation_level`,
-`validation_check_type`, and `validation_check`. `flex(report)` displays
+`validation_check`, and `validation_check_type`. `flex(report)` displays
 the same checks with human-readable labels.
 
 ## Events and repeats

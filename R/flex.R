@@ -7,9 +7,9 @@
 #' @param x A `redcapmissing` object created by [find_missing()].
 #' @param ... Unused.
 #'
-#' @return A `flextable` object with form metadata, validation level,
-#'   validation-check type, human-readable validation check, REDCap context
-#'   columns, and pass/fail counts for display. This function requires the
+#' @return A `flextable` object with form metadata, REDCap context columns,
+#'   validation level, human-readable validation check, validation-check type,
+#'   and pass/fail counts for display. This function requires the
 #'   optional `flextable` and `glue` packages.
 #'
 #' @seealso [find_missing()], [tidy.redcapmissing()], [flex_html()]
@@ -40,12 +40,12 @@ flex.redcapmissing <- function(x, ...) {
     dplyr::select(dplyr::all_of(c(
       "form",
       "form_label",
-      "validation_level",
-      "validation_check_type",
-      "validation_check",
       "redcap_event_name",
       "redcap_repeat_instrument",
       "redcap_repeat_instance",
+      "validation_level",
+      "validation_check",
+      "validation_check_type",
       "assessed",
       "passed",
       "failed"
@@ -53,12 +53,12 @@ flex.redcapmissing <- function(x, ...) {
     stats::setNames(c(
       "Form",
       "Form Label",
-      "Validation Level",
-      "Check Type",
-      "Validation Check",
       "Event",
       "Repeat Instrument",
       "Repeat Instance",
+      "Validation Level",
+      "Validation Check",
+      "Check Type",
       "Assessed",
       "Passed",
       "Failed"

@@ -1,3 +1,10 @@
+# redcapmissing 1.0.1
+
+## 2026-07-06
+
+- Moved validation metadata columns in `tidy()` and `flex()` output after the
+  REDCap event and repeat system columns for easier context-first scanning.
+
 # redcapmissing 1.0.0
 
 ## 2026-07-02

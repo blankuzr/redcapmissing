@@ -31,16 +31,19 @@ test_that("flex returns a formatted table when optional packages are available",
 
   expect_s3_class(flex_out, "flextable")
   expect_equal(flex_out$body$dataset$Assessed, tidy_tbl$assessed)
-  expect_true(all(c(
+  expect_identical(names(flex_out$body$dataset), c(
     "Form",
     "Form Label",
-    "Validation Level",
-    "Check Type",
-    "Validation Check",
     "Event",
     "Repeat Instrument",
-    "Repeat Instance"
-  ) %in% names(flex_out$body$dataset)))
+    "Repeat Instance",
+    "Validation Level",
+    "Validation Check",
+    "Check Type",
+    "Assessed",
+    "Passed",
+    "Failed"
+  ))
   expect_true(any(flex_out$body$dataset$Form == "baseline_form"))
   expect_true(any(flex_out$body$dataset$`Form Label` == "baseline_form label"))
   expect_true(any(

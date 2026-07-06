@@ -16,17 +16,17 @@ A tibble with one row per validation step/context and columns:
 \describe{
 \item{\code{form}}{The REDCap instrument/form name assessed by the report.}
 \item{\code{form_label}}{The REDCap instrument label for \code{form}.}
-\item{\code{validation_level}}{The validation level: \code{"row"}, \code{"form"}, or
-\code{"field"}.}
-\item{\code{validation_check_type}}{The validation-check type: \code{"on-route"} or
-\code{"detour"}.}
-\item{\code{validation_check}}{The canonical validation-check code.}
 \item{\code{redcap_event_name}}{The REDCap event name for the validation
 context, or \code{""} when not applicable.}
 \item{\code{redcap_repeat_instrument}}{The REDCap repeat instrument for the
 validation context, or \code{""} when not applicable.}
 \item{\code{redcap_repeat_instance}}{The REDCap repeat instance for the
 validation context, or \code{""} when not applicable.}
+\item{\code{validation_level}}{The validation level: \code{"row"}, \code{"form"}, or
+\code{"field"}.}
+\item{\code{validation_check}}{The canonical validation-check code.}
+\item{\code{validation_check_type}}{The validation-check type: \code{"on-route"} or
+\code{"detour"}.}
 \item{\code{assessed}}{The number of rows assessed.}
 \item{\code{passed}}{The number of rows that passed.}
 \item{\code{failed}}{The number of rows that failed.}
