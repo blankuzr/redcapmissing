@@ -102,6 +102,8 @@ forms, including checkbox child export columns and a \code{form} column.}
 fields.}
 \item{\code{events}}{Named list of REDCap events actually used for assessment
 by form, or \code{character(0)} for forms where no event restriction applied.}
+\item{\code{event_labels}}{Named REDCap event labels from event metadata, keyed
+by raw \code{redcap_event_name}, when available.}
 \item{\code{instances}}{Named list of expanded repeat-instance IDs by form, or
 \code{NULL} for forms without requested repeating contexts.}
 \item{\code{ignored_fields}}{Root field names skipped because of
@@ -130,8 +132,9 @@ offered. Blank values and \code{NA} values are considered missing.
 The function relies on \code{redcapAPI} project structure exposed through \code{rcon}
 to avoid checking a form on events or repeating rows where that form is not
 offered. It inspects available connection methods such as \code{rcon$metadata()},
-\code{rcon$instruments()}, \code{rcon$mapping()} / \code{rcon$mappings()},
-\code{rcon$repeatInstrumentEvent()}, and \code{rcon$projectInformation()} when present.
+\code{rcon$instruments()}, \code{rcon$events()}, \code{rcon$mapping()} /
+\code{rcon$mappings()}, \code{rcon$repeatInstrumentEvent()}, and
+\code{rcon$projectInformation()} when present.
 
 Checkbox fields are treated as one REDCap root field. A checkbox root is
 considered answered when at least one exported child column

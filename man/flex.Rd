@@ -2,22 +2,30 @@
 % Please edit documentation in R/flex.R
 \name{flex}
 \alias{flex}
+\alias{flex.redcapmissing}
 \title{Format a REDCap missingness report as a flextable}
 \usage{
 flex(x, ...)
+
+\method{flex}{redcapmissing}(x, events = NULL, forms = NULL, ...)
 }
 \arguments{
 \item{x}{A \code{redcapmissing} object created by \code{\link[=find_missing]{find_missing()}}.}
 
 \item{...}{Unused.}
+
+\item{events}{Optional character vector of raw REDCap \code{redcap_event_name}
+values. When supplied, \code{flex()} returns only matching event rows.}
+
+\item{forms}{Optional character vector of raw REDCap form/instrument names.
+When supplied, \code{flex()} returns only matching form rows.}
 }
 \value{
-A \code{flextable} object with form metadata, REDCap context columns,
-emitted validation context label (\code{"event:form"},
-\code{"event:form:instance"}, or \code{"event"}), human-readable validation check,
-validation-check type, and pass/fail counts for display. This function
-requires the
-optional \code{flextable} and \code{glue} packages.
+A \code{flextable} object with labeled event/form context,
+human-readable validation check, and pass/fail counts for display. Repeat
+instrument and instance columns are included only when the displayed rows
+contain repeat context. This function requires the optional \code{flextable}
+and \code{glue} packages.
 }
 \description{
 \code{flex()} formats the tidy validation summary from a REDCap missingness

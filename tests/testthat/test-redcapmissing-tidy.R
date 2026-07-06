@@ -17,21 +17,21 @@ tidy_baseline_report <- function() {
   )
 }
 
-tidy_expected_columns <- function() {
+tidy_expected_columns <- function(include_repeat = FALSE) {
   c(
-    "form",
-    "form_label",
     "redcap_event_name",
-    "redcap_repeat_instrument",
-    "redcap_repeat_instance",
+    "form",
+    if (isTRUE(include_repeat)) {
+      c("redcap_repeat_instrument", "redcap_repeat_instance")
+    },
     "validation_level",
     "validation_check",
-    "validation_check_type",
     "assessed",
     "passed",
     "failed",
     "pass_rate",
-    "fail_rate"
+    "fail_rate",
+    "validation_check_type"
   )
 }
 
@@ -45,18 +45,22 @@ test_that("tidy returns the canonical validation summary contract", {
   expect_identical(names(tidy_tbl), tidy_expected_columns())
   non_event <- tidy_tbl$validation_check != "event-complete"
   expect_equal(unique(tidy_tbl$form[non_event]), "baseline_form")
-  expect_equal(unique(tidy_tbl$form_label[non_event]), "baseline_form label")
   expect_equal(unique(tidy_tbl$form[!non_event]), "")
-  expect_equal(unique(tidy_tbl$form_label[!non_event]), "")
-  expect_false(any(c("validation", "validation_context") %in% names(tidy_tbl)))
+  expect_false(any(c(
+    "validation",
+    "validation_context",
+    "form_label",
+    "redcap_repeat_instrument",
+    "redcap_repeat_instance"
+  ) %in% names(tidy_tbl)))
+  expect_identical(tidy_tbl$redcap_event_name, validation_set$redcap_event_name)
   expect_identical(tidy_tbl$form, validation_set$form)
-  expect_identical(tidy_tbl$form_label, validation_set$form_label)
   expect_identical(tidy_tbl$validation_level, validation_set$validation_level)
+  expect_identical(tidy_tbl$validation_check, validation_set$validation_check)
   expect_identical(
     tidy_tbl$validation_check_type,
     validation_set$validation_check_type
   )
-  expect_identical(tidy_tbl$validation_check, validation_set$validation_check)
   expect_equal(tidy_tbl$assessed, validation_set$n)
   expect_equal(tidy_tbl$passed, validation_set$n_passed)
   expect_equal(tidy_tbl$failed, validation_set$n_failed)
@@ -88,7 +92,6 @@ test_that("tidy preserves zero-denominator event-row-started rows", {
     drop = FALSE
   ]
   expect_equal(event_complete_summary$form, "")
-  expect_equal(event_complete_summary$form_label, "")
   expect_equal(event_complete_summary$validation_level, "event")
   expect_equal(event_complete_summary$validation_check_type, "detour")
   expect_equal(event_complete_summary$redcap_event_name, "")
@@ -118,12 +121,8 @@ test_that("tidy returns focused summaries for combined multi-form reports", {
   expect_identical(names(tidy_tbl), tidy_expected_columns())
   non_event <- tidy_tbl$validation_check != "event-complete"
   expect_identical(unique(tidy_tbl$form[non_event]), c("alpha_form", "beta_form"))
-  expect_setequal(
-    tidy_tbl$form_label[non_event],
-    c("alpha_form label", "beta_form label")
-  )
   expect_equal(unique(tidy_tbl$form[!non_event]), "")
-  expect_equal(unique(tidy_tbl$form_label[!non_event]), "")
+  expect_false("form_label" %in% names(tidy_tbl))
   expect_true(any(
     tidy_tbl$form == "alpha_form" &
       tidy_tbl$validation_check == "field-complete"
@@ -134,7 +133,7 @@ test_that("tidy returns focused summaries for combined multi-form reports", {
   ))
 })
 
-test_that("tidy returns multi-event and repeating context denominators", {
+test_that("tidy returns multi-event denominators without repeat columns", {
   status_meta <- dplyr::bind_rows(
     meta_row("record_id", "status_form", field_label = "Record ID", required = "y"),
     meta_row("status_started", "status_form", field_label = "Status started", required = "y"),
@@ -164,6 +163,7 @@ test_that("tidy returns multi-event and repeating context denominators", {
   )
   tidy_tbl <- tidy(report)
 
+  expect_identical(names(tidy_tbl), tidy_expected_columns())
   event_summary <- tidy_tbl[
     tidy_tbl$validation_check == "event-row-started",
     ,
@@ -192,6 +192,55 @@ test_that("tidy returns multi-event and repeating context denominators", {
   expect_equal(event_complete$redcap_event_name, paste0("event_", 1:3, "_arm_1"))
   expect_equal(event_complete$assessed, c(2, 2, 2))
   expect_equal(event_complete$failed, c(0, 1, 2))
+})
+
+test_that("tidy retains repeat columns when repeat contexts are present", {
+  repeat_meta <- dplyr::bind_rows(
+    meta_row("record_id", "screen_form", field_label = "Record ID", required = "y"),
+    meta_row("screen_started", "screen_form", field_label = "Screen started", required = "y"),
+    meta_row("repeat_started", "repeat_form", field_label = "Repeat started", required = "y"),
+    meta_row("repeat_value", "repeat_form", field_label = "Repeat value", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1),
+    unique_event_name = c("baseline_event", "baseline_event"),
+    form = c("screen_form", "repeat_form")
+  )
+  repeat_instrument_event <- tibble::tibble(
+    event_name = "baseline_event",
+    form_name = "repeat_form",
+    custom_form_label = ""
+  )
+  records <- tibble::tibble(
+    record_id = c("r1", "r2", "r2"),
+    redcap_event_name = c("baseline_event", "baseline_event", "baseline_event"),
+    redcap_repeat_instrument = c("repeat_form", "repeat_form", "repeat_form"),
+    redcap_repeat_instance = c("1", "1", "2"),
+    repeat_started = c("yes", "yes", "yes"),
+    repeat_value = c("10", "20", "30")
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(
+      repeat_meta,
+      mapping = mapping,
+      repeat_instrument_event = repeat_instrument_event
+    ),
+    forms = "repeat_form",
+    instances = 2L
+  )
+  tidy_tbl <- tidy(report)
+
+  expect_identical(names(tidy_tbl), tidy_expected_columns(include_repeat = TRUE))
+  repeat_summary <- tidy_tbl[
+    tidy_tbl$validation_check == "instance-row-started",
+    ,
+    drop = FALSE
+  ]
+  expect_setequal(repeat_summary$redcap_repeat_instance, c("1", "2"))
+  expect_equal(unique(repeat_summary$redcap_repeat_instrument), "repeat_form")
+  expect_true(any(tidy_tbl$validation_level == "event:form:instance"))
 })
 
 test_that("tidy dispatch is available from redcapmissing", {

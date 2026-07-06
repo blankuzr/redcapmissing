@@ -23,6 +23,7 @@ meta_row <- function(
 fake_rcon <- function(
   metadata,
   instruments = NULL,
+  events = NULL,
   mapping = NULL,
   repeat_instrument_event = NULL,
   project_information = NULL
@@ -38,6 +39,7 @@ fake_rcon <- function(
   list(
     metadata = function() metadata,
     instruments = function() instruments,
+    events = function() events,
     mapping = function() mapping,
     mappings = function() mapping,
     repeatInstrumentEvent = function() repeat_instrument_event,
