@@ -7,8 +7,8 @@
 \title{redcapmissing: Branching-Aware Missingness Reports for REDCap Exports}
 \description{
 Build branching-aware missingness reports for REDCap record exports,
-including event-row, repeat-instance, form-started, form-complete, and
-field-complete validation surfaces.
+organized by canonical validation levels, validation checks, and
+validation-check types.
 }
 \details{
 \code{redcapmissing} is built on top of the \code{redcapAPI} package. In routine use,
@@ -37,7 +37,7 @@ Savannah Obregon, Shawn Garbett, and Benjamin Nutter.
 \url{https://github.com/vubiostat/redcapAPI}.
 }
 \seealso{
-\code{\link[=find_missing]{find_missing()}}, \code{\link[=tidy.redcapmissing]{tidy.redcapmissing()}}, \code{\link[=flex]{flex()}},
+\code{\link[=find_missing]{find_missing()}}, \code{\link[=registry]{registry()}}, \code{\link[=tidy.redcapmissing]{tidy.redcapmissing()}}, \code{\link[=flex]{flex()}},
 \code{\link[=flex_html]{flex_html()}},
 \code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}
 }

@@ -1,3 +1,23 @@
+# redcapmissing 1.0.0
+
+## 2026-07-02
+
+- Made the validation canon package-facing by reorganizing report rows around
+  `validation_level`, `validation_check_type`, `validation_check`, and
+  `validation_passed`.
+- Added `registry()` as the public validation-check registry, with a classed
+  tibble return value and a grouped `cli` print method.
+- Renamed validation checks to the canonical hyphenated values:
+  `event-row-started`, `instance-row-started`, `form-started`,
+  `form-complete`, and `field-complete`.
+- Removed old validation-scope names and report components such as
+  `event_row_exists_*`, `repeat_instance_row_exists_*`, and
+  `fields_complete_*`.
+- Enforced strict downstream gating for failed `on-route` checks while keeping
+  `form-complete` as a `detour` check that does not block field assessment.
+- Updated README, vignette, roxygen documentation, generated docs, and tests for
+  the 1.0.0 validation canon.
+
 # redcapmissing 0.9.0
 
 ## 2026-07-02

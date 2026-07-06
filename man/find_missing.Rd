@@ -2,7 +2,7 @@
 % Please edit documentation in R/find-missing.R
 \name{find_missing}
 \alias{find_missing}
-\title{Build a branching-aware REDCap missing-field report}
+\title{Build a branching-aware REDCap missingness report}
 \usage{
 find_missing(
   data,
@@ -82,18 +82,17 @@ A list with class \code{"redcapmissing"} containing:
 \item{\code{missing}}{A tibble of failed rows from the \code{pointblank} extract,
 keyed by record, event, repeat context, form, and field.}
 \item{\code{validation_rows}}{The full table supplied to \code{pointblank}, including
-event-row, repeat-instance, form-started, form-complete, and
-field-complete validation rows.}
-\item{\code{event_row_exists_checks}, \code{event_row_exists_failures}}{All
-event-row validation rows and their failed rows.}
-\item{\code{repeat_instance_row_exists_checks},
-\code{repeat_instance_row_exists_failures}}{All repeat-instance validation
+validation metadata and the \code{validation_passed} result column.}
+\item{\code{event_row_started_checks}, \code{event_row_started_failures}}{All
+event-row-started validation rows and their failed rows.}
+\item{\code{instance_row_started_checks},
+\code{instance_row_started_failures}}{All instance-row-started validation
 rows and their failed rows.}
 \item{\code{form_started_checks}, \code{form_started_failures}}{All form-started
 validation rows and their failed rows.}
 \item{\code{form_complete_checks}, \code{form_complete_failures}}{All form-complete
 validation rows and their failed rows.}
-\item{\code{fields_complete_checks}, \code{fields_complete_failures}}{All
+\item{\code{field_complete_checks}, \code{field_complete_failures}}{All
 field-complete validation rows and their failed rows.}
 \item{\code{field_plan}}{The metadata-derived field plan for the requested
 forms, including checkbox child export columns and a \code{form} column.}
@@ -115,9 +114,9 @@ from \code{rcon}, one per requested form.}
 }
 }
 \description{
-\code{find_missing()} checks whether expected REDCap fields are present
-for one or more instruments/forms. Expected fields are determined from REDCap
-project metadata and project structure supplied through a
+\code{find_missing()} checks one or more REDCap instruments/forms for missingness
+using the canonical validation model returned by \code{\link[=registry]{registry()}}. Expected data
+are derived from REDCap project metadata and structure supplied through a
 \code{redcapAPI::redcapConnection()} workflow.
 }
 \details{
@@ -128,56 +127,31 @@ offered. Blank values and \code{NA} values are considered missing.
 
 The function relies on \code{redcapAPI} project structure exposed through \code{rcon}
 to avoid checking a form on events or repeating rows where that form is not
-offered.
-It inspects available connection methods such as \code{rcon$metadata()},
+offered. It inspects available connection methods such as \code{rcon$metadata()},
 \code{rcon$instruments()}, \code{rcon$mapping()} / \code{rcon$mappings()},
-\code{rcon$repeatInstrumentEvent()}, and \code{rcon$projectInformation()} when
-present.
+\code{rcon$repeatInstrumentEvent()}, and \code{rcon$projectInformation()} when present.
 
 Checkbox fields are treated as one REDCap root field. A checkbox root is
 considered answered when at least one exported child column
 (\code{field___choice}) is selected. Unselected sibling checkboxes are not flagged
 as missing once the root question has at least one selected child.
 
-If an offered form has no data entered at all, the report emits one form-level
-missing row instead of one missing row per field. Longitudinal event rows that
-are absent from the export are also emitted as one form-level missing row for
-that record and event.
-
-Validation is intentionally split between REDCap-specific R preprocessing and
-\code{pointblank} reporting. The R code assigns each row to a positive
-\code{validation_scope} before \code{pointblank} runs:
+Validation is split between REDCap-specific R preprocessing and \code{pointblank}
+reporting. The package builds validation rows with:
 \describe{
-\item{\code{"event_row_exists"}}{The form is mapped to a longitudinal event for
-a record. The row passes when an exported row exists for that
-record/event context.}
-\item{\code{"repeat_instance_row_exists"}}{The form is assessed in a REDCap
-repeating event or as a repeating instrument. The row passes when an
-exported row exists for the expected repeat instance.}
-\item{\code{"form_started"}}{An exported row exists for the form context. The
-row passes when at least one data-capturing field on that form is not
-blank or unchecked.}
-\item{\code{"form_complete"}}{The row context exists and the form is started.
-The row passes when all expected fields in that context are complete.}
-\item{\code{"fields_complete"}}{The row context exists and the form is started.
-A field is expected after branching logic, required-field filtering, type
-exclusions, and ignored fields are applied. The row passes when that
-field is complete.}
+\item{\code{validation_level}}{\code{"row"}, \code{"form"}, or \code{"field"}.}
+\item{\code{validation_check}}{One of \code{"event-row-started"},
+\code{"instance-row-started"}, \code{"form-started"}, \code{"form-complete"}, or
+\code{"field-complete"}.}
+\item{\code{validation_check_type}}{\code{"on-route"} or \code{"detour"}.}
+\item{\code{validation_passed}}{Whether that row passed its validation check.}
 }
 
-The whole-form checks are built before field-level checks. Contexts already
-failing \code{form_started} are removed from field-level assessment so the report
-returns one form-level row instead of one row per missing field.
-\code{pointblank} does not rediscover REDCap branching, blank forms, or absent
-events; it provides the auditable validation steps and failed-row extraction
-after those REDCap-specific rules have been encoded.
-
-The pointblank checks are scoped with preconditions and stratified by a
-\code{validation_context} so the agent summary denominator (\code{n}) is clinically
-meaningful for each event or repeat instance. Context-level checks are
-counted over expected record contexts. Granular field checks are counted over
-expected field rows within each context. The \code{form_complete} check rolls
-those field rows up to one row per evaluable record context.
+The checks are assessed in registry order. Failed \code{"on-route"} checks remove
+the record/event/repeat/form context from every downstream assessment,
+regardless of the downstream validation level or check type. \code{form-complete}
+is a \code{"detour"} check: it reports whether all expected fields are complete,
+but a failed \code{form-complete} context still flows into \code{field-complete}.
 
 The returned \code{pointblank} agent is interrogated with failed-row extraction
 enabled. The row-level extract is also returned as \code{missing} for easier
@@ -238,5 +212,6 @@ projects using the API}. R package version 2.12.0.
 \url{https://doi.org/10.5281/zenodo.10564837}.
 }
 \seealso{
-\code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}
+\code{\link[=registry]{registry()}}, \code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}},
+\code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}
 }

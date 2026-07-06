@@ -446,26 +446,8 @@
   }
 
   out <- dplyr::bind_rows(extracts, .id = "pointblank_extract")
-  if (all(c("validation_scope", "form") %in% names(out))) {
-    out$pointblank_step <- dplyr::case_when(
-      out$validation_scope == "form_started" ~ paste0(
-        out$form,
-        "_form_started"
-      ),
-      out$validation_scope == "event_row_exists" ~ paste0(
-        out$form,
-        "_event_row_exists"
-      ),
-      out$validation_scope == "repeat_instance_row_exists" ~ paste0(
-        out$form,
-        "_repeat_instance_row_exists"
-      ),
-      out$validation_scope == "form_complete" ~ paste0(
-        out$form,
-        "_form_complete"
-      ),
-      TRUE ~ paste0(out$form, "_fields_complete")
-    )
+  if (all(c("validation_check", "form") %in% names(out))) {
+    out$pointblank_step <- .miss_step_id(out$form, out$validation_check)
   } else {
     out$pointblank_step <- out$pointblank_extract
   }
@@ -479,16 +461,16 @@
     "redcap_repeat_instance",
     "validation_context",
     "form",
+    "validation_level",
+    "validation_check_type",
+    "validation_check",
+    "validation_label",
+    "validation_passed",
     "field_name",
     "field_label",
     "field_type",
-    "validation_scope",
     "branching_logic",
-    "form_started",
-    "event_row_exists",
-    "repeat_instance_row_exists",
-    "form_complete",
-    "field_complete",
+    "branch_satisfied",
     "value_summary",
     "export_fields"
   )

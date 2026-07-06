@@ -354,41 +354,56 @@ display: none;
 
 
 <p><code>redcapmissing</code> builds branching-aware missingness reports
-for REDCap record exports.</p>
-<p>This package is built on top of <code>redcapAPI</code>. In real
-workflows, callers create an <code>rcon</code> object with
-<code>redcapAPI::redcapConnection()</code>, export records with an
-explicit <code>redcapAPI::exportRecordsTyped()</code> cast strategy, and
-then pass both objects into <code>find_missing()</code>.</p>
-<p>The examples below are intentionally synthetic so the vignette
-remains runnable without live REDCap credentials or access to a specific
-REDCap project.</p>
-<div id="why-the-package-uses-multiple-validation-checks" class="section level2">
-<h2>Why the package uses multiple validation checks</h2>
-<p>REDCap exports are sparse by design. A field can be missing because a
-value is blank, but it can also be missing because REDCap exported no
-row at all for the needed event or repeat context. The package therefore
-separates:</p>
+for REDCap record exports. In real workflows, callers create a
+<code>redcapAPI::redcapConnection()</code>, export records with
+<code>redcapAPI::exportRecordsTyped()</code>, and pass both objects into
+<code>find_missing()</code>.</p>
+<p>The examples below are synthetic so the vignette can run without live
+REDCap credentials.</p>
+<div id="validation-registry" class="section level2">
+<h2>Validation registry</h2>
+<p>The package validation model is available through
+<code>registry()</code>:</p>
+<pre class="r"><code>registry()
+#&gt;
+#&gt; ── redcapmissing validation registry ───────────────────────────────────────────
+#&gt;
+#&gt; ── row-level checks ──
+#&gt;
+#&gt; • `event-row-started` [on-route; gates downstream] - The expected REDCap event
+#&gt; row exists in the export.
+#&gt; • `instance-row-started` [on-route; gates downstream] - The expected REDCap
+#&gt; repeat instance row exists in the export.
+#&gt;
+#&gt; ── form-level checks ──
+#&gt;
+#&gt; • `form-started` [on-route; gates downstream] - The exported form context has
+#&gt; at least one entered data-capturing field.
+#&gt; • `form-complete` [detour; does not gate downstream] - All expected fields are
+#&gt; complete for an evaluable form context.
+#&gt;
+#&gt; ── field-level checks ──
+#&gt;
+#&gt; • `field-complete` [on-route; gates downstream] - A specific expected field is
+#&gt; complete after branching and filtering.</code></pre>
+<p>The checks are organized by validation level and validation-check
+type:</p>
 <ul>
-<li><code>event_row_exists</code>: the expected longitudinal event row
-exists</li>
-<li><code>repeat_instance_row_exists</code>: the expected
-repeat-instance row exists</li>
-<li><code>form_started</code>: the row exists and the form has at least
-one entered field</li>
-<li><code>form_complete</code>: the row context is evaluable and all
-expected fields are complete</li>
-<li><code>fields_complete</code>: the row exists, the form is started,
-and each expected field is complete</li>
+<li><code>row</code>: <code>event-row-started</code> and
+<code>instance-row-started</code></li>
+<li><code>form</code>: <code>form-started</code> and
+<code>form-complete</code></li>
+<li><code>field</code>: <code>field-complete</code></li>
 </ul>
-<p>This separation keeps the report aligned with how REDCap actually
-exports data.</p>
+<p>Failed <code>on-route</code> checks gate downstream assessment.
+Failed <code>detour</code> checks do not. This means a missing event row
+prevents form and field checks for that event context, while a failed
+<code>form-complete</code> check can still be followed by field-level
+failures for the same context.</p>
 </div>
-<div id="a-minimal-synthetic-redcap-example" class="section level2">
-<h2>A minimal synthetic REDCap example</h2>
-<pre class="r"><code>library(redcapmissing)
-
-meta_row &lt;- function(
+<div id="synthetic-redcap-helpers" class="section level2">
+<h2>Synthetic REDCap helpers</h2>
+<pre class="r"><code>meta_row &lt;- function(
   field_name,
   form_name,
   field_type = &quot;text&quot;,
@@ -427,9 +442,8 @@ fake_rcon &lt;- function(metadata, mapping = NULL, repeat_instrument_event = NUL
 </div>
 <div id="real-redcapapi-workflow" class="section level2">
 <h2>Real <code>redcapAPI</code> workflow</h2>
-<p>In routine use, the package expects a <code>redcapAPI</code>
-connection and a typed export that keeps coded branching-logic fields in
-REDCap code space while leaving checkbox and system fields raw:</p>
+<p>For real REDCap projects, keep branching-logic fields in REDCap code
+space and leave checkbox and system fields raw:</p>
 <pre class="r"><code>rcon &lt;- redcapAPI::redcapConnection(
   url = Sys.getenv(&quot;REDCAP_API_URL&quot;),
   token = Sys.getenv(&quot;REDCAP_API_TOKEN&quot;)
@@ -452,17 +466,19 @@ report &lt;- find_missing(
   rcon = rcon,
   forms = &quot;baseline_form&quot;
 )</code></pre>
-<p>If your project uses additional coded multiple-choice field types,
-extend this same pattern so those fields are also kept in code space for
-downstream branching-logic-aware missingness checks.</p>
 </div>
-<div id="required-and-branching-aware-field-checks" class="section level2">
-<h2>Required and branching-aware field checks</h2>
+<div id="branching-aware-field-checks" class="section level2">
+<h2>Branching-aware field checks</h2>
 <pre class="r"><code>metadata &lt;- dplyr::bind_rows(
   meta_row(&quot;record_id&quot;, &quot;baseline_form&quot;, required = &quot;y&quot;),
   meta_row(&quot;branch_flag&quot;, &quot;baseline_form&quot;, field_type = &quot;yesno&quot;, required = &quot;y&quot;),
   meta_row(&quot;required_note&quot;, &quot;baseline_form&quot;, required = &quot;y&quot;),
-  meta_row(&quot;conditional_note&quot;, &quot;baseline_form&quot;, branching = &quot;[branch_flag] = &#39;1&#39;&quot;, required = &quot;y&quot;)
+  meta_row(
+    &quot;conditional_note&quot;,
+    &quot;baseline_form&quot;,
+    branching = &quot;[branch_flag] = &#39;1&#39;&quot;,
+    required = &quot;y&quot;
+  )
 )
 
 records &lt;- tibble::tibble(
@@ -478,101 +494,83 @@ report &lt;- find_missing(
   forms = &quot;baseline_form&quot;
 )
 
-report$missing[, c(&quot;record_id&quot;, &quot;field_name&quot;, &quot;validation_scope&quot;)]
-#&gt; # A tibble: 2 × 3
-#&gt;   record_id field_name       validation_scope
-#&gt;   &lt;chr&gt;     &lt;chr&gt;            &lt;chr&gt;
-#&gt; 1 r1        baseline_form    form_complete
-#&gt; 2 r1        conditional_note fields_complete</code></pre>
+report$missing[, c(
+  &quot;record_id&quot;,
+  &quot;validation_level&quot;,
+  &quot;validation_check_type&quot;,
+  &quot;validation_check&quot;,
+  &quot;field_name&quot;
+)]
+#&gt; # A tibble: 2 × 5
+#&gt;   record_id validation_level validation_check_type validation_check field_name
+#&gt;   &lt;chr&gt;     &lt;chr&gt;            &lt;chr&gt;                 &lt;chr&gt;            &lt;chr&gt;
+#&gt; 1 r1        form             detour                form-complete    &lt;NA&gt;
+#&gt; 2 r1        field            on-route              field-complete   conditional…</code></pre>
+<p>Record <code>r1</code> is branch-open for
+<code>conditional_note</code>, so the missing value is a
+<code>field-complete</code> failure. Record <code>r2</code> is
+branch-closed, so the field is not in the assessment pool.</p>
 </div>
-<div id="restricting-forms-to-selected-events" class="section level2">
-<h2>Restricting forms to selected events</h2>
-<p>Some REDCap projects use many events of the same general type. In
-those cases, <code>events</code> lets you keep the assessment focused on
-the specific events that should count for the current review. With
-multiple forms, pass either one event vector for all requested forms or
-a named list by form.</p>
-<pre class="r"><code>followup_report &lt;- find_missing(
-  data = records,
-  rcon = rcon,
-  forms = &quot;patient_status&quot;,
-  events = c(
-    &quot;follow_up_1_arm_1&quot;,
-    &quot;follow_up_2_arm_1&quot;,
-    &quot;follow_up_3_arm_1&quot;
-  )
-)</code></pre>
-<p>If <code>events</code> is omitted, the function defaults to all
-offered events for each form. If a form is only offered on one event,
-the argument is ignored for that form.</p>
-<p>For form-specific event settings, omit any form that should use its
-default offered-event set:</p>
-<pre class="r"><code>multi_form_report &lt;- find_missing(
-  data = records,
-  rcon = rcon,
-  forms = c(&quot;imaging&quot;, &quot;demographics&quot;),
-  events = list(
-    imaging = c(&quot;event_2_arm_1&quot;, &quot;event_3_arm_1&quot;)
-  )
-)</code></pre>
-<p>In this example, <code>imaging</code> is assessed only on the two
-listed events, while <code>demographics</code> uses all events where
-REDCap offers that form.</p>
-</div>
-<div id="forms-that-are-regular-on-some-events-and-repeating-on-others" class="section level2">
-<h2>Forms that are regular on some events and repeating on others</h2>
-<p>Some REDCap projects offer the same form in mixed ways across events.
-For example, a form might be:</p>
-<ul>
-<li>a regular form on <code>event_a</code></li>
-<li>repeating on <code>event_b</code></li>
-<li>a regular form again on <code>event_c</code></li>
-</ul>
-<p>This matters because the package should not activate repeat-instance
-logic just because the form repeats somewhere in the project. It should
-only activate that logic for the requested events where the form
-actually repeats.</p>
-<p>Operationally, that means:</p>
-<ul>
-<li>if you request only non-repeating events for that form, the function
-uses the standard <code>fields_complete</code>,
-<code>form_complete</code>, <code>form_started</code>, and
-<code>event_row_exists</code> checks</li>
-<li>if you request repeating events for that form, the function uses
-<code>fields_complete</code>, <code>form_complete</code>,
-<code>form_started</code>, and <code>repeat_instance_row_exists</code>
-for those repeating contexts</li>
-<li>if you request a mixture of repeating and non-repeating events, the
-function applies the appropriate validation model per event</li>
-<li>if <code>instances</code> is omitted and at least one requested
-event is repeating for that form, the function assumes instance
-<code>1</code> only for those requested repeating contexts</li>
-</ul>
-<pre class="r"><code>mixed_report &lt;- find_missing(
-  data = records,
-  rcon = rcon,
-  forms = &quot;patient_status&quot;,
-  events = c(
-    &quot;event_a_arm_1&quot;,
-    &quot;event_b_arm_1&quot;,
-    &quot;event_c_arm_1&quot;
-  )
-)</code></pre>
-<p>In that example, <code>event_a_arm_1</code> and
-<code>event_c_arm_1</code> would be checked as regular form events,
-while <code>event_b_arm_1</code> would be checked with repeat-instance
-logic.</p>
+<div id="event-row-gating" class="section level2">
+<h2>Event-row gating</h2>
+<p>REDCap exports may omit entire event rows.
+<code>event-row-started</code> catches that before form and field checks
+run downstream.</p>
+<pre class="r"><code>status_metadata &lt;- dplyr::bind_rows(
+  meta_row(&quot;record_id&quot;, &quot;status_form&quot;, required = &quot;y&quot;),
+  meta_row(&quot;status_started&quot;, &quot;status_form&quot;, required = &quot;y&quot;),
+  meta_row(&quot;status_value&quot;, &quot;status_form&quot;, required = &quot;y&quot;)
+)
+
+mapping &lt;- tibble::tibble(
+  arm_num = c(1, 1, 1),
+  unique_event_name = c(&quot;event_1_arm_1&quot;, &quot;event_2_arm_1&quot;, &quot;event_3_arm_1&quot;),
+  form = c(&quot;status_form&quot;, &quot;status_form&quot;, &quot;status_form&quot;)
+)
+
+event_records &lt;- tibble::tibble(
+  record_id = c(&quot;r1&quot;, &quot;r1&quot;, &quot;r2&quot;, &quot;r2&quot;),
+  redcap_event_name = c(
+    &quot;event_1_arm_1&quot;,
+    &quot;event_2_arm_1&quot;,
+    &quot;event_1_arm_1&quot;,
+    &quot;event_2_arm_1&quot;
+  ),
+  status_started = c(&quot;yes&quot;, &quot;yes&quot;, &quot;yes&quot;, &quot;yes&quot;),
+  status_value = c(&quot;entered&quot;, &quot;&quot;, &quot;entered&quot;, &quot;entered&quot;)
+)
+
+event_report &lt;- find_missing(
+  data = event_records,
+  rcon = fake_rcon(status_metadata, mapping = mapping),
+  forms = &quot;status_form&quot;
+)
+
+tidy(event_report)[
+  ,
+  c(&quot;validation_check&quot;, &quot;redcap_event_name&quot;, &quot;assessed&quot;, &quot;failed&quot;)
+]
+#&gt; # A tibble: 9 × 4
+#&gt;   validation_check  redcap_event_name assessed failed
+#&gt;   &lt;chr&gt;             &lt;chr&gt;                &lt;dbl&gt;  &lt;dbl&gt;
+#&gt; 1 event-row-started event_1_arm_1            2      0
+#&gt; 2 event-row-started event_2_arm_1            2      0
+#&gt; 3 event-row-started event_3_arm_1            2      2
+#&gt; 4 form-started      event_1_arm_1            2      0
+#&gt; 5 form-started      event_2_arm_1            2      0
+#&gt; 6 form-complete     event_1_arm_1            2      0
+#&gt; 7 form-complete     event_2_arm_1            2      1
+#&gt; 8 field-complete    event_1_arm_1            6      0
+#&gt; 9 field-complete    event_2_arm_1            6      1</code></pre>
+<p><code>event_3_arm_1</code> fails <code>event-row-started</code>, so
+it is not assessed by <code>form-started</code>,
+<code>form-complete</code>, or <code>field-complete</code>.</p>
 </div>
 <div id="repeat-expectations" class="section level2">
 <h2>Repeat expectations</h2>
-<p><code>instances</code> exists because REDCap does not export
-nonexistent repeat rows. If instance 2 should exist but was never
-created, there is no row in the export for the package to inspect unless
-it first creates the expected repeat contexts. Scalar
-<code>instances</code> values are counts, so <code>instances = 2L</code>
-means instances <code>1</code> and <code>2</code>. Vectors with length
-greater than one are treated as exact instance IDs, and named lists can
-set different expectations by form.</p>
+<p>REDCap does not export nonexistent repeat rows. Use
+<code>instances</code> to declare the repeat instances expected for the
+report.</p>
 <pre class="r"><code>repeat_metadata &lt;- dplyr::bind_rows(
   meta_row(&quot;record_id&quot;, &quot;screen_form&quot;, required = &quot;y&quot;),
   meta_row(&quot;screen_started&quot;, &quot;screen_form&quot;, required = &quot;y&quot;),
@@ -580,7 +578,7 @@ set different expectations by form.</p>
   meta_row(&quot;repeat_value&quot;, &quot;repeat_form&quot;, required = &quot;y&quot;)
 )
 
-mapping &lt;- tibble::tibble(
+repeat_mapping &lt;- tibble::tibble(
   arm_num = c(1, 1),
   unique_event_name = c(&quot;baseline_event&quot;, &quot;baseline_event&quot;),
   form = c(&quot;screen_form&quot;, &quot;repeat_form&quot;)
@@ -603,59 +601,62 @@ repeat_records &lt;- tibble::tibble(
 
 repeat_report &lt;- find_missing(
   data = repeat_records,
-  rcon = fake_rcon(repeat_metadata, mapping = mapping, repeat_instrument_event = repeat_map),
+  rcon = fake_rcon(
+    repeat_metadata,
+    mapping = repeat_mapping,
+    repeat_instrument_event = repeat_map
+  ),
   forms = &quot;repeat_form&quot;,
   instances = 2L
 )
 
-repeat_report$repeat_instance_row_exists_failures[
+repeat_report$instance_row_started_failures[
   ,
-  c(&quot;record_id&quot;, &quot;redcap_repeat_instance&quot;, &quot;validation_scope&quot;)
+  c(&quot;record_id&quot;, &quot;redcap_repeat_instance&quot;, &quot;validation_check&quot;)
 ]
 #&gt; # A tibble: 1 × 3
-#&gt;   record_id redcap_repeat_instance validation_scope
+#&gt;   record_id redcap_repeat_instance validation_check
 #&gt;   &lt;chr&gt;     &lt;chr&gt;                  &lt;chr&gt;
-#&gt; 1 r1        2                      repeat_instance_row_exists</code></pre>
+#&gt; 1 r1        2                      instance-row-started</code></pre>
+<p>The missing instance <code>2</code> for record <code>r1</code> fails
+<code>instance-row-started</code> and is removed from downstream form
+and field assessment.</p>
 </div>
-<div id="inspecting-the-return-object" class="section level2">
-<h2>Inspecting the return object</h2>
-<p>The report object is intentionally multi-part. In practice, these are
-the most useful components to inspect first:</p>
+<div id="mixed-regular-and-repeating-contexts" class="section level2">
+<h2>Mixed regular and repeating contexts</h2>
+<p>Some REDCap projects offer the same form as regular on one event and
+repeating on another. The package activates row checks per context:</p>
 <ul>
-<li><code>report$missing</code>: all failed rows extracted from the
-interrogated agent</li>
-<li><code>report$form_started_failures</code>: the form-level failures
-for unstarted form contexts</li>
-<li><code>report$event_row_exists_failures</code>: the failures for
-expected event rows that do not exist</li>
-<li><code>report$repeat_instance_row_exists_failures</code>: the
-failures for expected repeat rows that do not exist</li>
-<li><code>report$form_complete_failures</code>: the patient-context
-roll-up failures for evaluable contexts where not every expected field
-is complete</li>
-<li><code>report$fields_complete_checks</code>: the field-level expected
-rows that were actually assessed</li>
-<li><code>report$forms</code>, <code>report$form_labels</code>,
-<code>report$events</code>, and <code>report$instances</code>: the
-normalized form, label, selected-event, and expanded repeat-instance
-settings used for the report</li>
-<li><code>report$agent</code>: the interrogated <code>pointblank</code>
-agent itself</li>
+<li>regular event contexts use <code>event-row-started</code></li>
+<li>repeating contexts use <code>instance-row-started</code></li>
 </ul>
-<p>This design keeps the correction queue (<code>report$missing</code>)
-separate from the full validation context and from the
-validation-specific helper tables.</p>
+<p>If <code>events</code> excludes the repeating event,
+<code>instances</code> is ignored for that form. If a requested
+repeating context omits <code>instances</code>, the package assumes
+instance <code>1</code> and warns once.</p>
 </div>
-<div id="tidy-summary-tables" class="section level2">
-<h2>Tidy summary tables</h2>
-<p><code>tidy(report)</code> returns a focused validation summary tibble
-with one row per validation step and REDCap context, including form
-metadata and the REDCap event/repeat columns used for stratified
-denominators. If optional formatting packages are installed, you can
-also format that validation summary for reporting workflows:</p>
-<pre class="r"><code>tidy_tbl &lt;- tidy(report)
-ft &lt;- flex(report)
+<div id="inspecting-results" class="section level2">
+<h2>Inspecting results</h2>
+<p><code>tidy(report)</code> returns a focused summary with canonical
+validation metadata:</p>
+<pre class="r"><code>tidy(report)
+#&gt; # A tibble: 4 × 13
+#&gt;   form        form_label validation_level validation_check_type validation_check
+#&gt;   &lt;chr&gt;       &lt;chr&gt;      &lt;chr&gt;            &lt;chr&gt;                 &lt;chr&gt;
+#&gt; 1 baseline_f… baseline_… row              on-route              event-row-start…
+#&gt; 2 baseline_f… baseline_… form             on-route              form-started
+#&gt; 3 baseline_f… baseline_… form             detour                form-complete
+#&gt; 4 baseline_f… baseline_… field            on-route              field-complete
+#&gt; # ℹ 8 more variables: redcap_event_name &lt;chr&gt;, redcap_repeat_instrument &lt;chr&gt;,
+#&gt; #   redcap_repeat_instance &lt;chr&gt;, assessed &lt;dbl&gt;, passed &lt;dbl&gt;, failed &lt;dbl&gt;,
+#&gt; #   pass_rate &lt;dbl&gt;, fail_rate &lt;dbl&gt;</code></pre>
+<p>For reporting workflows, optional formatting helpers are
+available:</p>
+<pre class="r"><code>ft &lt;- flex(report)
 html &lt;- flex_html(ft)</code></pre>
+<p><code>flex()</code> displays the canonical checks with human-readable
+labels, while <code>tidy()</code> and the <code>pointblank</code> agent
+keep the canonical hyphenated <code>validation_check</code> values.</p>
 </div>
 <div id="citation-and-acknowledgement" class="section level2">
 <h2>Citation and acknowledgement</h2>

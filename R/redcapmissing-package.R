@@ -1,8 +1,8 @@
 #' redcapmissing: Branching-Aware Missingness Reports for REDCap Exports
 #'
 #' Build branching-aware missingness reports for REDCap record exports,
-#' including event-row, repeat-instance, form-started, form-complete, and
-#' field-complete validation surfaces.
+#' organized by canonical validation levels, validation checks, and
+#' validation-check types.
 #'
 #' @details
 #' `redcapmissing` is built on top of the `redcapAPI` package. In routine use,
@@ -16,7 +16,7 @@
 #' but current public stewardship and development resources now live under the
 #' VUMC Biostatistics `vubiostat/redcapAPI` project.
 #'
-#' @seealso [find_missing()], [tidy.redcapmissing()], [flex()],
+#' @seealso [find_missing()], [registry()], [tidy.redcapmissing()], [flex()],
 #'   [flex_html()],
 #'   [redcapAPI::redcapConnection()], [redcapAPI::exportRecordsTyped()]
 #' @references
@@ -36,5 +36,3 @@
 #' @importFrom redcapAPI isNAorBlank
 #' @keywords internal
 "_PACKAGE"
-
-utils::globalVariables("validation_context")
