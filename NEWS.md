@@ -1,3 +1,11 @@
+# redcapmissing 1.0.3
+
+## 2026-07-06
+
+- Clarified the README validation-flow diagram so `event-row-started` and
+  `instance-row-started` are shown as sibling row-context gates instead of a
+  sequential pass-through.
+
 # redcapmissing 1.0.2
 
 ## 2026-07-06
