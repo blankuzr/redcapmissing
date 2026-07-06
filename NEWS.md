@@ -1,3 +1,10 @@
+# redcapmissing 3.1.2
+
+## 2026-07-06
+
+- Redesigned the README validation-flow diagram with clearer plain-language
+  labels, simplified event-complete flow, and a more polished visual style.
+
 # redcapmissing 3.1.1
 
 ## 2026-07-06
