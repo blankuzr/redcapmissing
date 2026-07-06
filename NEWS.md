@@ -1,3 +1,14 @@
+# redcapmissing 3.1.0
+
+## 2026-07-06
+
+- Added a `records` argument to `find_missing()` for event-specific record
+  eligibility. Non-empty `records` list entries override the record IDs assessed
+  for their named REDCap event, while omitted or empty events continue to use
+  the existing data-derived denominators.
+- Added `report$eligible_records` so reports expose the normalized event-to-ID
+  overrides used during validation.
+
 # redcapmissing 3.0.1
 
 ## 2026-07-06

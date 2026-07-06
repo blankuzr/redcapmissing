@@ -212,6 +212,61 @@ tidy(event_report)[
 rolls up on-route failures, the same record/event failures are also visible in
 the event-level summary.
 
+## Event-specific record eligibility
+
+Use `records` when records become eligible for validation on different REDCap
+events at different times. The argument is a named list keyed by raw
+`redcap_event_name`; non-empty entries override the record IDs assessed on that
+event, while omitted or empty events use the default data-derived denominator.
+
+```{r}
+staged_metadata <- dplyr::bind_rows(
+  meta_row("record_id", "demographics", required = "y"),
+  meta_row("demographics_started", "demographics", required = "y"),
+  meta_row("demographics_value", "demographics", required = "y"),
+  meta_row("surgery_started", "surgery", required = "y"),
+  meta_row("surgery_value", "surgery", required = "y")
+)
+
+staged_mapping <- tibble::tibble(
+  arm_num = c(1, 1, 1),
+  unique_event_name = c("event_a", "event_b", "event_c"),
+  form = c("demographics", "surgery", "surgery")
+)
+
+staged_records <- tibble::tibble(
+  record_id = c("record_a", "record_a", "record_b", "record_b", "record_b"),
+  redcap_event_name = c("event_a", "event_b", "event_a", "event_b", "event_c"),
+  demographics_started = c("yes", "", "yes", "", ""),
+  demographics_value = c("entered", "", "entered", "", ""),
+  surgery_started = c("", "yes", "", "yes", "yes"),
+  surgery_value = c("", "entered", "", "entered", "")
+)
+
+staged_report <- find_missing(
+  data = staged_records,
+  rcon = fake_rcon(staged_metadata, mapping = staged_mapping),
+  forms = c("surgery", "demographics"),
+  records = list(
+    event_a = c("record_a", "record_b"),
+    event_b = c("record_a", "record_b"),
+    event_c = "record_b"
+  )
+)
+
+staged_report$eligible_records
+
+staged_summary <- tidy(staged_report)
+staged_summary[
+  staged_summary$validation_check == "event-row-started",
+  c("form", "redcap_event_name", "assessed", "failed")
+]
+```
+
+Record `record_a` is assessed for `surgery` on `event_b`, but not on
+`event_c`. Record `record_b` is assessed on `event_c`, where its blank surgery
+value fails downstream field completeness.
+
 ## Repeat expectations
 
 REDCap does not export nonexistent repeat rows. Use `instances` to declare the

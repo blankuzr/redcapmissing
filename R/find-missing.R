@@ -74,6 +74,18 @@
 #'   supplied event values are ignored for that form. If a form is regular on
 #'   some events and repeating on others, `events` also determines whether
 #'   repeat-instance logic is activated. Defaults to `NULL`.
+#' @param records Named list of REDCap record ID vectors by raw
+#'   `redcap_event_name`, or `NULL`. Non-empty entries override which record IDs
+#'   are eligible for assessment on that event; events omitted from the list use
+#'   the default data-derived record set. Empty or blank-only entries are
+#'   ignored. Supplied IDs are normalized to character values and are not
+#'   checked through a live REDCap record export. IDs not present in `data` are
+#'   allowed and can create upstream row-started failures. When both `events`
+#'   and `records` are supplied, `events` selects the form-event scope first and
+#'   `records` narrows record eligibility inside those events. For repeating
+#'   contexts, event-level eligibility applies before `instances` expands the
+#'   expected repeat-instance IDs. Defaults to `NULL`, which preserves the
+#'   current all-record behavior.
 #' @param required_fields Logical scalar. When `TRUE`, only fields marked as
 #'   required in the REDCap metadata `required_field` column are assessed. When
 #'   `FALSE`, all fields on the form are assessed after `exclude_types` and
@@ -129,6 +141,9 @@
 #'     by form, or `character(0)` for forms where no event restriction applied.}
 #'   \item{`event_labels`}{Named REDCap event labels from event metadata, keyed
 #'     by raw `redcap_event_name`, when available.}
+#'   \item{`eligible_records`}{Named list of active event-level record ID
+#'     overrides used for assessment. Events omitted from this list used the
+#'     default data-derived record set.}
 #'   \item{`instances`}{Named list of expanded repeat-instance IDs by form, or
 #'     `NULL` for forms without requested repeating contexts.}
 #'   \item{`ignored_fields`}{Root field names skipped because of
@@ -195,6 +210,17 @@
 #'     imaging = c("event_2_arm_1", "event_3_arm_1")
 #'   )
 #' )
+#'
+#' staged_missing <- find_missing(
+#'   data = records,
+#'   rcon = rcon,
+#'   forms = c("surgery", "demographics"),
+#'   records = list(
+#'     event_1_arm_1 = c("record_a", "record_b"),
+#'     event_2_arm_1 = c("record_a", "record_b"),
+#'     event_3_arm_1 = "record_b"
+#'   )
+#' )
 #' }
 #'
 #' @export
@@ -203,6 +229,7 @@ find_missing <- function(
   rcon,
   forms,
   events = NULL,
+  records = NULL,
   required_fields = TRUE,
   ignore_fields = NULL,
   ignore_ids = NULL,
@@ -242,13 +269,13 @@ find_missing <- function(
   )
 
   # Normalize inputs and derive project context from the redcapAPI connection.
-  records <- tibble::as_tibble(data)
-  all_records <- records
+  record_data <- tibble::as_tibble(data)
+  all_records <- record_data
 
   meta <- .miss_get_metadata(rcon)
   .miss_check_metadata(meta)
   id_col <- meta$field_name[[1]]
-  if (!id_col %in% names(records)) {
+  if (!id_col %in% names(record_data)) {
     stop(
       "The REDCap record identifier column `",
       id_col,
@@ -260,8 +287,8 @@ find_missing <- function(
   # Remove caller-specified records before branch evaluation or validation.
   ignore_ids <- unique(.miss_chr_vec(ignore_ids %||% character()))
   if (length(ignore_ids) > 0) {
-    records <- records[
-      !.miss_chr_vec(records[[id_col]]) %in% ignore_ids,
+    record_data <- record_data[
+      !.miss_chr_vec(record_data[[id_col]]) %in% ignore_ids,
       ,
       drop = FALSE
     ]
@@ -271,15 +298,21 @@ find_missing <- function(
       drop = FALSE
     ]
   }
+  eligible_records <- .miss_resolve_event_records_arg(
+    records = records,
+    valid_events = .miss_get_project_event_names(rcon),
+    ignore_ids = ignore_ids
+  )
 
   form_reports <- lapply(forms, function(form) {
     .miss_build_form_report(
-      records = records,
+      records = record_data,
       all_records = all_records,
       meta = meta,
       rcon = rcon,
       form = form,
       events = event_settings$values[[form]],
+      eligible_records = eligible_records,
       required_fields = required_fields,
       ignore_fields = ignore_fields,
       exclude_types = exclude_types,
@@ -407,6 +440,7 @@ find_missing <- function(
     required_fields = required_fields,
     events = .miss_named_report_component(form_reports, "events"),
     event_labels = event_labels,
+    eligible_records = eligible_records,
     instances = .miss_named_report_component(form_reports, "instances"),
     ignored_fields = ignored_fields,
     ignored_ids = ignore_ids,
@@ -429,6 +463,7 @@ find_missing <- function(
   rcon,
   form,
   events,
+  eligible_records,
   required_fields,
   ignore_fields,
   exclude_types,
@@ -510,12 +545,18 @@ find_missing <- function(
     form = form,
     project = project
   )
+  records <- .miss_filter_eligible_event_records(
+    records = records,
+    project = project,
+    eligible_records = eligible_records
+  )
 
   event_checks <- .miss_build_event_check_rows(
     records = all_records,
     form_records = records,
     project = project,
-    form = form
+    form = form,
+    eligible_records = eligible_records
   )
   event_checks <- .miss_add_validation_context(event_checks)
   event_row_started_failures <- event_checks[
@@ -529,7 +570,8 @@ find_missing <- function(
     form_records = records,
     project = project,
     form = form,
-    instances = instances
+    instances = instances,
+    eligible_records = eligible_records
   )
   repeat_checks <- .miss_add_validation_context(repeat_checks)
   instance_row_started_failures <- repeat_checks[
@@ -789,6 +831,87 @@ find_missing <- function(
     values[[form]] <- instances
   }
   list(values = values, explicit = explicit)
+}
+
+.miss_resolve_event_records_arg <- function(records, valid_events, ignore_ids) {
+  if (is.null(records)) {
+    return(list())
+  }
+  if (!is.list(records) || is.data.frame(records)) {
+    stop(
+      "`records` must be NULL or a named list of REDCap record ID vectors ",
+      "by `redcap_event_name`.",
+      call. = FALSE
+    )
+  }
+
+  record_event_names <- names(records)
+  if (
+    is.null(record_event_names) ||
+      length(record_event_names) != length(records) ||
+      any(.miss_is_blank_vec(record_event_names))
+  ) {
+    stop(
+      "`records` lists must be named by raw REDCap `redcap_event_name`.",
+      call. = FALSE
+    )
+  }
+
+  duplicated_events <- unique(record_event_names[duplicated(record_event_names)])
+  if (length(duplicated_events) > 0) {
+    stop(
+      "`records` list names must not be duplicated. Duplicate event name(s): ",
+      paste(duplicated_events, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  valid_events <- unique(.miss_chr_vec(valid_events))
+  valid_events <- valid_events[!.miss_is_blank_vec(valid_events)]
+  if (length(valid_events) == 0) {
+    stop(
+      "`records` requires REDCap event metadata from `rcon`.",
+      call. = FALSE
+    )
+  }
+
+  unknown_events <- setdiff(record_event_names, valid_events)
+  if (length(unknown_events) > 0) {
+    stop(
+      "`records` list names must be valid REDCap event names from `rcon`. ",
+      "Unknown event(s): ",
+      paste(unknown_events, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  ignore_ids <- unique(.miss_chr_vec(ignore_ids %||% character()))
+  out <- list()
+  for (event in record_event_names) {
+    value <- records[[event]]
+    if (is.null(value)) {
+      next
+    }
+    if (is.list(value) || is.data.frame(value)) {
+      stop(
+        "`records` list entry `",
+        event,
+        "` must be a vector of REDCap record IDs.",
+        call. = FALSE
+      )
+    }
+
+    record_ids <- unique(.miss_chr_vec(value))
+    record_ids <- record_ids[!.miss_is_blank_vec(record_ids)]
+    record_ids <- setdiff(record_ids, ignore_ids)
+    if (length(record_ids) == 0) {
+      next
+    }
+
+    out[[event]] <- record_ids
+  }
+
+  out
 }
 
 .miss_check_named_setting_list <- function(x, forms, arg) {

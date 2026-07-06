@@ -8,6 +8,7 @@ test_that("public report API exposes canonical validation surfaces", {
       "rcon",
       "forms",
       "events",
+      "records",
       "required_fields",
       "ignore_fields",
       "ignore_ids",
@@ -91,7 +92,8 @@ test_that("report object uses validation-check canon and removes old names", {
     "event_complete_checks",
     "event_complete_failures",
     "field_complete_checks",
-    "field_complete_failures"
+    "field_complete_failures",
+    "eligible_records"
   ) %in% names(report)))
   expect_false(any(c(
     "event_row_exists_checks",
@@ -543,6 +545,273 @@ test_that("multi-arm event denominators do not cross arms", {
   expect_equal(event_summary$n_failed, c(0, 1, 0, 1))
 })
 
+test_that("records limits event-level eligibility across requested forms", {
+  event_meta <- dplyr::bind_rows(
+    meta_row("record_id", "demographics", field_label = "Record ID", required = "y"),
+    meta_row("demographics_started", "demographics", required = "y"),
+    meta_row("demographics_value", "demographics", required = "y"),
+    meta_row("surgery_started", "surgery", required = "y"),
+    meta_row("surgery_value", "surgery", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1, 1),
+    unique_event_name = c("event_a", "event_b", "event_c"),
+    form = c("demographics", "surgery", "surgery")
+  )
+  records <- tibble::tibble(
+    record_id = c("record_a", "record_a", "record_b", "record_b", "record_b"),
+    redcap_event_name = c("event_a", "event_b", "event_a", "event_b", "event_c"),
+    demographics_started = c("yes", "", "yes", "", ""),
+    demographics_value = c("entered", "", "entered", "", ""),
+    surgery_started = c("", "yes", "", "yes", "yes"),
+    surgery_value = c("", "entered", "", "entered", "")
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(event_meta, mapping = mapping),
+    forms = c("surgery", "demographics"),
+    records = list(
+      event_a = c("record_a", "record_b"),
+      event_b = c("record_a", "record_b"),
+      event_c = "record_b"
+    )
+  )
+
+  expect_identical(report$eligible_records$event_c, "record_b")
+  expect_false(any(
+    report$validation_rows$record_id == "record_a" &
+      report$validation_rows$redcap_event_name == "event_c"
+  ))
+  expect_true(any(
+    report$field_complete_failures$record_id == "record_b" &
+      report$field_complete_failures$redcap_event_name == "event_c" &
+      report$field_complete_failures$form == "surgery"
+  ))
+  surgery_event_summary <- report$agent$validation_set[
+    report$agent$validation_set$form == "surgery" &
+      report$agent$validation_set$validation_check == "event-row-started",
+    ,
+    drop = FALSE
+  ]
+  surgery_event_summary <- surgery_event_summary[
+    order(surgery_event_summary$redcap_event_name),
+    ,
+    drop = FALSE
+  ]
+  expect_equal(surgery_event_summary$redcap_event_name, c("event_b", "event_c"))
+  expect_equal(surgery_event_summary$n, c(2, 1))
+  expect_equal(surgery_event_summary$n_failed, c(0, 0))
+})
+
+test_that("records partially overrides only named events", {
+  status_meta <- dplyr::bind_rows(
+    meta_row("record_id", "status_form", field_label = "Record ID", required = "y"),
+    meta_row("status_started", "status_form", required = "y"),
+    meta_row("status_value", "status_form", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1, 1),
+    unique_event_name = c("event_1", "event_2", "event_3"),
+    form = c("status_form", "status_form", "status_form")
+  )
+  records <- tibble::tibble(
+    record_id = c("r1", "r1", "r2", "r2"),
+    redcap_event_name = c("event_1", "event_2", "event_1", "event_2"),
+    status_started = "yes",
+    status_value = "entered"
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(status_meta, mapping = mapping),
+    forms = "status_form",
+    records = list(event_3 = "r1")
+  )
+  event_summary <- report$agent$validation_set[
+    report$agent$validation_set$validation_check == "event-row-started",
+    ,
+    drop = FALSE
+  ]
+  event_summary <- event_summary[order(event_summary$redcap_event_name), , drop = FALSE]
+
+  expect_equal(event_summary$redcap_event_name, c("event_1", "event_2", "event_3"))
+  expect_equal(event_summary$n, c(2, 2, 1))
+  expect_equal(event_summary$n_failed, c(0, 0, 1))
+  expect_true(any(
+    report$event_row_started_failures$record_id == "r1" &
+      report$event_row_started_failures$redcap_event_name == "event_3"
+  ))
+})
+
+test_that("events and records intersect before assessment", {
+  status_meta <- dplyr::bind_rows(
+    meta_row("record_id", "status_form", field_label = "Record ID", required = "y"),
+    meta_row("status_started", "status_form", required = "y"),
+    meta_row("status_value", "status_form", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1, 1),
+    unique_event_name = c("event_1", "event_2", "event_3"),
+    form = c("status_form", "status_form", "status_form")
+  )
+  records <- tibble::tibble(
+    record_id = c("r1", "r2"),
+    redcap_event_name = c("event_2", "event_3"),
+    status_started = "yes",
+    status_value = "entered"
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(status_meta, mapping = mapping),
+    forms = "status_form",
+    events = "event_3",
+    records = list(event_2 = "r1", event_3 = "r2")
+  )
+
+  expect_identical(report$events$status_form, "event_3")
+  expect_equal(unique(report$validation_rows$redcap_event_name), "event_3")
+  expect_equal(report$event_row_started_checks$record_id, "r2")
+  expect_equal(nrow(report$event_row_started_checks), 1)
+})
+
+test_that("records IDs absent from data create upstream failures", {
+  status_meta <- dplyr::bind_rows(
+    meta_row("record_id", "status_form", field_label = "Record ID", required = "y"),
+    meta_row("status_started", "status_form", required = "y"),
+    meta_row("status_value", "status_form", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1),
+    unique_event_name = c("event_1", "event_2"),
+    form = c("status_form", "status_form")
+  )
+  records <- tibble::tibble(
+    record_id = "r1",
+    redcap_event_name = "event_1",
+    status_started = "yes",
+    status_value = "entered"
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(status_meta, mapping = mapping),
+    forms = "status_form",
+    records = list(event_2 = "missing_id")
+  )
+
+  expect_true(any(
+    report$event_row_started_failures$record_id == "missing_id" &
+      report$event_row_started_failures$redcap_event_name == "event_2"
+  ))
+  expect_false(any(report$form_started_checks$record_id == "missing_id"))
+  expect_false(any(report$field_complete_checks$record_id == "missing_id"))
+})
+
+test_that("records eligibility applies to repeat-instance checks", {
+  repeat_meta <- dplyr::bind_rows(
+    meta_row("record_id", "screen_form", field_label = "Record ID", required = "y"),
+    meta_row("screen_started", "screen_form", required = "y"),
+    meta_row("repeat_started", "repeat_form", required = "y"),
+    meta_row("repeat_value", "repeat_form", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1),
+    unique_event_name = c("baseline_event", "baseline_event"),
+    form = c("screen_form", "repeat_form")
+  )
+  repeat_instrument_event <- tibble::tibble(
+    event_name = "baseline_event",
+    form_name = "repeat_form",
+    custom_form_label = ""
+  )
+  records <- tibble::tibble(
+    record_id = c("r1", "r2", "r2"),
+    redcap_event_name = c("baseline_event", "baseline_event", "baseline_event"),
+    redcap_repeat_instrument = c("repeat_form", "repeat_form", "repeat_form"),
+    redcap_repeat_instance = c("1", "1", "2"),
+    repeat_started = c("yes", "yes", "yes"),
+    repeat_value = c("10", "20", "30")
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(
+      repeat_meta,
+      mapping = mapping,
+      repeat_instrument_event = repeat_instrument_event
+    ),
+    forms = "repeat_form",
+    records = list(baseline_event = "r2"),
+    instances = 2L
+  )
+
+  expect_equal(nrow(report$instance_row_started_checks), 2)
+  expect_equal(unique(report$instance_row_started_checks$record_id), "r2")
+  expect_false(any(report$validation_rows$record_id == "r1"))
+})
+
+test_that("ignore_ids wins over records eligibility", {
+  status_meta <- dplyr::bind_rows(
+    meta_row("record_id", "status_form", field_label = "Record ID", required = "y"),
+    meta_row("status_started", "status_form", required = "y"),
+    meta_row("status_value", "status_form", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1),
+    unique_event_name = c("event_1", "event_2"),
+    form = c("status_form", "status_form")
+  )
+  records <- tibble::tibble(
+    record_id = c("keep", "drop"),
+    redcap_event_name = c("event_2", "event_2"),
+    status_started = "yes",
+    status_value = "entered"
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(status_meta, mapping = mapping),
+    forms = "status_form",
+    records = list(event_2 = c("keep", "drop")),
+    ignore_ids = "drop"
+  )
+
+  expect_equal(report$ignored_ids, "drop")
+  expect_identical(report$eligible_records$event_2, "keep")
+  expect_false(any(report$validation_rows$record_id == "drop"))
+})
+
+test_that("unused valid records events are retained but harmless", {
+  status_meta <- dplyr::bind_rows(
+    meta_row("record_id", "status_form", field_label = "Record ID", required = "y"),
+    meta_row("status_value", "status_form", required = "y"),
+    meta_row("other_value", "other_form", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1),
+    unique_event_name = c("status_event", "unused_event"),
+    form = c("status_form", "other_form")
+  )
+  records <- tibble::tibble(
+    record_id = "r1",
+    redcap_event_name = "status_event",
+    status_value = "entered",
+    other_value = ""
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(status_meta, mapping = mapping),
+    forms = "status_form",
+    records = list(unused_event = "r1")
+  )
+
+  expect_identical(report$eligible_records$unused_event, "r1")
+  expect_false(any(report$validation_rows$redcap_event_name == "unused_event"))
+})
+
 test_that("ignore fields and ignore ids are applied before assessment", {
   records <- tibble::tibble(
     record_id = c("keep", "drop"),
@@ -573,7 +842,43 @@ test_that("ignore fields and ignore ids are applied before assessment", {
   )))
 })
 
-test_that("invalid forms, events, and instances fail clearly", {
+test_that("empty records entries behave like omitted events", {
+  status_meta <- dplyr::bind_rows(
+    meta_row("record_id", "status_form", field_label = "Record ID", required = "y"),
+    meta_row("status_started", "status_form", required = "y"),
+    meta_row("status_value", "status_form", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1),
+    unique_event_name = c("event_1", "event_2"),
+    form = c("status_form", "status_form")
+  )
+  records <- tibble::tibble(
+    record_id = c("r1", "r2"),
+    redcap_event_name = c("event_1", "event_1"),
+    status_started = "yes",
+    status_value = "entered"
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(status_meta, mapping = mapping),
+    forms = "status_form",
+    records = list(event_2 = c("", NA_character_))
+  )
+  event_summary <- report$agent$validation_set[
+    report$agent$validation_set$validation_check == "event-row-started" &
+      report$agent$validation_set$redcap_event_name == "event_2",
+    ,
+    drop = FALSE
+  ]
+
+  expect_equal(report$eligible_records, list())
+  expect_equal(event_summary$n, 2)
+  expect_equal(event_summary$n_failed, 2)
+})
+
+test_that("invalid forms, events, records, and instances fail clearly", {
   records <- tibble::tibble(
     record_id = "r1",
     branch_flag = "0",
@@ -599,6 +904,75 @@ test_that("invalid forms, events, and instances fail clearly", {
       forms = character()
     ),
     "at least one"
+  )
+  expect_error(
+    find_missing(
+      data = records,
+      rcon = fake_rcon(baseline_form_meta()),
+      forms = "baseline_form",
+      records = "r1"
+    ),
+    "`records` must be NULL or a named list"
+  )
+  expect_error(
+    find_missing(
+      data = records,
+      rcon = fake_rcon(baseline_form_meta()),
+      forms = "baseline_form",
+      records = list("r1")
+    ),
+    "named by raw REDCap `redcap_event_name`"
+  )
+  expect_error(
+    find_missing(
+      data = records,
+      rcon = fake_rcon(
+        baseline_form_meta(),
+        mapping = tibble::tibble(
+          arm_num = c(1, 1),
+          unique_event_name = c("event_1", "event_2"),
+          form = c("baseline_form", "baseline_form")
+        )
+      ),
+      forms = "baseline_form",
+      records = structure(
+        list("r1", "r2"),
+        names = c("event_1", "event_1")
+      )
+    ),
+    "must not be duplicated"
+  )
+  expect_error(
+    find_missing(
+      data = records,
+      rcon = fake_rcon(
+        baseline_form_meta(),
+        mapping = tibble::tibble(
+          arm_num = 1,
+          unique_event_name = "event_1",
+          form = "baseline_form"
+        )
+      ),
+      forms = "baseline_form",
+      records = list(unknown_event = "r1")
+    ),
+    "Unknown event"
+  )
+  expect_error(
+    find_missing(
+      data = records,
+      rcon = fake_rcon(
+        baseline_form_meta(),
+        mapping = tibble::tibble(
+          arm_num = 1,
+          unique_event_name = "event_1",
+          form = "baseline_form"
+        )
+      ),
+      forms = "baseline_form",
+      records = list(event_1 = list("r1"))
+    ),
+    "must be a vector"
   )
   expect_error(
     find_missing(

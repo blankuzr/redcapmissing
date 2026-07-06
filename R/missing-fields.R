@@ -371,7 +371,8 @@
   records,
   form_records,
   project,
-  form
+  form,
+  eligible_records = NULL
 ) {
   records <- tibble::as_tibble(records)
   form_records <- tibble::as_tibble(form_records)
@@ -389,7 +390,8 @@
   expected <- .miss_expected_record_events(
     records = records,
     project = project,
-    events = form_events
+    events = form_events,
+    eligible_records = eligible_records
   )
   if (nrow(expected) == 0) {
     return(.miss_empty_expected())
@@ -432,7 +434,8 @@
   form_records,
   project,
   form,
-  instances
+  instances,
+  eligible_records = NULL
 ) {
   if (is.null(instances) || !isTRUE(project$form_repeats)) {
     return(.miss_empty_expected())
@@ -448,7 +451,8 @@
     records = records,
     project = project,
     form = form,
-    instances = instances
+    instances = instances,
+    eligible_records = eligible_records
   )
   if (nrow(contexts) == 0) {
     return(.miss_empty_expected())
@@ -482,7 +486,8 @@
   records,
   project,
   form,
-  instances
+  instances,
+  eligible_records = NULL
 ) {
   fields <- project$system_fields
   repeat_instances <- .miss_chr_vec(instances)
@@ -506,7 +511,8 @@
       record_events <- .miss_expected_record_events(
         records = records,
         project = project,
-        events = project$repeat_form_events
+        events = project$repeat_form_events,
+        eligible_records = eligible_records
       )
       if (nrow(record_events) > 0) {
         context_pieces <- c(context_pieces, list(
@@ -518,7 +524,8 @@
       record_events <- .miss_expected_record_events(
         records = records,
         project = project,
-        events = repeat_event_contexts
+        events = repeat_event_contexts,
+        eligible_records = eligible_records
       )
       if (nrow(record_events) > 0) {
         context_pieces <- c(context_pieces, list(
@@ -719,7 +726,46 @@
   )
 }
 
-.miss_expected_record_events <- function(records, project, events) {
+.miss_expected_record_events <- function(
+  records,
+  project,
+  events,
+  eligible_records = NULL
+) {
+  eligible_records <- eligible_records %||% list()
+  events <- unique(.miss_chr_vec(events))
+  events <- events[!.miss_is_blank_vec(events)]
+  if (length(events) == 0) {
+    return(tibble::tibble(
+      record_id = character(),
+      redcap_event_name = character()
+    ))
+  }
+
+  override_events <- intersect(events, names(eligible_records))
+  default_events <- setdiff(events, override_events)
+  pieces <- list()
+
+  if (length(default_events) > 0) {
+    pieces <- c(pieces, list(.miss_expected_record_events_from_data(
+      records = records,
+      project = project,
+      events = default_events
+    )))
+  }
+  if (length(override_events) > 0) {
+    pieces <- c(pieces, lapply(override_events, function(event) {
+      .miss_cross_record_events(
+        record_ids = eligible_records[[event]],
+        events = event
+      )
+    }))
+  }
+
+  unique(dplyr::bind_rows(pieces))
+}
+
+.miss_expected_record_events_from_data <- function(records, project, events) {
   fields <- project$system_fields
   record_ids <- unique(.miss_chr_vec(records[[project$id_col]]))
   record_ids <- record_ids[!.miss_is_blank_vec(record_ids)]

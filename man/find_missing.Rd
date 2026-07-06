@@ -9,6 +9,7 @@ find_missing(
   rcon,
   forms,
   events = NULL,
+  records = NULL,
   required_fields = TRUE,
   ignore_fields = NULL,
   ignore_ids = NULL,
@@ -43,6 +44,19 @@ form's default offered events. If a form is offered on only one event,
 supplied event values are ignored for that form. If a form is regular on
 some events and repeating on others, \code{events} also determines whether
 repeat-instance logic is activated. Defaults to \code{NULL}.}
+
+\item{records}{Named list of REDCap record ID vectors by raw
+\code{redcap_event_name}, or \code{NULL}. Non-empty entries override which record IDs
+are eligible for assessment on that event; events omitted from the list use
+the default data-derived record set. Empty or blank-only entries are
+ignored. Supplied IDs are normalized to character values and are not
+checked through a live REDCap record export. IDs not present in \code{data} are
+allowed and can create upstream row-started failures. When both \code{events}
+and \code{records} are supplied, \code{events} selects the form-event scope first and
+\code{records} narrows record eligibility inside those events. For repeating
+contexts, event-level eligibility applies before \code{instances} expands the
+expected repeat-instance IDs. Defaults to \code{NULL}, which preserves the
+current all-record behavior.}
 
 \item{required_fields}{Logical scalar. When \code{TRUE}, only fields marked as
 required in the REDCap metadata \code{required_field} column are assessed. When
@@ -104,6 +118,9 @@ fields.}
 by form, or \code{character(0)} for forms where no event restriction applied.}
 \item{\code{event_labels}}{Named REDCap event labels from event metadata, keyed
 by raw \code{redcap_event_name}, when available.}
+\item{\code{eligible_records}}{Named list of active event-level record ID
+overrides used for assessment. Events omitted from this list used the
+default data-derived record set.}
 \item{\code{instances}}{Named list of expanded repeat-instance IDs by form, or
 \code{NULL} for forms without requested repeating contexts.}
 \item{\code{ignored_fields}}{Root field names skipped because of
@@ -210,6 +227,17 @@ multi_form_missing <- find_missing(
   forms = c("imaging", "demographics"),
   events = list(
     imaging = c("event_2_arm_1", "event_3_arm_1")
+  )
+)
+
+staged_missing <- find_missing(
+  data = records,
+  rcon = rcon,
+  forms = c("surgery", "demographics"),
+  records = list(
+    event_1_arm_1 = c("record_a", "record_b"),
+    event_2_arm_1 = c("record_a", "record_b"),
+    event_3_arm_1 = "record_b"
   )
 )
 }
