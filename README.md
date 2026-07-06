@@ -50,15 +50,21 @@ records <- redcapAPI::exportRecordsTyped(
 `redcapmissing` uses five validation checks. Failed `on-route` checks
 remove that record/event/repeat/form context from every downstream
 check. The `form-complete` check is a `detour`: it can fail while the
-same context still flows into `field-complete`.
+same context still flows into `field-complete`. In the diagram, only
+main-pipeline `PASS` paths continue downstream; the detour branch
+reports without feeding back into the pipeline.
 
 ``` mermaid
-flowchart LR
-  A["event-row-started<br/>row / on-route"] --> B["instance-row-started<br/>row / on-route"]
-  B --> C["form-started<br/>form / on-route"]
-  C --> D["form-complete<br/>form / detour"]
-  D --> E["field-complete<br/>field / on-route"]
-  C --> E
+flowchart TB
+  A["event-row-started<br/>row / on-route"] -->|"PASS only"| B["instance-row-started<br/>row / on-route"]
+  B -->|"PASS only"| C["form-started<br/>form / on-route"]
+  C -->|"PASS only"| E["field-complete<br/>field / on-route"]
+  C -. "detour: reports only" .-> D["form-complete<br/>form / detour"]
+
+  classDef onRoute fill:#eaf5ee,stroke:#258457,color:#173b2b,stroke-width:2px;
+  classDef detour fill:#fff4d7,stroke:#c77900,color:#513300,stroke-width:2px;
+  class A,B,C,E onRoute;
+  class D detour;
 ```
 
 | validation_level | validation_check | validation_check_type | Meaning |
