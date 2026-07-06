@@ -1,3 +1,12 @@
+# redcapmissing 1.0.2
+
+## 2026-07-06
+
+- Revised the README validation-flow diagram so `detour` checks are shown as
+  reporting offshoots instead of downstream-gating pipeline steps.
+- Made the README validation-flow diagram more compact and labeled main
+  `on-route` transitions as pass-only paths.
+
 # redcapmissing 1.0.1
 
 ## 2026-07-06
