@@ -9,19 +9,25 @@
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 <!-- badges: end -->
 
-<img src="man/figures/logo.svg" align="right" width="180" alt="redcapmissing hex logo" />
-
 `redcapmissing` builds branching-aware missingness reports for REDCap
 record exports. It combines `redcapAPI` project metadata with typed
 REDCap exports so missing values, absent event rows, absent repeat
 instances, blank forms, and field-specific gaps stay separate in the
 report.
 
-## Install
+<p align="center">
+
+<img src="man/figures/logo.svg" width="160" alt="redcapmissing hex logo" />
+</p>
+
+## Installation
+
+`redcapmissing` requires R 4.1.0 or later. Install the current GitHub
+version with:
 
 ``` r
 # install.packages("pak")
-pak::pkg_install("blankuzr/redcapmissing")
+pak::pak("blankuzr/redcapmissing")
 ```
 
 ## REDCap inputs
@@ -88,11 +94,11 @@ flowchart TB
 | event:form / event:form:instance | `field-complete` | `on-route` | A specific expected field is complete after branching and filtering. |
 | event | `event-complete` | `detour` | All on-route checks pass within the REDCap event context. |
 
-Call `registry()` to inspect the package registry that drives this
-model:
+Call `redcapmissing::registry()` to inspect the package registry that
+drives this model:
 
 ``` r
-registry()
+redcapmissing::registry()
 ```
 
 ## Minimal workflow
@@ -136,9 +142,39 @@ report <- find_missing(
   forms = "baseline_form"
 )
 
-report$missing
-tidy(report)
-flex(report)
+missing_rows <- as.data.frame(report$missing[
+  ,
+  c(
+    "record_id",
+    "validation_level",
+    "validation_check_type",
+    "validation_check",
+    "field_name"
+  )
+])
+print(missing_rows, row.names = FALSE)
+#>  record_id validation_level validation_check_type validation_check       field_name
+#>         r1       event:form                detour    form-complete             <NA>
+#>         r1       event:form              on-route   field-complete conditional_note
+#>         r1            event                detour   event-complete             <NA>
+
+summary <- tidy(report)
+summary_rows <- as.data.frame(summary[
+  summary$assessed > 0,
+  c(
+    "validation_level",
+    "validation_check",
+    "validation_check_type",
+    "assessed",
+    "failed"
+  )
+])
+print(summary_rows, row.names = FALSE)
+#>  validation_level validation_check validation_check_type assessed failed
+#>        event:form     form-started              on-route        2      0
+#>        event:form    form-complete                detour        2      1
+#>        event:form   field-complete              on-route        7      1
+#>             event   event-complete                detour        2      1
 ```
 
 ## Report outputs
@@ -155,12 +191,15 @@ interrogated `pointblank` agent. Common outputs are:
   `report$event_complete_failures`: check-specific failure tables
 - `tidy(report)`: one summary row per validation check and REDCap
   context
-- `flex(report)`: a formatted summary table for reporting workflows
 
 `tidy(report)` uses canonical validation columns: `validation_level`,
 `validation_check`, and `validation_check_type`. `validation_level` is
-`event:form`, `event:form:instance`, or `event`. `flex(report)` displays
-the same checks with human-readable labels.
+`event:form`, `event:form:instance`, or `event`.
+
+Optional reporting helpers are available for formatted outputs.
+`flex(report)` requires `flextable` and `glue`;
+`flex_html(flex(report))` also requires `htmltools`. `flex(report)`
+displays the same checks as `tidy(report)` with human-readable labels.
 
 ## Events and repeats
 
@@ -168,9 +207,12 @@ Use `events` to restrict multi-event forms to selected REDCap events.
 Use `instances` to declare expected repeat instances when REDCap would
 otherwise omit nonexistent repeat rows from the export.
 
+For a repeating form, declare the expected repeat instances after
+exporting records and creating the REDCap connection object:
+
 ``` r
 repeat_report <- find_missing(
-  data = records,
+  data = typed_records,
   rcon = rcon,
   forms = "repeat_form",
   instances = 2L
@@ -182,6 +224,10 @@ others, the package activates event/form checks per context: regular
 event contexts use `event-row-started`, repeating contexts use
 `instance-row-started`, and repeat instances roll up to their parent
 event for `event-complete`.
+
+See the [package
+vignette](vignettes/redcapmissing.Rmd#repeat-expectations) for a
+runnable synthetic repeat example.
 
 ## Acknowledgement and citation
 
@@ -232,9 +278,14 @@ Useful current `pointblank` references:
 
 ## Learn more
 
-See the package vignette for a fuller synthetic walk-through of
-branching-aware, repeat-aware, and validation-registry-driven
-missingness reporting.
+- Run `vignette("redcapmissing", package = "redcapmissing")` after
+  installing the package.
+- Read the [getting started vignette](vignettes/redcapmissing.Rmd) for a
+  fuller synthetic walk-through of branching-aware, repeat-aware, and
+  validation-registry-driven missingness reporting.
+- Review [NEWS.md](NEWS.md) for user-facing changes by version.
+- Report bugs and feature requests in [GitHub
+  issues](https://github.com/blankuzr/redcapmissing/issues).
 
 ## Development
 
