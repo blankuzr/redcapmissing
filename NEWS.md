@@ -1,3 +1,16 @@
+# redcapmissing 3.1.3
+
+## 2026-07-06
+
+- Updated validation-check wording in `registry()`, README, help, and vignettes:
+  `form-complete` is "all form fields complete", `field-complete` is
+  "field complete", and `event-complete` is "all forms on event complete".
+  `event-complete` behavior is unchanged and continues to summarize only
+  downstream-gating on-route checks.
+- Updated the README minimal workflow to show `tidy(report)` summary rows
+  before `report$missing`, so readers can see every validation check that ran
+  before reviewing failed rows.
+
 # redcapmissing 3.1.2
 
 ## 2026-07-06

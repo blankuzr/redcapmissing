@@ -54,6 +54,11 @@ test_that("registry returns the canonical validation taxonomy", {
   ) %in% names(reg)))
   expect_true(all(reg$gates_downstream[reg$validation_check_type == "on-route"]))
   expect_false(any(reg$gates_downstream[reg$validation_check_type == "detour"]))
+
+  descriptions <- stats::setNames(reg$description, reg$validation_check)
+  expect_identical(descriptions[["form-complete"]], "all form fields complete")
+  expect_identical(descriptions[["field-complete"]], "field complete")
+  expect_identical(descriptions[["event-complete"]], "all forms on event complete")
 })
 
 test_that("registry prints an organized cli summary", {
@@ -73,9 +78,14 @@ test_that("registry prints an organized cli summary", {
   expect_true(grepl("form-complete", printed, fixed = TRUE))
   expect_true(grepl("event-complete", printed, fixed = TRUE))
   expect_true(grepl("event row exists", printed, fixed = TRUE))
-  expect_true(grepl("fields complete", printed, fixed = TRUE))
+  expect_true(grepl("all form fields complete", printed, fixed = TRUE))
+  expect_true(grepl("field complete", printed, fixed = TRUE))
+  expect_true(grepl("all forms on event complete", printed, fixed = TRUE))
   expect_false(grepl("Expected event row exists.", printed, fixed = TRUE))
   expect_false(grepl("All expected fields complete.", printed, fixed = TRUE))
+  expect_false(grepl("| fields complete", printed, fixed = TRUE))
+  expect_false(grepl("field complete after branching", printed, fixed = TRUE))
+  expect_false(grepl("on-route checks pass in event", printed, fixed = TRUE))
   expect_false(grepl("component", printed, fixed = TRUE))
   expect_false(grepl("event_complete", printed, fixed = TRUE))
   expect_false(grepl("gate", printed, fixed = TRUE))

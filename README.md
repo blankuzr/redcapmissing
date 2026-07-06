@@ -145,9 +145,13 @@ flowchart LR
 | event:form / event:form:instance | `event-row-started` | `on-route` | The expected REDCap event row exists in the export. |
 | event:form / event:form:instance | `instance-row-started` | `on-route` | The expected REDCap repeat instance row exists in the export. |
 | event:form / event:form:instance | `form-started` | `on-route` | The exported form context has at least one entered data-capturing field. |
-| event:form / event:form:instance | `form-complete` | `detour` | All expected fields are complete for an evaluable form context. |
-| event:form / event:form:instance | `field-complete` | `on-route` | A specific expected field is complete after branching and filtering. |
-| event | `event-complete` | `detour` | All on-route checks pass within the REDCap event context. |
+| event:form / event:form:instance | `form-complete` | `detour` | all form fields complete |
+| event:form / event:form:instance | `field-complete` | `on-route` | field complete |
+| event | `event-complete` | `detour` | all forms on event complete |
+
+`event-complete` is computed from the event's `on-route` checks. It does
+not count `form-complete` rows because `form-complete` is itself a
+`detour`.
 
 Call `redcapmissing::registry()` to inspect the package registry that
 drives this model:
@@ -161,6 +165,8 @@ redcapmissing::registry()
 The example below uses a synthetic connection-like object so it can run
 without live REDCap credentials. In routine use, replace `rcon` and
 `records` with a real `redcapAPI::redcapConnection()` and typed export.
+The summary shows every validation check that ran in this compact
+example; `report$missing` shows only the failed rows.
 
 ``` r
 library(redcapmissing)
@@ -197,7 +203,25 @@ report <- find_missing(
   forms = "baseline_form"
 )
 
-missing_rows <- as.data.frame(report$missing[
+check_summary <- tidy(report)
+check_summary_rows <- as.data.frame(check_summary[
+  check_summary$assessed > 0,
+  c(
+    "validation_level",
+    "validation_check",
+    "validation_check_type",
+    "assessed",
+    "failed"
+  )
+])
+print(check_summary_rows, row.names = FALSE)
+#>  validation_level validation_check validation_check_type assessed failed
+#>        event:form     form-started              on-route        2      0
+#>        event:form    form-complete                detour        2      1
+#>        event:form   field-complete              on-route        7      1
+#>             event   event-complete                detour        2      1
+
+failed_rows <- as.data.frame(report$missing[
   ,
   c(
     "record_id",
@@ -207,29 +231,11 @@ missing_rows <- as.data.frame(report$missing[
     "field_name"
   )
 ])
-print(missing_rows, row.names = FALSE)
+print(failed_rows, row.names = FALSE)
 #>  record_id validation_level validation_check_type validation_check       field_name
 #>         r1       event:form                detour    form-complete             <NA>
 #>         r1       event:form              on-route   field-complete conditional_note
 #>         r1            event                detour   event-complete             <NA>
-
-summary <- tidy(report)
-summary_rows <- as.data.frame(summary[
-  summary$assessed > 0,
-  c(
-    "validation_level",
-    "validation_check",
-    "validation_check_type",
-    "assessed",
-    "failed"
-  )
-])
-print(summary_rows, row.names = FALSE)
-#>  validation_level validation_check validation_check_type assessed failed
-#>        event:form     form-started              on-route        2      0
-#>        event:form    form-complete                detour        2      1
-#>        event:form   field-complete              on-route        7      1
-#>             event   event-complete                detour        2      1
 ```
 
 ## Report outputs

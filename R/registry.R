@@ -117,9 +117,9 @@ print.redcapmissing_registry <- function(x, ...) {
       "The expected REDCap event row exists in the export.",
       "The expected REDCap repeat instance row exists in the export.",
       "The exported form context has at least one entered data-capturing field.",
-      "All expected fields are complete for an evaluable form context.",
-      "A specific expected field is complete after branching and filtering.",
-      "All on-route validation checks pass within the REDCap event context."
+      "all form fields complete",
+      "field complete",
+      "all forms on event complete"
     ),
     r_identifier = c(
       "event_row_started",
@@ -365,9 +365,9 @@ print.redcapmissing_registry <- function(x, ...) {
     "event-row-started" = "event row exists",
     "instance-row-started" = "repeat row exists",
     "form-started" = "form has data",
-    "form-complete" = "fields complete",
-    "field-complete" = "field complete after branching",
-    "event-complete" = "on-route checks pass in event",
+    "form-complete" = "all form fields complete",
+    "field-complete" = "field complete",
+    "event-complete" = "all forms on event complete",
     validation_check
   )
 }

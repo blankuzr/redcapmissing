@@ -40,18 +40,19 @@ The checks are organized by validation level and validation-check type:
 `event-row-started`, `instance-row-started`, `form-started`, and
 `field-complete` are `on-route`: failures remove that context from downstream
 assessment. `form-complete` and `event-complete` are `detour`: failures are
-reported without blocking later checks. `event-complete` summarizes whether all
-on-route checks passed for each record/event context across the forms and repeat
-instances requested in the report.
+reported without blocking later checks. `event-complete` has the display
+meaning `all forms on event complete` and is computed from event-level
+downstream-gating `on-route` checks; it does not count `form-complete` rows
+because `form-complete` is also a `detour`.
 
-| validation_level | validation_check | validation_check_type |
-|---|---|---|
-| event:form / event:form:instance | `event-row-started` | `on-route` |
-| event:form / event:form:instance | `instance-row-started` | `on-route` |
-| event:form / event:form:instance | `form-started` | `on-route` |
-| event:form / event:form:instance | `form-complete` | `detour` |
-| event:form / event:form:instance | `field-complete` | `on-route` |
-| event | `event-complete` | `detour` |
+| validation_level | validation_check | validation_check_type | Meaning |
+|---|---|---|---|
+| event:form / event:form:instance | `event-row-started` | `on-route` | The expected REDCap event row exists in the export. |
+| event:form / event:form:instance | `instance-row-started` | `on-route` | The expected REDCap repeat instance row exists in the export. |
+| event:form / event:form:instance | `form-started` | `on-route` | The exported form context has at least one entered data-capturing field. |
+| event:form / event:form:instance | `form-complete` | `detour` | all form fields complete |
+| event:form / event:form:instance | `field-complete` | `on-route` | field complete |
+| event | `event-complete` | `detour` | all forms on event complete |
 
 ## Synthetic REDCap helpers
 
