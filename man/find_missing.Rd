@@ -175,11 +175,12 @@ reporting. The package builds validation rows with:
 The checks are assessed in registry order. Failed \code{"on-route"} checks remove
 the record/event/repeat/form context from every downstream assessment,
 regardless of the downstream validation level or check type. \code{form-complete}
-is a \code{"detour"} check: it reports whether all expected fields are complete,
+is a \code{"detour"} check: it reports whether all form fields are complete,
 but a failed \code{form-complete} context still flows into \code{field-complete}.
-\code{event-complete} is an event-level \code{"detour"} rollup: it reports whether
-all on-route checks passed for each record/event context without gating any
-downstream assessment.
+\code{event-complete} is an event-level \code{"detour"} rollup with the display
+meaning "all forms on event complete": it checks only downstream-gating
+on-route results for each record/event context and does not count
+\code{form-complete} because \code{form-complete} is also a detour.
 
 The returned \code{pointblank} agent is interrogated with failed-row extraction
 enabled. The failed-row extract is also returned as \code{missing} for easier

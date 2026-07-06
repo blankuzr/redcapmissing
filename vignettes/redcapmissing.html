@@ -373,9 +373,9 @@ REDCap credentials.</p>
 #&gt; | event:form / event:form:instance   | event-row-started     | on-route | event row exists                |
 #&gt; | event:form / event:form:instance   | instance-row-started  | on-route | repeat row exists               |
 #&gt; | event:form / event:form:instance   | form-started          | on-route | form has data                   |
-#&gt; | event:form / event:form:instance   | form-complete         | detour   | fields complete                 |
-#&gt; | event:form / event:form:instance   | field-complete        | on-route | field complete after branching  |
-#&gt; | event                              | event-complete        | detour   | on-route checks pass in event   |
+#&gt; | event:form / event:form:instance   | form-complete         | detour   | all form fields complete        |
+#&gt; | event:form / event:form:instance   | field-complete        | on-route | field complete                  |
+#&gt; | event                              | event-complete        | detour   | all forms on event complete     |
 #&gt; +------------------------------------+-----------------------+----------+---------------------------------+</code></pre>
 <p>The checks are organized by validation level and validation-check
 type:</p>
@@ -391,20 +391,24 @@ repeat-instance contexts.</li>
 <code>on-route</code>: failures remove that context from downstream
 assessment. <code>form-complete</code> and <code>event-complete</code>
 are <code>detour</code>: failures are reported without blocking later
-checks. <code>event-complete</code> summarizes whether all on-route
-checks passed for each record/event context across the forms and repeat
-instances requested in the report.</p>
+checks. <code>event-complete</code> has the display meaning
+<code>all forms on event complete</code> and is computed from
+event-level downstream-gating <code>on-route</code> checks; it does not
+count <code>form-complete</code> rows because <code>form-complete</code>
+is also a <code>detour</code>.</p>
 <table>
 <colgroup>
-<col width="33%" />
-<col width="33%" />
-<col width="33%" />
+<col width="25%" />
+<col width="25%" />
+<col width="25%" />
+<col width="25%" />
 </colgroup>
 <thead>
 <tr class="header">
 <th>validation_level</th>
 <th>validation_check</th>
 <th>validation_check_type</th>
+<th>Meaning</th>
 </tr>
 </thead>
 <tbody>
@@ -412,31 +416,38 @@ instances requested in the report.</p>
 <td>event:form / event:form:instance</td>
 <td><code>event-row-started</code></td>
 <td><code>on-route</code></td>
+<td>The expected REDCap event row exists in the export.</td>
 </tr>
 <tr class="even">
 <td>event:form / event:form:instance</td>
 <td><code>instance-row-started</code></td>
 <td><code>on-route</code></td>
+<td>The expected REDCap repeat instance row exists in the export.</td>
 </tr>
 <tr class="odd">
 <td>event:form / event:form:instance</td>
 <td><code>form-started</code></td>
 <td><code>on-route</code></td>
+<td>The exported form context has at least one entered data-capturing
+field.</td>
 </tr>
 <tr class="even">
 <td>event:form / event:form:instance</td>
 <td><code>form-complete</code></td>
 <td><code>detour</code></td>
+<td>all form fields complete</td>
 </tr>
 <tr class="odd">
 <td>event:form / event:form:instance</td>
 <td><code>field-complete</code></td>
 <td><code>on-route</code></td>
+<td>field complete</td>
 </tr>
 <tr class="even">
 <td>event</td>
 <td><code>event-complete</code></td>
 <td><code>detour</code></td>
+<td>all forms on event complete</td>
 </tr>
 </tbody>
 </table>

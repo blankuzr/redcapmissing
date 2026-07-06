@@ -41,11 +41,12 @@
 #' The checks are assessed in registry order. Failed `"on-route"` checks remove
 #' the record/event/repeat/form context from every downstream assessment,
 #' regardless of the downstream validation level or check type. `form-complete`
-#' is a `"detour"` check: it reports whether all expected fields are complete,
+#' is a `"detour"` check: it reports whether all form fields are complete,
 #' but a failed `form-complete` context still flows into `field-complete`.
-#' `event-complete` is an event-level `"detour"` rollup: it reports whether
-#' all on-route checks passed for each record/event context without gating any
-#' downstream assessment.
+#' `event-complete` is an event-level `"detour"` rollup with the display
+#' meaning "all forms on event complete": it checks only downstream-gating
+#' on-route results for each record/event context and does not count
+#' `form-complete` because `form-complete` is also a detour.
 #'
 #' The returned `pointblank` agent is interrogated with failed-row extraction
 #' enabled. The failed-row extract is also returned as `missing` for easier
