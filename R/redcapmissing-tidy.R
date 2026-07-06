@@ -10,26 +10,27 @@
 #'
 #' @return A tibble with one row per validation step/context and columns:
 #' \describe{
-#'   \item{`form`}{The REDCap instrument/form name assessed by the report.}
-#'   \item{`form_label`}{The REDCap instrument label for `form`.}
 #'   \item{`redcap_event_name`}{The REDCap event name for the validation
 #'     context, or `""` when not applicable.}
+#'   \item{`form`}{The REDCap instrument/form name assessed by the report.}
 #'   \item{`redcap_repeat_instrument`}{The REDCap repeat instrument for the
-#'     validation context, or `""` when not applicable.}
+#'     validation context, or `""` when not applicable. Omitted when the
+#'     report contains no repeat context.}
 #'   \item{`redcap_repeat_instance`}{The REDCap repeat instance for the
-#'     validation context, or `""` when not applicable.}
+#'     validation context, or `""` when not applicable. Omitted when the
+#'     report contains no repeat context.}
 #'   \item{`validation_level`}{The emitted context label. Event/form checks use
 #'     `"event:form"` for non-repeating contexts and
 #'     `"event:form:instance"` for repeat-instance contexts; event rollups use
 #'     `"event"`.}
 #'   \item{`validation_check`}{The canonical validation-check code.}
-#'   \item{`validation_check_type`}{The validation-check type: `"on-route"` or
-#'     `"detour"`.}
 #'   \item{`assessed`}{The number of rows assessed.}
 #'   \item{`passed`}{The number of rows that passed.}
 #'   \item{`failed`}{The number of rows that failed.}
 #'   \item{`pass_rate`}{The numeric pass fraction.}
 #'   \item{`fail_rate`}{The numeric failure fraction.}
+#'   \item{`validation_check_type`}{The validation-check type: `"on-route"` or
+#'     `"detour"`.}
 #' }
 #'
 #' @seealso [find_missing()], [flex()], [flex_html()]
@@ -41,21 +42,22 @@ tidy.redcapmissing <- function(x, ...) {
   validation_set <- x$agent$validation_set
   .redcapmissing_check_tidy_validation_set(validation_set)
 
-  tibble::tibble(
-    form = validation_set$form,
-    form_label = validation_set$form_label,
+  out <- tibble::tibble(
     redcap_event_name = validation_set$redcap_event_name,
+    form = validation_set$form,
     redcap_repeat_instrument = validation_set$redcap_repeat_instrument,
     redcap_repeat_instance = validation_set$redcap_repeat_instance,
     validation_level = validation_set$validation_level,
     validation_check = validation_set$validation_check,
-    validation_check_type = validation_set$validation_check_type,
     assessed = validation_set$n,
     passed = validation_set$n_passed,
     failed = validation_set$n_failed,
     pass_rate = validation_set$f_passed,
-    fail_rate = validation_set$f_failed
+    fail_rate = validation_set$f_failed,
+    validation_check_type = validation_set$validation_check_type
   )
+
+  .redcapmissing_tidy_drop_repeat_columns(out)
 }
 
 #' @importFrom generics tidy
@@ -66,9 +68,8 @@ generics::tidy
 
 .redcapmissing_tidy_validation_set_columns <- function() {
   c(
-    "form",
-    "form_label",
     "redcap_event_name",
+    "form",
     "redcap_repeat_instrument",
     "redcap_repeat_instance",
     "validation_level",
@@ -97,4 +98,21 @@ generics::tidy
   }
 
   invisible(validation_set)
+}
+
+.redcapmissing_tidy_drop_repeat_columns <- function(x) {
+  repeat_columns <- c("redcap_repeat_instrument", "redcap_repeat_instance")
+  if (!all(repeat_columns %in% names(x))) {
+    return(x)
+  }
+
+  has_repeat <- any(
+    !.miss_is_blank_vec(x$redcap_repeat_instrument) |
+      !.miss_is_blank_vec(x$redcap_repeat_instance)
+  )
+  if (isTRUE(has_repeat)) {
+    return(x)
+  }
+
+  x[, setdiff(names(x), repeat_columns), drop = FALSE]
 }

@@ -189,14 +189,18 @@ print(summary_rows, row.names = FALSE)
   check-specific failure tables
 - `tidy(report)`: one summary row per validation check and REDCap context
 
-`tidy(report)` uses canonical validation columns:
-`validation_level`, `validation_check`, and `validation_check_type`.
-`validation_level` is `event:form`, `event:form:instance`, or `event`.
+`tidy(report)` returns raw REDCap event/form context first, followed by
+canonical validation columns and pass/fail rates. Repeat instrument and repeat
+instance columns are included only when the report contains repeat contexts.
+`validation_level` is `event:form`, `event:form:instance`, or `event`, and
+`validation_check_type` is `on-route` or `detour`.
 
 Optional reporting helpers are available for formatted outputs.
 `flex(report)` requires `flextable` and `glue`; `flex_html(flex(report))`
-also requires `htmltools`. `flex(report)` displays the same checks as
-`tidy(report)` with human-readable labels.
+also requires `htmltools`. `flex(report)` displays labeled event, form, repeat
+context, validation-check, and pass/fail columns. Use raw REDCap values in
+`flex(events = ...)` and `flex(forms = ...)` to subset rows before display
+labels are applied.
 
 ## Events and repeats
 

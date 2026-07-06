@@ -61,6 +61,7 @@
       )
     )
   )
+  event_labels <- .miss_get_event_labels(rcon)
   project_information <- .miss_get_rcon_table(
     rcon,
     c("projectInformation", "project_information", "projectInfo")
@@ -78,6 +79,7 @@
     system_fields = system_fields,
     mapping = mapping,
     repeat_instrument_event = repeat_instrument_event,
+    event_labels = event_labels,
     project_information = project_information,
     form_events = form_events,
     repeat_form_events = repeat_form_events,
@@ -132,6 +134,13 @@
   form_label
 }
 
+.miss_get_event_labels <- function(rcon) {
+  event_data <- .miss_normalize_events(.miss_get_rcon_table(
+    rcon,
+    c("events", "exportEvents", "event_data", "eventData")
+  ))
+  .miss_event_label_vector(event_data)
+}
 
 .miss_resolve_events <- function(project, events, form) {
   offered_events <- union(project$form_events, project$repeat_form_events)
@@ -294,6 +303,48 @@
     },
     unique_event_name = .miss_chr_vec(mapping$unique_event_name),
     form = .miss_chr_vec(mapping$form)
+  )
+}
+
+.miss_normalize_events <- function(events) {
+  if (ncol(events) == 0) {
+    return(tibble::tibble(
+      unique_event_name = character(),
+      event_name = character()
+    ))
+  }
+
+  if (!"unique_event_name" %in% names(events)) {
+    events$unique_event_name <- if ("event_name" %in% names(events)) {
+      events$event_name
+    } else {
+      NA_character_
+    }
+  }
+  if (!"event_name" %in% names(events)) {
+    events$event_name <- NA_character_
+  }
+
+  tibble::tibble(
+    unique_event_name = .miss_chr_vec(events$unique_event_name),
+    event_name = .miss_chr_vec(events$event_name)
+  )
+}
+
+.miss_event_label_vector <- function(events) {
+  if (nrow(events) == 0) {
+    return(character())
+  }
+
+  keep <- !.miss_is_blank_vec(events$unique_event_name) &
+    !.miss_is_blank_vec(events$event_name)
+  unique_event_name <- events$unique_event_name[keep]
+  event_name <- events$event_name[keep]
+  duplicated_event <- duplicated(unique_event_name)
+
+  stats::setNames(
+    event_name[!duplicated_event],
+    unique_event_name[!duplicated_event]
   )
 }
 

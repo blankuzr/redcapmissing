@@ -1,3 +1,16 @@
+# redcapmissing 3.0.0
+
+## 2026-07-06
+
+- Changed `tidy()` to return a raw context-first validation summary without
+  the previous `form_label` column and to omit repeat-context columns when a
+  report has no repeat contexts.
+- Changed `flex()` to display the default reporting columns as labeled event,
+  form, repeat context, validation check, and pass/fail counts, with repeat
+  columns omitted whenever the displayed rows do not include repeat contexts.
+- Added raw `events` and `forms` filters to `flex()` so formatted reports can
+  be subset before display labels are applied.
+
 # redcapmissing 2.0.1
 
 ## 2026-07-06

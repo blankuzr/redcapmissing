@@ -283,7 +283,9 @@ instance `1` and warns once.
 
 ## Inspecting results
 
-`tidy(report)` returns a focused summary with canonical validation metadata:
+`tidy(report)` returns a raw context-first summary with canonical validation
+metadata. Repeat context columns are shown only when the report contains repeat
+contexts:
 
 ```{r}
 tidy(report)
@@ -296,10 +298,11 @@ ft <- flex(report)
 html <- flex_html(ft)
 ```
 
-`flex()` displays the canonical checks with human-readable labels, while
-`tidy()` and the `pointblank` agent keep the canonical hyphenated
-`validation_check` values. The public `validation_level` values are
-`event:form`, `event:form:instance`, and `event`.
+`flex()` displays the canonical checks with human-readable event, form, and
+repeat labels. Its `events` and `forms` arguments use raw REDCap values to
+filter rows before labels are applied. `tidy()` and the `pointblank` agent keep
+the canonical hyphenated `validation_check` values. The public
+`validation_level` values are `event:form`, `event:form:instance`, and `event`.
 
 ## Citation and acknowledgement
 

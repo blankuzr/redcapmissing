@@ -443,7 +443,6 @@ test_that("event-complete rolls up on-route failures across requested forms", {
   ]
 
   expect_equal(event_complete$form, c("", ""))
-  expect_equal(event_complete$form_label, c("", ""))
   expect_equal(event_complete$validation_level, c("event", "event"))
   expect_equal(event_complete$validation_check_type, c("detour", "detour"))
   expect_equal(

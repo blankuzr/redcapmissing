@@ -15,8 +15,9 @@
 #' The function relies on `redcapAPI` project structure exposed through `rcon`
 #' to avoid checking a form on events or repeating rows where that form is not
 #' offered. It inspects available connection methods such as `rcon$metadata()`,
-#' `rcon$instruments()`, `rcon$mapping()` / `rcon$mappings()`,
-#' `rcon$repeatInstrumentEvent()`, and `rcon$projectInformation()` when present.
+#' `rcon$instruments()`, `rcon$events()`, `rcon$mapping()` /
+#' `rcon$mappings()`, `rcon$repeatInstrumentEvent()`, and
+#' `rcon$projectInformation()` when present.
 #'
 #' Checkbox fields are treated as one REDCap root field. A checkbox root is
 #' considered answered when at least one exported child column
@@ -126,6 +127,8 @@
 #'     fields.}
 #'   \item{`events`}{Named list of REDCap events actually used for assessment
 #'     by form, or `character(0)` for forms where no event restriction applied.}
+#'   \item{`event_labels`}{Named REDCap event labels from event metadata, keyed
+#'     by raw `redcap_event_name`, when available.}
 #'   \item{`instances`}{Named list of expanded repeat-instance IDs by form, or
 #'     `NULL` for forms without requested repeating contexts.}
 #'   \item{`ignored_fields`}{Root field names skipped because of
@@ -309,6 +312,7 @@ find_missing <- function(
     vapply(form_reports, `[[`, character(1), "form_label"),
     forms
   )
+  event_labels <- .miss_combine_event_labels(form_reports)
   event_complete_checks <- .miss_build_event_complete_check_rows(
     validation_rows
   )
@@ -402,6 +406,7 @@ find_missing <- function(
     field_plan = .miss_bind_report_component(form_reports, "field_plan"),
     required_fields = required_fields,
     events = .miss_named_report_component(form_reports, "events"),
+    event_labels = event_labels,
     instances = .miss_named_report_component(form_reports, "instances"),
     ignored_fields = ignored_fields,
     ignored_ids = ignore_ids,
@@ -624,6 +629,7 @@ find_missing <- function(
     field_complete_failures = field_complete_failures,
     field_plan = field_plan,
     events = project$events %||% character(),
+    event_labels = project$event_labels,
     instances = instances,
     instances_defaulted = resolved_instances$defaulted,
     ignored_fields = ignore_roots,
@@ -852,6 +858,25 @@ find_missing <- function(
 
 .miss_named_report_component <- function(reports, component) {
   stats::setNames(lapply(reports, `[[`, component), names(reports))
+}
+
+.miss_combine_event_labels <- function(reports) {
+  labels <- character()
+  for (report in reports) {
+    report_labels <- report$event_labels %||% character()
+    if (length(report_labels) == 0) {
+      next
+    }
+
+    report_label_names <- names(report_labels) %||% rep("", length(report_labels))
+    keep <- !.miss_is_blank_vec(report_label_names) &
+      !.miss_is_blank_vec(report_labels)
+    report_labels <- report_labels[keep]
+    names(report_labels) <- report_label_names[keep]
+    labels <- c(labels, report_labels[!names(report_labels) %in% names(labels)])
+  }
+
+  labels
 }
 
 .miss_step_id <- function(form, validation_check) {

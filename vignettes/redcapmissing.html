@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 
 <html>
 
@@ -541,11 +541,11 @@ report$missing[, c(
   &quot;validation_check&quot;,
   &quot;field_name&quot;
 )]
-#&gt; # A tibble: 3 × 5
+#&gt; # A tibble: 3 Ã— 5
 #&gt;   record_id validation_level validation_check_type validation_check field_name
 #&gt;   &lt;chr&gt;     &lt;chr&gt;            &lt;chr&gt;                 &lt;chr&gt;            &lt;chr&gt;
 #&gt; 1 r1        event:form       detour                form-complete    &lt;NA&gt;
-#&gt; 2 r1        event:form       on-route              field-complete   conditional…
+#&gt; 2 r1        event:form       on-route              field-complete   conditionalâ€¦
 #&gt; 3 r1        event            detour                event-complete   &lt;NA&gt;</code></pre>
 <p>Record <code>r1</code> is branch-open for
 <code>conditional_note</code>, so the missing value is a
@@ -591,7 +591,7 @@ tidy(event_report)[
   ,
   c(&quot;validation_level&quot;, &quot;validation_check&quot;, &quot;redcap_event_name&quot;, &quot;assessed&quot;, &quot;failed&quot;)
 ]
-#&gt; # A tibble: 12 × 5
+#&gt; # A tibble: 12 Ã— 5
 #&gt;    validation_level validation_check  redcap_event_name assessed failed
 #&gt;    &lt;chr&gt;            &lt;chr&gt;             &lt;chr&gt;                &lt;dbl&gt;  &lt;dbl&gt;
 #&gt;  1 event:form       event-row-started event_1_arm_1            2      0
@@ -660,7 +660,7 @@ repeat_report$instance_row_started_failures[
   ,
   c(&quot;record_id&quot;, &quot;redcap_repeat_instance&quot;, &quot;validation_check&quot;)
 ]
-#&gt; # A tibble: 1 × 3
+#&gt; # A tibble: 1 Ã— 3
 #&gt;   record_id redcap_repeat_instance validation_check
 #&gt;   &lt;chr&gt;     &lt;chr&gt;                  &lt;chr&gt;
 #&gt; 1 r1        2                      instance-row-started</code></pre>
@@ -687,19 +687,20 @@ instance <code>1</code> and warns once.</p>
 </div>
 <div id="inspecting-results" class="section level2">
 <h2>Inspecting results</h2>
-<p><code>tidy(report)</code> returns a focused summary with canonical
-validation metadata:</p>
+<p><code>tidy(report)</code> returns a raw context-first summary with
+canonical validation metadata. Repeat context columns are shown only
+when the report contains repeat contexts:</p>
 <pre class="r"><code>tidy(report)
-#&gt; # A tibble: 5 × 13
-#&gt;   form            form_label            redcap_event_name redcap_repeat_instru…¹
+#&gt; # A tibble: 5 Ã— 13
+#&gt;   form            form_label            redcap_event_name redcap_repeat_instruâ€¦Â¹
 #&gt;   &lt;chr&gt;           &lt;chr&gt;                 &lt;chr&gt;             &lt;chr&gt;
 #&gt; 1 &quot;baseline_form&quot; &quot;baseline_form label&quot; &quot;&quot;                &quot;&quot;
 #&gt; 2 &quot;baseline_form&quot; &quot;baseline_form label&quot; &quot;&quot;                &quot;&quot;
 #&gt; 3 &quot;baseline_form&quot; &quot;baseline_form label&quot; &quot;&quot;                &quot;&quot;
 #&gt; 4 &quot;baseline_form&quot; &quot;baseline_form label&quot; &quot;&quot;                &quot;&quot;
 #&gt; 5 &quot;&quot;              &quot;&quot;                    &quot;&quot;                &quot;&quot;
-#&gt; # ℹ abbreviated name: ¹​redcap_repeat_instrument
-#&gt; # ℹ 9 more variables: redcap_repeat_instance &lt;chr&gt;, validation_level &lt;chr&gt;,
+#&gt; # â„¹ abbreviated name: Â¹â€‹redcap_repeat_instrument
+#&gt; # â„¹ 9 more variables: redcap_repeat_instance &lt;chr&gt;, validation_level &lt;chr&gt;,
 #&gt; #   validation_check &lt;chr&gt;, validation_check_type &lt;chr&gt;, assessed &lt;dbl&gt;,
 #&gt; #   passed &lt;dbl&gt;, failed &lt;dbl&gt;, pass_rate &lt;dbl&gt;, fail_rate &lt;dbl&gt;</code></pre>
 <p>For reporting workflows, optional formatting helpers are
@@ -707,10 +708,13 @@ available:</p>
 <pre class="r"><code>ft &lt;- flex(report)
 html &lt;- flex_html(ft)</code></pre>
 <p><code>flex()</code> displays the canonical checks with human-readable
-labels, while <code>tidy()</code> and the <code>pointblank</code> agent
-keep the canonical hyphenated <code>validation_check</code> values. The
-public <code>validation_level</code> values are <code>event:form</code>,
-<code>event:form:instance</code>, and <code>event</code>.</p>
+event, form, and repeat labels. Its <code>events</code> and
+<code>forms</code> arguments use raw REDCap values to filter rows before
+labels are applied. <code>tidy()</code> and the <code>pointblank</code>
+agent keep the canonical hyphenated <code>validation_check</code>
+values. The public <code>validation_level</code> values are
+<code>event:form</code>, <code>event:form:instance</code>, and
+<code>event</code>.</p>
 </div>
 <div id="citation-and-acknowledgement" class="section level2">
 <h2>Citation and acknowledgement</h2>
