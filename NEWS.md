@@ -1,3 +1,11 @@
+# redcapmissing 3.0.1
+
+## 2026-07-06
+
+- Simplified the README validation-flow diagram so the validation levels read
+  left to right and multiple event/form contexts visibly contribute to the
+  shared event-level detour summary.
+
 # redcapmissing 3.0.0
 
 ## 2026-07-06
