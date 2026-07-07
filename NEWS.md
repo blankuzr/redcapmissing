@@ -8,6 +8,9 @@
 - Standardized all `flex()` filters so `events`, `forms`, and
   `validation_check` validate against values present in `tidy(x)`, then apply
   by intersection.
+- Fixed REDCap branching logic parsing for compound field references across
+  `stringr` versions, including multi-reference same-row and event-qualified
+  logic.
 
 # redcapmissing 3.1.3
 
