@@ -352,6 +352,7 @@ For reporting workflows, optional formatting helpers are available:
 ```{r, eval = FALSE}
 ft <- flex(report)
 field_ft <- flex(report, validation_check = "field-complete")
+event_form_ft <- flex_event_forms(report)
 html <- flex_html(ft)
 ```
 
@@ -359,8 +360,10 @@ html <- flex_html(ft)
 repeat labels. Its `events`, `forms`, and `validation_check` arguments use raw
 values from `tidy(report)` to filter rows before labels are applied. `tidy()`
 and the `pointblank` agent keep the canonical hyphenated `validation_check`
-values. The public
-`validation_level` values are `event:form`, `event:form:instance`, and `event`.
+values. `flex_event_forms()` returns a reduced event/form table with total
+record N, event row-started N, form-complete counts, and field-complete failure
+counts nested under each event. The public `validation_level` values are
+`event:form`, `event:form:instance`, and `event`.
 
 ## Citation and acknowledgement
 

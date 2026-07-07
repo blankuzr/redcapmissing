@@ -38,7 +38,7 @@ Savannah Obregon, Shawn Garbett, and Benjamin Nutter.
 }
 \seealso{
 \code{\link[=find_missing]{find_missing()}}, \code{\link[=registry]{registry()}}, \code{\link[=tidy.redcapmissing]{tidy.redcapmissing()}}, \code{\link[=flex]{flex()}},
-\code{\link[=flex_html]{flex_html()}},
+\code{\link[=flex_event_forms]{flex_event_forms()}}, \code{\link[=flex_html]{flex_html()}},
 \code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}
 }
 \author{

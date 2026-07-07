@@ -14,5 +14,6 @@ A character scalar containing rendered HTML.
 }
 \description{
 \code{flex_html()} renders a \code{flextable} object, such as one returned by
-\code{\link[=flex]{flex()}}, to the HTML string used by email and report insertion workflows.
+\code{\link[=flex]{flex()}} or \code{\link[=flex_event_forms]{flex_event_forms()}}, to the HTML string used by email and
+report insertion workflows.
 }

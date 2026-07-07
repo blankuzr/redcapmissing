@@ -783,14 +783,18 @@ when the report contains repeat contexts:</p>
 available:</p>
 <pre class="r"><code>ft &lt;- flex(report)
 field_ft &lt;- flex(report, validation_check = &quot;field-complete&quot;)
+event_form_ft &lt;- flex_event_forms(report)
 html &lt;- flex_html(ft)</code></pre>
 <p><code>flex()</code> displays the canonical checks with human-readable
 event, form, and repeat labels. Its <code>events</code>,
 <code>forms</code>, and <code>validation_check</code> arguments use raw
 values from <code>tidy(report)</code> to filter rows before labels are
 applied. <code>tidy()</code> and the <code>pointblank</code> agent keep
-the canonical hyphenated <code>validation_check</code> values. The
-public <code>validation_level</code> values are <code>event:form</code>,
+the canonical hyphenated <code>validation_check</code> values.
+<code>flex_event_forms()</code> returns a reduced event/form table with
+total record N, event row-started N, form-complete counts, and
+field-complete failure counts nested under each event. The public
+<code>validation_level</code> values are <code>event:form</code>,
 <code>event:form:instance</code>, and <code>event</code>.</p>
 </div>
 <div id="citation-and-acknowledgement" class="section level2">

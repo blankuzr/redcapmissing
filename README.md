@@ -263,16 +263,19 @@ repeat contexts. `validation_level` is `event:form`,
 `on-route` or `detour`.
 
 Optional reporting helpers are available for formatted outputs.
-`flex(report)` requires `flextable` and `glue`;
-`flex_html(flex(report))` also requires `htmltools`. `flex(report)`
-displays labeled event, form, repeat context, validation-check, and
-pass/fail columns. Use raw values from `tidy(report)` in
-`flex(events = ...)`, `flex(forms = ...)`, and
-`flex(validation_check = ...)` to subset rows before display labels are
-applied:
+`flex(report)` and `flex_event_forms(report)` require `flextable` and
+`glue`; `flex_html()` also requires `htmltools`. `flex(report)` displays
+labeled event, form, repeat context, validation-check, and pass/fail
+columns. Use raw values from `tidy(report)` in `flex(events = ...)`,
+`flex(forms = ...)`, and `flex(validation_check = ...)` to subset rows
+before display labels are applied. `flex_event_forms(report)` returns a
+reduced event/form table with total record N, event row-started N,
+form-complete counts, and field-complete failure counts nested under
+each event:
 
 ``` r
 flex(report, validation_check = "field-complete")
+flex_event_forms(report)
 ```
 
 ## Events, records, and repeats
