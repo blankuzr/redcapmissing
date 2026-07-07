@@ -782,15 +782,16 @@ when the report contains repeat contexts:</p>
 <p>For reporting workflows, optional formatting helpers are
 available:</p>
 <pre class="r"><code>ft &lt;- flex(report)
+field_ft &lt;- flex(report, validation_check = &quot;field-complete&quot;)
 html &lt;- flex_html(ft)</code></pre>
 <p><code>flex()</code> displays the canonical checks with human-readable
-event, form, and repeat labels. Its <code>events</code> and
-<code>forms</code> arguments use raw REDCap values to filter rows before
-labels are applied. <code>tidy()</code> and the <code>pointblank</code>
-agent keep the canonical hyphenated <code>validation_check</code>
-values. The public <code>validation_level</code> values are
-<code>event:form</code>, <code>event:form:instance</code>, and
-<code>event</code>.</p>
+event, form, and repeat labels. Its <code>events</code>,
+<code>forms</code>, and <code>validation_check</code> arguments use raw
+values from <code>tidy(report)</code> to filter rows before labels are
+applied. <code>tidy()</code> and the <code>pointblank</code> agent keep
+the canonical hyphenated <code>validation_check</code> values. The
+public <code>validation_level</code> values are <code>event:form</code>,
+<code>event:form:instance</code>, and <code>event</code>.</p>
 </div>
 <div id="citation-and-acknowledgement" class="section level2">
 <h2>Citation and acknowledgement</h2>

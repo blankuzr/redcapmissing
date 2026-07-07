@@ -196,6 +196,91 @@ test_that("branch-open fields fail and branch-closed fields are not expected", {
   expect_false(any(
     report$field_complete_checks$record_id == "closed" &
       report$field_complete_checks$field_name == "conditional_note"
+    ))
+})
+
+test_that("compound same-row branching logic evaluates all field references", {
+  meta <- baseline_form_meta()
+  meta$branching_logic[meta$field_name == "conditional_note"] <-
+    "[branch_flag] = '1' and [required_note] <> ''"
+
+  records <- tibble::tibble(
+    record_id = c("open", "closed_flag", "closed_note"),
+    branch_flag = c("1", "0", "1"),
+    required_note = c("entered", "entered", ""),
+    optional_note = c("optional", "optional", "optional"),
+    checkbox_field___1 = c("1", "1", "1"),
+    checkbox_field___2 = c("0", "0", "0"),
+    checkbox_other = c("", "", ""),
+    conditional_note = c("", "", "")
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(meta),
+    forms = "baseline_form"
+  )
+  conditional_checks <- report$field_complete_checks[
+    report$field_complete_checks$field_name == "conditional_note",
+    ,
+    drop = FALSE
+  ]
+
+  expect_equal(conditional_checks$record_id, "open")
+  expect_false(conditional_checks$validation_passed)
+  expect_false(any(
+    report$field_complete_checks$record_id %in% c("closed_flag", "closed_note") &
+      report$field_complete_checks$field_name == "conditional_note"
+  ))
+})
+
+test_that("compound event-qualified branching logic evaluates all references", {
+  meta <- dplyr::bind_rows(
+    meta_row("record_id", "longitudinal_form", field_label = "Record ID", required = "y"),
+    meta_row("branch_flag", "longitudinal_form", field_type = "yesno", required = "y"),
+    meta_row("required_note", "longitudinal_form", required = "y"),
+    meta_row(
+      "event_conditional",
+      "longitudinal_form",
+      branching = "[screening_event][branch_flag] = '1' and [required_note] <> ''",
+      required = "y"
+    )
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1),
+    unique_event_name = c("screening_event", "baseline_event"),
+    form = c("longitudinal_form", "longitudinal_form")
+  )
+  records <- tibble::tibble(
+    record_id = c(
+      "open", "open",
+      "closed_event", "closed_event",
+      "closed_note", "closed_note"
+    ),
+    redcap_event_name = rep(c("screening_event", "baseline_event"), 3),
+    branch_flag = c("1", "1", "0", "1", "1", "1"),
+    required_note = c("screened", "entered", "screened", "entered", "screened", ""),
+    event_conditional = c("", "", "", "", "", "")
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(meta, mapping = mapping),
+    forms = "longitudinal_form",
+    events = "baseline_event"
+  )
+  conditional_checks <- report$field_complete_checks[
+    report$field_complete_checks$field_name == "event_conditional",
+    ,
+    drop = FALSE
+  ]
+
+  expect_equal(conditional_checks$record_id, "open")
+  expect_equal(conditional_checks$redcap_event_name, "baseline_event")
+  expect_false(conditional_checks$validation_passed)
+  expect_false(any(
+    report$field_complete_checks$record_id %in% c("closed_event", "closed_note") &
+      report$field_complete_checks$field_name == "event_conditional"
   ))
 })
 

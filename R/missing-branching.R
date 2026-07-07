@@ -87,30 +87,36 @@
   event_ref <- "\\[([^\\]]+)\\]\\[([^\\]]+)\\]"
   logic <- stringr::str_replace_all(logic, event_ref, function(x) {
     bits <- stringr::str_match(x, event_ref)
-    ref <- .miss_parse_ref(bits[[3]])
-    paste0(
-      ".v(",
-      .miss_quote(bits[[2]]),
-      ", ",
-      .miss_quote(ref$field),
-      ", ",
-      .miss_quote(ref$choice),
-      ")"
-    )
+    .miss_format_ref_calls(refs = bits[, 3], events = bits[, 2])
   })
 
   same_ref <- "\\[([^\\]]+)\\]"
   stringr::str_replace_all(logic, same_ref, function(x) {
     bits <- stringr::str_match(x, same_ref)
-    ref <- .miss_parse_ref(bits[[2]])
-    paste0(
-      ".v(NULL, ",
-      .miss_quote(ref$field),
-      ", ",
-      .miss_quote(ref$choice),
-      ")"
-    )
+    .miss_format_ref_calls(refs = bits[, 2])
   })
+}
+
+.miss_format_ref_calls <- function(refs, events = NULL) {
+  refs <- as.character(refs)
+  parsed <- lapply(refs, .miss_parse_ref)
+  fields <- vapply(
+    parsed,
+    function(ref) .miss_quote(ref$field),
+    character(1)
+  )
+  choices <- vapply(
+    parsed,
+    function(ref) .miss_quote(ref$choice),
+    character(1)
+  )
+  events <- if (is.null(events)) {
+    rep("NULL", length(refs))
+  } else {
+    vapply(as.character(events), .miss_quote, character(1))
+  }
+
+  paste0(".v(", events, ", ", fields, ", ", choices, ")")
 }
 
 .miss_parse_ref <- function(ref) {

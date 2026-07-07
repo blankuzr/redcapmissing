@@ -1,3 +1,17 @@
+# redcapmissing 3.2.0
+
+## 2026-07-06
+
+- Added a `validation_check` argument to `flex()` for filtering formatted
+  reports by raw validation-check values from `tidy()`, such as
+  `"field-complete"`.
+- Standardized all `flex()` filters so `events`, `forms`, and
+  `validation_check` validate against values present in `tidy(x)`, then apply
+  by intersection.
+- Fixed REDCap branching logic parsing for compound field references across
+  `stringr` versions, including multi-reference same-row and event-qualified
+  logic.
+
 # redcapmissing 3.1.3
 
 ## 2026-07-06
