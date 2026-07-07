@@ -389,16 +389,33 @@ test_that("failed event-row-started checks do not create blank-event downstream 
   expect_equal(nrow(report$form_complete_checks), 0)
   expect_equal(nrow(report$field_complete_checks), 0)
 
-  form_started <- report$agent$validation_set[
-    report$agent$validation_set$validation_check == "form-started",
+  validation_summary <- report$agent$validation_set
+  blank_event_summary <- validation_summary[
+    validation_summary$redcap_event_name == "",
     ,
     drop = FALSE
   ]
-  expect_equal(form_started$n, 0)
-  expect_equal(form_started$n_passed, 0)
+  expect_false(any(
+    blank_event_summary$validation_check %in% c("form-started", "field-complete")
+  ))
+  expect_false(any(tidy(report)$redcap_event_name == ""))
 
-  event_complete <- report$agent$validation_set[
-    report$agent$validation_set$validation_check == "event-complete",
+  form_started <- validation_summary[
+    validation_summary$validation_check == "form-started",
+    ,
+    drop = FALSE
+  ]
+  expect_equal(nrow(form_started), 0)
+
+  field_complete <- validation_summary[
+    validation_summary$validation_check == "field-complete",
+    ,
+    drop = FALSE
+  ]
+  expect_equal(nrow(field_complete), 0)
+
+  event_complete <- validation_summary[
+    validation_summary$validation_check == "event-complete",
     ,
     drop = FALSE
   ]
@@ -478,6 +495,56 @@ test_that("instance-row-started gates downstream repeat checks", {
       report$missing$redcap_event_name == "baseline_event" &
       report$missing$validation_check == "event-complete"
   ))
+})
+
+test_that("failed instance-row-started checks do not create blank-event downstream contexts", {
+  repeat_meta <- dplyr::bind_rows(
+    meta_row("record_id", "screen_form", field_label = "Record ID", required = "y"),
+    meta_row("screen_started", "screen_form", field_label = "Screen started", required = "y"),
+    meta_row("repeat_started", "repeat_form", field_label = "Repeat started", required = "y"),
+    meta_row("repeat_value", "repeat_form", field_label = "Repeat value", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1),
+    unique_event_name = c("baseline_event", "baseline_event"),
+    form = c("screen_form", "repeat_form")
+  )
+  repeat_instrument_event <- tibble::tibble(
+    event_name = "baseline_event",
+    form_name = "repeat_form",
+    custom_form_label = ""
+  )
+  records <- tibble::tibble(
+    record_id = c("r1", "r2"),
+    redcap_event_name = c("baseline_event", "baseline_event"),
+    redcap_repeat_instrument = c("", ""),
+    redcap_repeat_instance = c("", ""),
+    screen_started = c("yes", "yes"),
+    repeat_started = c("", ""),
+    repeat_value = c("", "")
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(
+      repeat_meta,
+      mapping = mapping,
+      repeat_instrument_event = repeat_instrument_event
+    ),
+    forms = "repeat_form",
+    instances = 2L
+  )
+  validation_summary <- report$agent$validation_set
+
+  expect_equal(nrow(report$form_started_checks), 0)
+  expect_equal(nrow(report$form_complete_checks), 0)
+  expect_equal(nrow(report$field_complete_checks), 0)
+  expect_false(any(validation_summary$redcap_event_name == ""))
+  expect_false(any(tidy(report)$redcap_event_name == ""))
+  expect_setequal(
+    validation_summary$validation_check,
+    c("instance-row-started", "event-complete")
+  )
 })
 
 test_that("mixed repeat and non-repeat forms activate row checks per context", {

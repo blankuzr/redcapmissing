@@ -697,10 +697,9 @@ find_missing <- function(
     check <- registry[row, , drop = FALSE]
     component <- paste0(check$component_stem, "_checks")
     rows <- form_report[[component]] %||% .miss_empty_expected()
-    keep_zero <- check$validation_check %in% c(
-      "event-row-started",
-      "form-started",
-      "field-complete"
+    keep_zero <- .miss_keep_zero_validation_step(
+      validation_check = check$validation_check,
+      form_report = form_report
     )
     if (nrow(rows) > 0 || isTRUE(keep_zero)) {
       agent <- .miss_add_validation_step(
@@ -714,6 +713,39 @@ find_missing <- function(
   }
 
   agent
+}
+
+.miss_keep_zero_validation_step <- function(validation_check, form_report) {
+  keep_zero_checks <- c(
+    "event-row-started",
+    "form-started",
+    "field-complete"
+  )
+  if (!validation_check %in% keep_zero_checks) {
+    return(FALSE)
+  }
+
+  if (
+    identical(validation_check, "event-row-started") &&
+      nrow(form_report$instance_row_started_checks) > 0
+  ) {
+    return(FALSE)
+  }
+
+  downstream_checks <- c("form-started", "field-complete")
+  if (
+    validation_check %in% downstream_checks &&
+      .miss_form_report_has_row_context_gates(form_report)
+  ) {
+    return(FALSE)
+  }
+
+  TRUE
+}
+
+.miss_form_report_has_row_context_gates <- function(form_report) {
+  nrow(form_report$event_row_started_checks) > 0 ||
+    nrow(form_report$instance_row_started_checks) > 0
 }
 
 .miss_add_report_validation_steps <- function(agent, validation_rows) {
