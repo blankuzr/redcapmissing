@@ -1,3 +1,11 @@
+# redcapmissing 3.2.2
+
+## 2026-07-07
+
+- Added `flex_event_forms()` for reduced event/form flextable reports with
+  total record N, event row-started N, form-complete counts, and
+  field-complete failure counts nested under each event.
+
 # redcapmissing 3.2.1
 
 ## 2026-07-07

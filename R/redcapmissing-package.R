@@ -17,7 +17,7 @@
 #' VUMC Biostatistics `vubiostat/redcapAPI` project.
 #'
 #' @seealso [find_missing()], [registry()], [tidy.redcapmissing()], [flex()],
-#'   [flex_html()],
+#'   [flex_event_forms()], [flex_html()],
 #'   [redcapAPI::redcapConnection()], [redcapAPI::exportRecordsTyped()]
 #' @references
 #' Nutter B, Garbett S, Obregon S, Obadia T, Lehr M, High B, Lane S,

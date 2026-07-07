@@ -2,7 +2,8 @@
 #'
 #' @description
 #' `flex_html()` renders a `flextable` object, such as one returned by
-#' [flex()], to the HTML string used by email and report insertion workflows.
+#' [flex()] or [flex_event_forms()], to the HTML string used by email and
+#' report insertion workflows.
 #'
 #' @param x A `flextable` object.
 #'
