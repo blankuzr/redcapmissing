@@ -1,3 +1,11 @@
+# redcapmissing 3.2.1
+
+## 2026-07-07
+
+- Fixed longitudinal validation summaries so downstream checks gated out by
+  missing event or repeat rows no longer appear as zero-denominator rows with
+  blank `redcap_event_name`.
+
 # redcapmissing 3.2.0
 
 ## 2026-07-06
