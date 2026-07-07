@@ -1,3 +1,16 @@
+# redcapmissing 3.2.5
+
+## 2026-07-07
+
+- Fixed `flex_event_forms()` event headers so event-row-started counts are
+  derived from the same tidy validation summaries shown by `tidy()` and
+  `flex()`.
+- Updated `flex_event_forms()` output to remove the body `Total N` row, show
+  total N in the N column label, display event and repeat N as
+  passed/assessed, and rename field-complete failures to `Fields Missing`.
+- Added an informative error when duplicate `event-row-started` summaries for
+  the same event disagree on passed or assessed counts.
+
 # redcapmissing 3.2.4
 
 ## 2026-07-07

@@ -43,8 +43,9 @@ for display, and formats passed/failed counts with percentages. The optional
 present in \code{tidy(x)} before labels are applied.
 
 Use \code{flex_event_forms()} when you want the reduced event/form report with
-form rows nested under event header rows instead of the full validation-check
-summary.
+total record N in the column label, event row-started passed/assessed counts,
+and form rows nested under event header rows instead of the full
+validation-check summary.
 }
 \examples{
 \dontrun{
