@@ -265,7 +265,9 @@ from `tidy(report)` in `flex(events = ...)`, `flex(forms = ...)`, and
 `flex(validation_check = ...)` to subset rows before display labels are
 applied. `flex_event_forms(report)` returns a reduced event/form table with
 total record N, event row-started N, form-complete counts, and field-complete
-failure counts nested under each event:
+failure counts nested under each event. The table uses the package's
+normalized internal record key for counts, so REDCap projects whose record ID
+field has another name still report the correct N values:
 
 ```{r, eval = FALSE}
 flex(report, validation_check = "field-complete")

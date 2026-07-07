@@ -35,6 +35,26 @@ and \code{glue} packages.
 \code{flex()} formats the tidy validation summary from a REDCap missingness
 report as a \code{flextable} for reporting workflows.
 }
+\details{
+\code{flex()} is a display wrapper around \code{\link[=tidy.redcapmissing]{tidy.redcapmissing()}}. It preserves
+one row per validation summary context, applies REDCap event and form labels
+for display, and formats passed/failed counts with percentages. The optional
+\code{events}, \code{forms}, and \code{validation_check} arguments filter by raw values
+present in \code{tidy(x)} before labels are applied.
+
+Use \code{flex_event_forms()} when you want the reduced event/form report with
+form rows nested under event header rows instead of the full validation-check
+summary.
+}
+\examples{
+\dontshow{if (requireNamespace("flextable", quietly = TRUE) && requireNamespace("glue", quietly = TRUE)) withAutoprint(\{ # examplesIf}
+# After building a report with find_missing():
+# flex(report)
+# flex(report, validation_check = "field-complete")
+# flex(report, events = "baseline_event", forms = "baseline_form")
+\dontshow{\}) # examplesIf}
+}
 \seealso{
-\code{\link[=find_missing]{find_missing()}}, \code{\link[=tidy.redcapmissing]{tidy.redcapmissing()}}, \code{\link[=flex_html]{flex_html()}}
+\code{\link[=find_missing]{find_missing()}}, \code{\link[=tidy.redcapmissing]{tidy.redcapmissing()}}, \code{\link[=flex_event_forms]{flex_event_forms()}},
+\code{\link[=flex_html]{flex_html()}}
 }

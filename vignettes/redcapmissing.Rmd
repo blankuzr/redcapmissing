@@ -362,7 +362,9 @@ values from `tidy(report)` to filter rows before labels are applied. `tidy()`
 and the `pointblank` agent keep the canonical hyphenated `validation_check`
 values. `flex_event_forms()` returns a reduced event/form table with total
 record N, event row-started N, form-complete counts, and field-complete failure
-counts nested under each event. The public `validation_level` values are
+counts nested under each event. Counts use the package's normalized internal
+record key, so projects whose REDCap record ID field has another name still
+produce populated event and form rows. The public `validation_level` values are
 `event:form`, `event:form:instance`, and `event`.
 
 ## Citation and acknowledgement

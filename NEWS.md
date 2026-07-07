@@ -1,3 +1,13 @@
+# redcapmissing 3.2.3
+
+## 2026-07-07
+
+- Fixed `flex_event_forms()` so reports whose REDCap record ID field is not
+  named `record_id` still populate total N, event N, repeat-instance N, form
+  rows, and rendered HTML output.
+- Expanded `flex()` and `flex_event_forms()` help pages with clearer reporting
+  semantics, filter behavior, and generated-output examples.
+
 # redcapmissing 3.2.2
 
 ## 2026-07-07

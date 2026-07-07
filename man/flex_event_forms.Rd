@@ -25,6 +25,25 @@ function requires the optional \code{flextable} and \code{glue} packages.
 event/form \code{flextable}. It shows total record N, event row-started N, and
 form-level form-complete and field-complete failure summaries.
 }
+\details{
+The table is a reporting reduction of \code{\link[=tidy.redcapmissing]{tidy.redcapmissing()}} plus report
+metadata. The top \verb{Total N} row counts unique eligible records represented
+in the report's validation rows. Event header rows count unique records that
+passed \code{event-row-started} for that event; non-longitudinal reports use a
+synthetic \verb{Single event} row with the same N as \verb{Total N}. Form rows show
+\code{form-complete} passed counts as a percentage of the event or repeat-instance
+row N, and \code{field-complete} failed field-cell counts as a percentage of
+field cells assessed for that form context.
+
+\code{event-complete} rows are not shown. \code{form-started} acts only as an upstream
+gate for downstream assessment and is not shown as a metric row.
+}
+\examples{
+\dontshow{if (requireNamespace("flextable", quietly = TRUE) && requireNamespace("glue", quietly = TRUE)) withAutoprint(\{ # examplesIf}
+# After building a report with find_missing():
+# flex_event_forms(report)
+\dontshow{\}) # examplesIf}
+}
 \seealso{
 \code{\link[=find_missing]{find_missing()}}, \code{\link[=tidy.redcapmissing]{tidy.redcapmissing()}}, \code{\link[=flex]{flex()}}, \code{\link[=flex_html]{flex_html()}}
 }
