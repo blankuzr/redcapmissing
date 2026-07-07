@@ -12,8 +12,9 @@
 #' present in `tidy(x)` before labels are applied.
 #'
 #' Use `flex_event_forms()` when you want the reduced event/form report with
-#' form rows nested under event header rows instead of the full validation-check
-#' summary.
+#' total record N in the column label, event row-started passed/assessed counts,
+#' and form rows nested under event header rows instead of the full
+#' validation-check summary.
 #'
 #' @param x A `redcapmissing` object created by [find_missing()].
 #' @param ... Additional arguments passed to methods.
