@@ -627,9 +627,15 @@ record/event failures are also visible in the event-level summary.</p>
 <h2>Event-specific record eligibility</h2>
 <p>Use <code>records</code> when records become eligible for validation
 on different REDCap events at different times. The argument is a named
-list keyed by raw <code>redcap_event_name</code>; non-empty entries
-override the record IDs assessed on that event, while omitted or empty
-events use the default data-derived denominator.</p>
+list keyed by raw <code>redcap_event_name</code>. Each non-empty entry
+limits that event to the listed record IDs. Events not named in
+<code>records</code> are still checked when the requested form is
+offered on that event: every applicable non-ignored record in
+<code>data</code> is considered, and records with no exported row for
+that event fail <code>event-row-started</code> before downstream form or
+field checks. Empty entries behave like omitted events. To remove an
+event from assessment entirely, exclude it with <code>events</code>
+rather than omitting it from <code>records</code>.</p>
 <pre class="r"><code>staged_metadata &lt;- dplyr::bind_rows(
   meta_row(&quot;record_id&quot;, &quot;demographics&quot;, required = &quot;y&quot;),
   meta_row(&quot;demographics_started&quot;, &quot;demographics&quot;, required = &quot;y&quot;),
@@ -689,6 +695,12 @@ staged_summary[
 <code>event_b</code>, but not on <code>event_c</code>. Record
 <code>record_b</code> is assessed on <code>event_c</code>, where its
 blank surgery value fails downstream field completeness.</p>
+<p>If another requested event offered <code>demographics</code> and was
+not named in <code>records</code>, the <code>records</code> argument
+would not limit that event. The package would consider every applicable
+non-ignored record in <code>data</code> for that event, then use
+<code>event-row-started</code> to decide whether each record actually
+has an event row.</p>
 </div>
 <div id="repeat-expectations" class="section level2">
 <h2>Repeat expectations</h2>

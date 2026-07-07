@@ -46,17 +46,20 @@ some events and repeating on others, \code{events} also determines whether
 repeat-instance logic is activated. Defaults to \code{NULL}.}
 
 \item{records}{Named list of REDCap record ID vectors by raw
-\code{redcap_event_name}, or \code{NULL}. Non-empty entries override which record IDs
-are eligible for assessment on that event; events omitted from the list use
-the default data-derived record set. Empty or blank-only entries are
-ignored. Supplied IDs are normalized to character values and are not
-checked through a live REDCap record export. IDs not present in \code{data} are
-allowed and can create upstream row-started failures. When both \code{events}
-and \code{records} are supplied, \code{events} selects the form-event scope first and
-\code{records} narrows record eligibility inside those events. For repeating
-contexts, event-level eligibility applies before \code{instances} expands the
-expected repeat-instance IDs. Defaults to \code{NULL}, which preserves the
-current all-record behavior.}
+\code{redcap_event_name}, or \code{NULL}. Use it to restrict selected events to a
+specific set of record IDs. Events not named in \code{records} are not
+restricted by this argument: every applicable non-ignored record in \code{data}
+is considered for those events. A record with no exported row for an event
+fails \code{event-row-started} and is not assessed by downstream form or field
+checks for that event. Empty or blank-only entries are ignored and behave
+like omitted events. Supplied IDs are normalized to character values and
+are not checked through a live REDCap record export. IDs not present in
+\code{data} are allowed and can create upstream row-started failures. When both
+\code{events} and \code{records} are supplied, \code{events} selects the form-event scope
+first and \code{records} narrows record eligibility inside those events. For
+repeating contexts, event-level eligibility applies before \code{instances}
+expands the expected repeat-instance IDs. Defaults to \code{NULL}, which means
+\code{records} does not restrict any event.}
 
 \item{required_fields}{Logical scalar. When \code{TRUE}, only fields marked as
 required in the REDCap metadata \code{required_field} column are assessed. When
@@ -119,8 +122,8 @@ by form, or \code{character(0)} for forms where no event restriction applied.}
 \item{\code{event_labels}}{Named REDCap event labels from event metadata, keyed
 by raw \code{redcap_event_name}, when available.}
 \item{\code{eligible_records}}{Named list of active event-level record ID
-overrides used for assessment. Events omitted from this list used the
-default data-derived record set.}
+restrictions used for assessment. Events omitted from this list were not
+restricted by \code{records}.}
 \item{\code{instances}}{Named list of expanded repeat-instance IDs by form, or
 \code{NULL} for forms without requested repeating contexts.}
 \item{\code{ignored_fields}}{Root field names skipped because of

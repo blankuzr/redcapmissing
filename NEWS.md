@@ -1,3 +1,11 @@
+# redcapmissing 3.2.4
+
+## 2026-07-07
+
+- Clarified `find_missing(records = ...)` documentation so omitted events are
+  described as still checked unless excluded with `events`, with
+  `event-row-started` determining whether each record has an exported event row.
+
 # redcapmissing 3.2.3
 
 ## 2026-07-07

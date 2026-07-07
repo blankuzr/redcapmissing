@@ -217,8 +217,13 @@ the event-level summary.
 
 Use `records` when records become eligible for validation on different REDCap
 events at different times. The argument is a named list keyed by raw
-`redcap_event_name`; non-empty entries override the record IDs assessed on that
-event, while omitted or empty events use the default data-derived denominator.
+`redcap_event_name`. Each non-empty entry limits that event to the listed
+record IDs. Events not named in `records` are still checked when the requested
+form is offered on that event: every applicable non-ignored record in `data` is
+considered, and records with no exported row for that event fail
+`event-row-started` before downstream form or field checks. Empty entries behave
+like omitted events. To remove an event from assessment entirely, exclude it
+with `events` rather than omitting it from `records`.
 
 ```{r}
 staged_metadata <- dplyr::bind_rows(
@@ -267,6 +272,11 @@ staged_summary[
 Record `record_a` is assessed for `surgery` on `event_b`, but not on
 `event_c`. Record `record_b` is assessed on `event_c`, where its blank surgery
 value fails downstream field completeness.
+
+If another requested event offered `demographics` and was not named in
+`records`, the `records` argument would not limit that event. The package would
+consider every applicable non-ignored record in `data` for that event, then use
+`event-row-started` to decide whether each record actually has an event row.
 
 ## Repeat expectations
 
