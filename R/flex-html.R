@@ -12,7 +12,11 @@
 #' @export
 flex_html <- function(x) {
   if (!inherits(x, "flextable")) {
-    stop("`x` must be a `flextable` object created by `flex()`.", call. = FALSE)
+    stop(
+      "`x` must be a `flextable` object created by `flex()` or ",
+      "`flex_event_forms()`.",
+      call. = FALSE
+    )
   }
   .redcapmissing_check_packages(c("flextable", "htmltools"), "flex_html()")
 

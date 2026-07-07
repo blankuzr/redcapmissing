@@ -4,6 +4,17 @@
 #' `flex()` formats the tidy validation summary from a REDCap missingness
 #' report as a `flextable` for reporting workflows.
 #'
+#' @details
+#' `flex()` is a display wrapper around [tidy.redcapmissing()]. It preserves
+#' one row per validation summary context, applies REDCap event and form labels
+#' for display, and formats passed/failed counts with percentages. The optional
+#' `events`, `forms`, and `validation_check` arguments filter by raw values
+#' present in `tidy(x)` before labels are applied.
+#'
+#' Use `flex_event_forms()` when you want the reduced event/form report with
+#' form rows nested under event header rows instead of the full validation-check
+#' summary.
+#'
 #' @param x A `redcapmissing` object created by [find_missing()].
 #' @param ... Additional arguments passed to methods.
 #'
@@ -13,7 +24,22 @@
 #'   contain repeat context. This function requires the optional `flextable`
 #'   and `glue` packages.
 #'
-#' @seealso [find_missing()], [tidy.redcapmissing()], [flex_html()]
+#' @examples
+#' \dontrun{
+#' records <- redcapAPI::exportRecordsTyped(rcon)
+#' report <- find_missing(
+#'   data = records,
+#'   rcon = rcon,
+#'   forms = c("baseline_form", "followup_form")
+#' )
+#'
+#' flex(report)
+#' flex(report, validation_check = "field-complete")
+#' flex(report, events = "baseline_event", forms = "baseline_form")
+#' }
+#'
+#' @seealso [find_missing()], [tidy.redcapmissing()], [flex_event_forms()],
+#'   [flex_html()]
 #'
 #' @export
 flex <- function(x, ...) {

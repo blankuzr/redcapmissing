@@ -271,7 +271,8 @@ columns. Use raw values from `tidy(report)` in `flex(events = ...)`,
 before display labels are applied. `flex_event_forms(report)` returns a
 reduced event/form table with total record N, event row-started N,
 form-complete counts, and field-complete failure counts nested under
-each event:
+each event. Projects whose REDCap record ID field has another name still
+report the correct N values:
 
 ``` r
 flex(report, validation_check = "field-complete")
