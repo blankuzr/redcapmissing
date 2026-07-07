@@ -170,7 +170,7 @@ test_that("flex labels forms in multi-form summaries", {
   )
 })
 
-test_that("flex filters by raw events and forms before applying labels", {
+test_that("flex filters by raw events, forms, and validation checks before applying labels", {
   skip_flex_packages()
 
   report <- flex_event_report()
@@ -183,19 +183,38 @@ test_that("flex filters by raw events and forms before applying labels", {
   expect_false(any(form_flex$body$dataset$`Validation Check` == "Event complete"))
   expect_setequal(form_flex$body$dataset$Form, "status_form label")
 
+  check_flex <- flex(report, validation_check = "field-complete")
+  expect_setequal(check_flex$body$dataset$`Validation Check`, "Field complete")
+  expect_equal(
+    nrow(check_flex$body$dataset),
+    sum(tidy(report)$validation_check == "field-complete")
+  )
+
+  multi_check_flex <- flex(
+    report,
+    validation_check = c("event-row-started", "event-complete")
+  )
+  expect_setequal(
+    multi_check_flex$body$dataset$`Validation Check`,
+    c("Event row started", "Event complete")
+  )
+
   intersect_flex <- flex(
     report,
     events = "event_2_arm_1",
-    forms = "status_form"
+    forms = "status_form",
+    validation_check = "field-complete"
   )
   expect_setequal(intersect_flex$body$dataset$Event, "Follow-up")
   expect_setequal(intersect_flex$body$dataset$Form, "status_form label")
+  expect_setequal(intersect_flex$body$dataset$`Validation Check`, "Field complete")
 })
 
 test_that("flex errors on invalid filters and empty intersections", {
   skip_flex_packages()
 
   report <- flex_event_report()
+  base_report <- flex_baseline_report()
 
   expect_error(
     flex(report, forms = "unknown_form"),
@@ -208,6 +227,29 @@ test_that("flex errors on invalid filters and empty intersections", {
   expect_error(
     flex(report, forms = character()),
     "at least one non-blank"
+  )
+  expect_error(
+    flex(report, validation_check = 1),
+    "`validation_check` must be a character vector"
+  )
+  expect_error(
+    flex(report, validation_check = character()),
+    "at least one non-blank"
+  )
+  expect_error(
+    flex(report, validation_check = "unknown-check"),
+    "Unknown validation check"
+  )
+  expect_error(
+    flex(report, validation_check = "instance-row-started"),
+    "Unknown validation check"
+  )
+
+  inconsistent_report <- base_report
+  inconsistent_report$forms <- "not_in_tidy"
+  expect_error(
+    flex(inconsistent_report, forms = "not_in_tidy"),
+    "Unknown form"
   )
 
   metadata <- dplyr::bind_rows(
@@ -233,7 +275,12 @@ test_that("flex errors on invalid filters and empty intersections", {
   )
 
   expect_error(
-    flex(split_event_report, events = "followup_event", forms = "alpha_form"),
+    flex(
+      split_event_report,
+      events = "followup_event",
+      forms = "alpha_form",
+      validation_check = "field-complete"
+    ),
     "produced no validation rows"
   )
 })
@@ -251,6 +298,14 @@ test_that("flex repeat columns follow the filtered rows", {
   regular_event_flex <- flex(report, events = "regular_a_arm_1")
   expect_false("Repeat Instrument" %in% names(regular_event_flex$body$dataset))
   expect_false("Repeat Instance" %in% names(regular_event_flex$body$dataset))
+
+  repeat_check_flex <- flex(report, validation_check = "instance-row-started")
+  expect_true("Repeat Instrument" %in% names(repeat_check_flex$body$dataset))
+  expect_true("Repeat Instance" %in% names(repeat_check_flex$body$dataset))
+
+  nonrepeat_check_flex <- flex(report, validation_check = "event-row-started")
+  expect_false("Repeat Instrument" %in% names(nonrepeat_check_flex$body$dataset))
+  expect_false("Repeat Instance" %in% names(nonrepeat_check_flex$body$dataset))
 })
 
 test_that("flex no longer accepts summary objects", {

@@ -351,13 +351,15 @@ For reporting workflows, optional formatting helpers are available:
 
 ```{r, eval = FALSE}
 ft <- flex(report)
+field_ft <- flex(report, validation_check = "field-complete")
 html <- flex_html(ft)
 ```
 
 `flex()` displays the canonical checks with human-readable event, form, and
-repeat labels. Its `events` and `forms` arguments use raw REDCap values to
-filter rows before labels are applied. `tidy()` and the `pointblank` agent keep
-the canonical hyphenated `validation_check` values. The public
+repeat labels. Its `events`, `forms`, and `validation_check` arguments use raw
+values from `tidy(report)` to filter rows before labels are applied. `tidy()`
+and the `pointblank` agent keep the canonical hyphenated `validation_check`
+values. The public
 `validation_level` values are `event:form`, `event:form:instance`, and `event`.
 
 ## Citation and acknowledgement

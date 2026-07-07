@@ -25,18 +25,27 @@ flex <- function(x, ...) {
 #'   values. When supplied, `flex()` returns only matching event rows.
 #' @param forms Optional character vector of raw REDCap form/instrument names.
 #'   When supplied, `flex()` returns only matching form rows.
+#' @param validation_check Optional character vector of raw validation-check
+#'   values from [tidy.redcapmissing()], such as `"field-complete"`. When
+#'   supplied, `flex()` returns only matching validation-check rows.
 #' @param ... Unused.
 #' @export
-flex.redcapmissing <- function(x, events = NULL, forms = NULL, ...) {
+flex.redcapmissing <- function(
+  x,
+  events = NULL,
+  forms = NULL,
+  validation_check = NULL,
+  ...
+) {
   .redcapmissing_check_report(x)
   .redcapmissing_check_packages(c("flextable", "glue"), "flex()")
 
   validation_set <- generics::tidy(x)
   validation_set <- .redcapmissing_flex_filter_validation_set(
     validation_set = validation_set,
-    x = x,
     events = events,
-    forms = forms
+    forms = forms,
+    validation_check = validation_check
   )
   flex_data <- .redcapmissing_flex_format_validation_set(
     validation_set = validation_set,
@@ -55,9 +64,9 @@ flex.redcapmissing <- function(x, events = NULL, forms = NULL, ...) {
 
 .redcapmissing_flex_filter_validation_set <- function(
   validation_set,
-  x,
   events,
-  forms
+  forms,
+  validation_check
 ) {
   events <- .redcapmissing_flex_resolve_filter_values(
     values = events,
@@ -69,9 +78,33 @@ flex.redcapmissing <- function(x, events = NULL, forms = NULL, ...) {
     arg = "forms",
     value_label = "raw REDCap form name"
   )
+  validation_check <- .redcapmissing_flex_resolve_filter_values(
+    values = validation_check,
+    arg = "validation_check",
+    value_label = "raw validation check value"
+  )
 
-  .redcapmissing_flex_check_forms(forms = forms, x = x)
-  .redcapmissing_flex_check_events(events = events, validation_set = validation_set)
+  .redcapmissing_flex_check_filter_values(
+    values = events,
+    validation_set = validation_set,
+    arg = "events",
+    column = "redcap_event_name",
+    unknown_label = "event"
+  )
+  .redcapmissing_flex_check_filter_values(
+    values = forms,
+    validation_set = validation_set,
+    arg = "forms",
+    column = "form",
+    unknown_label = "form"
+  )
+  .redcapmissing_flex_check_filter_values(
+    values = validation_check,
+    validation_set = validation_set,
+    arg = "validation_check",
+    column = "validation_check",
+    unknown_label = "validation check"
+  )
 
   keep <- rep(TRUE, nrow(validation_set))
   if (!is.null(forms)) {
@@ -80,11 +113,21 @@ flex.redcapmissing <- function(x, events = NULL, forms = NULL, ...) {
   if (!is.null(events)) {
     keep <- keep & validation_set$redcap_event_name %in% events
   }
+  if (!is.null(validation_check)) {
+    keep <- keep & validation_set$validation_check %in% validation_check
+  }
 
   out <- validation_set[keep, , drop = FALSE]
-  if ((!is.null(events) || !is.null(forms)) && nrow(out) == 0) {
+  active_filters <- .redcapmissing_flex_active_filter_args(
+    events = events,
+    forms = forms,
+    validation_check = validation_check
+  )
+  if (length(active_filters) > 0 && nrow(out) == 0) {
     stop(
-      "The supplied `events` and `forms` filters produced no validation rows.",
+      "The supplied ",
+      paste(active_filters, collapse = ", "),
+      " filter(s) produced no validation rows.",
       call. = FALSE
     )
   }
@@ -120,44 +163,48 @@ flex.redcapmissing <- function(x, events = NULL, forms = NULL, ...) {
   values
 }
 
-.redcapmissing_flex_check_forms <- function(forms, x) {
-  if (is.null(forms)) {
-    return(invisible(forms))
+.redcapmissing_flex_check_filter_values <- function(
+  values,
+  validation_set,
+  arg,
+  column,
+  unknown_label
+) {
+  if (is.null(values)) {
+    return(invisible(values))
   }
 
-  valid_forms <- unique(.miss_chr_vec(x$forms %||% character()))
-  valid_forms <- valid_forms[!.miss_is_blank_vec(valid_forms)]
-  unknown_forms <- setdiff(forms, valid_forms)
-  if (length(unknown_forms) > 0) {
+  valid_values <- unique(.miss_chr_vec(validation_set[[column]]))
+  valid_values <- valid_values[!.miss_is_blank_vec(valid_values)]
+  unknown_values <- setdiff(values, valid_values)
+  if (length(unknown_values) > 0) {
     stop(
-      "`forms` must match form(s) in `x`. Unknown form(s): ",
-      paste(unknown_forms, collapse = ", "),
+      "`",
+      arg,
+      "` must match ",
+      unknown_label,
+      "(s) in `x`. Unknown ",
+      unknown_label,
+      "(s): ",
+      paste(unknown_values, collapse = ", "),
       ".",
       call. = FALSE
     )
   }
 
-  invisible(forms)
+  invisible(values)
 }
 
-.redcapmissing_flex_check_events <- function(events, validation_set) {
-  if (is.null(events)) {
-    return(invisible(events))
-  }
-
-  valid_events <- unique(.miss_chr_vec(validation_set$redcap_event_name))
-  valid_events <- valid_events[!.miss_is_blank_vec(valid_events)]
-  unknown_events <- setdiff(events, valid_events)
-  if (length(unknown_events) > 0) {
-    stop(
-      "`events` must match event(s) in `x`. Unknown event(s): ",
-      paste(unknown_events, collapse = ", "),
-      ".",
-      call. = FALSE
-    )
-  }
-
-  invisible(events)
+.redcapmissing_flex_active_filter_args <- function(
+  events,
+  forms,
+  validation_check
+) {
+  c(
+    if (!is.null(events)) "`events`",
+    if (!is.null(forms)) "`forms`",
+    if (!is.null(validation_check)) "`validation_check`"
+  )
 }
 
 .redcapmissing_flex_format_validation_set <- function(validation_set, x) {

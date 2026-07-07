@@ -266,8 +266,14 @@ Optional reporting helpers are available for formatted outputs.
 `flex(report)` requires `flextable` and `glue`;
 `flex_html(flex(report))` also requires `htmltools`. `flex(report)`
 displays labeled event, form, repeat context, validation-check, and
-pass/fail columns. Use raw REDCap values in `flex(events = ...)` and
-`flex(forms = ...)` to subset rows before display labels are applied.
+pass/fail columns. Use raw values from `tidy(report)` in
+`flex(events = ...)`, `flex(forms = ...)`, and
+`flex(validation_check = ...)` to subset rows before display labels are
+applied:
+
+``` r
+flex(report, validation_check = "field-complete")
+```
 
 ## Events, records, and repeats
 

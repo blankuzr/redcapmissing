@@ -7,7 +7,7 @@
 \usage{
 flex(x, ...)
 
-\method{flex}{redcapmissing}(x, events = NULL, forms = NULL, ...)
+\method{flex}{redcapmissing}(x, events = NULL, forms = NULL, validation_check = NULL, ...)
 }
 \arguments{
 \item{x}{A \code{redcapmissing} object created by \code{\link[=find_missing]{find_missing()}}.}
@@ -19,6 +19,10 @@ values. When supplied, \code{flex()} returns only matching event rows.}
 
 \item{forms}{Optional character vector of raw REDCap form/instrument names.
 When supplied, \code{flex()} returns only matching form rows.}
+
+\item{validation_check}{Optional character vector of raw validation-check
+values from \code{\link[=tidy.redcapmissing]{tidy.redcapmissing()}}, such as \code{"field-complete"}. When
+supplied, \code{flex()} returns only matching validation-check rows.}
 }
 \value{
 A \code{flextable} object with labeled event/form context,
