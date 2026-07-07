@@ -6,7 +6,7 @@
   named `record_id` still populate total N, event N, repeat-instance N, form
   rows, and rendered HTML output.
 - Expanded `flex()` and `flex_event_forms()` help pages with clearer reporting
-  semantics, filter behavior, and generated-output examples.
+  semantics, filter behavior, and workflow examples.
 
 # redcapmissing 3.2.2
 

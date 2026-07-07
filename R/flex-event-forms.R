@@ -26,9 +26,18 @@
 #'   columns are included only when the report contains repeat context. This
 #'   function requires the optional `flextable` and `glue` packages.
 #'
-#' @examplesIf requireNamespace("flextable", quietly = TRUE) && requireNamespace("glue", quietly = TRUE)
-#' # After building a report with find_missing():
-#' # flex_event_forms(report)
+#' @examples
+#' \dontrun{
+#' records <- redcapAPI::exportRecordsTyped(rcon)
+#' report <- find_missing(
+#'   data = records,
+#'   rcon = rcon,
+#'   forms = c("status_form", "survey_form")
+#' )
+#'
+#' event_form_table <- flex_event_forms(report)
+#' flex_html(event_form_table)
+#' }
 #'
 #' @seealso [find_missing()], [tidy.redcapmissing()], [flex()], [flex_html()]
 #'

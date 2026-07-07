@@ -47,12 +47,19 @@ form rows nested under event header rows instead of the full validation-check
 summary.
 }
 \examples{
-\dontshow{if (requireNamespace("flextable", quietly = TRUE) && requireNamespace("glue", quietly = TRUE)) withAutoprint(\{ # examplesIf}
-# After building a report with find_missing():
-# flex(report)
-# flex(report, validation_check = "field-complete")
-# flex(report, events = "baseline_event", forms = "baseline_form")
-\dontshow{\}) # examplesIf}
+\dontrun{
+records <- redcapAPI::exportRecordsTyped(rcon)
+report <- find_missing(
+  data = records,
+  rcon = rcon,
+  forms = c("baseline_form", "followup_form")
+)
+
+flex(report)
+flex(report, validation_check = "field-complete")
+flex(report, events = "baseline_event", forms = "baseline_form")
+}
+
 }
 \seealso{
 \code{\link[=find_missing]{find_missing()}}, \code{\link[=tidy.redcapmissing]{tidy.redcapmissing()}}, \code{\link[=flex_event_forms]{flex_event_forms()}},

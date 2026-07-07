@@ -39,10 +39,18 @@ field cells assessed for that form context.
 gate for downstream assessment and is not shown as a metric row.
 }
 \examples{
-\dontshow{if (requireNamespace("flextable", quietly = TRUE) && requireNamespace("glue", quietly = TRUE)) withAutoprint(\{ # examplesIf}
-# After building a report with find_missing():
-# flex_event_forms(report)
-\dontshow{\}) # examplesIf}
+\dontrun{
+records <- redcapAPI::exportRecordsTyped(rcon)
+report <- find_missing(
+  data = records,
+  rcon = rcon,
+  forms = c("status_form", "survey_form")
+)
+
+event_form_table <- flex_event_forms(report)
+flex_html(event_form_table)
+}
+
 }
 \seealso{
 \code{\link[=find_missing]{find_missing()}}, \code{\link[=tidy.redcapmissing]{tidy.redcapmissing()}}, \code{\link[=flex]{flex()}}, \code{\link[=flex_html]{flex_html()}}
