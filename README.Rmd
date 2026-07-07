@@ -275,15 +275,19 @@ flex_event_forms(report)
 
 ## Events, records, and repeats
 
-Use `events` to restrict multi-event forms to selected REDCap events. Use
-`records` to restrict which record IDs are eligible for assessment on specific
-events while leaving omitted events on the default data-derived denominator.
-Use `instances` to declare expected repeat instances when REDCap would otherwise
+Use `events` to keep a multi-event form on only selected REDCap events. Use
+`records` when only certain record IDs should be checked on certain events. Use
+`instances` to declare expected repeat instances when REDCap would otherwise
 omit nonexistent repeat rows from the export.
 
-`records` is a named list keyed by raw `redcap_event_name`. Non-empty entries
-override the record IDs assessed on that event. Empty or omitted events fall
-back to the existing behavior:
+`records` is a named list keyed by raw `redcap_event_name`. Each non-empty
+entry limits that event to the listed record IDs. Events not named in `records`
+are still checked when the requested form is offered on that event: every
+applicable non-ignored record in `data` is considered, and records with no
+exported row for that event fail `event-row-started` before downstream form or
+field checks. Empty `records` entries behave like omitted events. To remove an
+event from assessment entirely, exclude it with `events` rather than omitting it
+from `records`.
 
 ```{r, eval = FALSE}
 staged_report <- find_missing(
@@ -297,6 +301,11 @@ staged_report <- find_missing(
   )
 )
 ```
+
+With this call, `event_a_arm_1` and `event_b_arm_1` are limited to `record_a`
+and `record_b`, and `event_c_arm_1` is limited to `record_b`. If
+`demographics` is also offered on `event_d_arm_1` and `event_d_arm_1` is not
+excluded with `events`, then `records` does not limit that event.
 
 For a repeating form, declare the expected repeat instances after exporting
 records and creating the REDCap connection object:

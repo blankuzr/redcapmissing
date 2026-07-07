@@ -76,17 +76,20 @@
 #'   some events and repeating on others, `events` also determines whether
 #'   repeat-instance logic is activated. Defaults to `NULL`.
 #' @param records Named list of REDCap record ID vectors by raw
-#'   `redcap_event_name`, or `NULL`. Non-empty entries override which record IDs
-#'   are eligible for assessment on that event; events omitted from the list use
-#'   the default data-derived record set. Empty or blank-only entries are
-#'   ignored. Supplied IDs are normalized to character values and are not
-#'   checked through a live REDCap record export. IDs not present in `data` are
-#'   allowed and can create upstream row-started failures. When both `events`
-#'   and `records` are supplied, `events` selects the form-event scope first and
-#'   `records` narrows record eligibility inside those events. For repeating
-#'   contexts, event-level eligibility applies before `instances` expands the
-#'   expected repeat-instance IDs. Defaults to `NULL`, which preserves the
-#'   current all-record behavior.
+#'   `redcap_event_name`, or `NULL`. Use it to restrict selected events to a
+#'   specific set of record IDs. Events not named in `records` are not
+#'   restricted by this argument: every applicable non-ignored record in `data`
+#'   is considered for those events. A record with no exported row for an event
+#'   fails `event-row-started` and is not assessed by downstream form or field
+#'   checks for that event. Empty or blank-only entries are ignored and behave
+#'   like omitted events. Supplied IDs are normalized to character values and
+#'   are not checked through a live REDCap record export. IDs not present in
+#'   `data` are allowed and can create upstream row-started failures. When both
+#'   `events` and `records` are supplied, `events` selects the form-event scope
+#'   first and `records` narrows record eligibility inside those events. For
+#'   repeating contexts, event-level eligibility applies before `instances`
+#'   expands the expected repeat-instance IDs. Defaults to `NULL`, which means
+#'   `records` does not restrict any event.
 #' @param required_fields Logical scalar. When `TRUE`, only fields marked as
 #'   required in the REDCap metadata `required_field` column are assessed. When
 #'   `FALSE`, all fields on the form are assessed after `exclude_types` and
@@ -143,8 +146,8 @@
 #'   \item{`event_labels`}{Named REDCap event labels from event metadata, keyed
 #'     by raw `redcap_event_name`, when available.}
 #'   \item{`eligible_records`}{Named list of active event-level record ID
-#'     overrides used for assessment. Events omitted from this list used the
-#'     default data-derived record set.}
+#'     restrictions used for assessment. Events omitted from this list were not
+#'     restricted by `records`.}
 #'   \item{`instances`}{Named list of expanded repeat-instance IDs by form, or
 #'     `NULL` for forms without requested repeating contexts.}
 #'   \item{`ignored_fields`}{Root field names skipped because of
