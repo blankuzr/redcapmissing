@@ -9,15 +9,30 @@ test_that("startup message includes banner and release metadata", {
 
   expect_identical(
     message_lines,
-    c(
-      "> redcapmissing",
-      "  Forever-searching  {v1.2.3}",
-      "  :: Improved scope reporting"
-    )
+    "> redcapmissing {v1.2.3} ~ eye-spy"
   )
   expect_false(any(grepl("\u2588", message_lines, fixed = TRUE)))
   expect_false(any(grepl("Release:", message_lines, fixed = TRUE)))
   expect_false(any(grepl("Latest:", message_lines, fixed = TRUE)))
+  expect_false(any(grepl("Improved scope reporting", message_lines, fixed = TRUE)))
+})
+
+test_that("startup message includes Ember Tag ANSI styling", {
+  old_options <- options(cli.num_colors = 256)
+  on.exit(options(old_options), add = TRUE)
+
+  build_message <- getFromNamespace(
+    ".redcapmissing_startup_build_message",
+    "redcapmissing"
+  )
+
+  message <- build_message(version = "1.2.3")
+
+  expect_true(cli::ansi_has_any(message))
+  expect_identical(
+    cli::ansi_strip(message),
+    "> redcapmissing {v1.2.3} ~ eye-spy"
+  )
 })
 
 test_that("startup version helper resolves package versions safely", {
@@ -47,7 +62,7 @@ test_that("startup hook emits message when enabled", {
 
   expect_message(
     on_attach(NULL, "redcapmissing"),
-    "Forever-searching"
+    "eye-spy"
   )
 })
 
