@@ -246,7 +246,7 @@ test_that("flex errors on invalid filters and empty intersections", {
   )
 
   inconsistent_report <- base_report
-  inconsistent_report$forms <- "not_in_tidy"
+  inconsistent_report$spec$forms <- "not_in_tidy"
   expect_error(
     flex(inconsistent_report, forms = "not_in_tidy"),
     "Unknown form"

@@ -2,6 +2,8 @@
 
 .miss_branch_satisfied <- function(
   logic,
+  branch_plan = NULL,
+  branch_cache = NULL,
   records,
   lookup_records,
   meta,
@@ -12,7 +14,8 @@
     return(rep(TRUE, nrow(records)))
   }
 
-  expr <- .miss_logic_to_r(logic)
+  branch_plan <- branch_plan %||% .miss_compile_branch_logic(logic)
+  expr <- branch_plan$expr
   env <- new.env(parent = baseenv())
 
   env$.v <- function(event, field, choice = NULL) {
@@ -24,7 +27,8 @@
       choice = choice,
       meta = meta,
       choice_map = choice_map,
-      project = project
+      project = project,
+      branch_cache = branch_cache
     )
   }
   env$contains <- function(x, pattern) {
@@ -44,7 +48,7 @@
   }
 
   value <- tryCatch(
-    eval(parse(text = expr), envir = env),
+    eval(branch_plan$parsed_expr, envir = env),
     error = function(e) {
       stop(
         "Could not evaluate branching logic `",
@@ -61,6 +65,19 @@
   value <- rep(value, length.out = nrow(records))
   value <- as.logical(value)
   !is.na(value) & value
+}
+
+.miss_compile_branch_logic <- function(logic) {
+  if (.miss_is_blank_scalar(logic)) {
+    return(list(logic = logic, expr = NULL, parsed_expr = NULL))
+  }
+
+  expr <- .miss_logic_to_r(logic)
+  list(
+    logic = logic,
+    expr = expr,
+    parsed_expr = parse(text = expr)
+  )
 }
 
 .miss_logic_to_r <- function(logic) {
@@ -138,7 +155,8 @@
   choice,
   meta,
   choice_map,
-  project
+  project,
+  branch_cache = NULL
 ) {
   field_type <- .miss_field_type(meta = meta, field = field)
 
@@ -157,7 +175,8 @@
             lookup_records = lookup_records,
             event = event,
             field = child,
-            project = project
+            project = project,
+            branch_cache = branch_cache
           ))
         },
         logical(nrow(records))
@@ -174,7 +193,8 @@
       lookup_records = lookup_records,
       event = event,
       field = child,
-      project = project
+      project = project,
+      branch_cache = branch_cache
     ))))
   }
 
@@ -183,7 +203,8 @@
     lookup_records = lookup_records,
     event = event,
     field = field,
-    project = project
+    project = project,
+    branch_cache = branch_cache
   )
 
   .miss_normalize_value(
@@ -199,29 +220,83 @@
   lookup_records,
   event,
   field,
-  project
+  project,
+  branch_cache = NULL
 ) {
   if (is.null(event)) {
     return(.miss_col_vec(records, field))
+  }
+  cached <- .miss_branch_cache_get(branch_cache, event = event, field = field)
+  if (!is.null(cached)) {
+    return(cached)
   }
 
   fields <- project$system_fields
   event_col <- fields$event_col
   if (!event_col %in% names(lookup_records)) {
-    return(rep(NA_character_, nrow(records)))
+    value <- rep(NA_character_, nrow(records))
+    .miss_branch_cache_set(
+      branch_cache,
+      event = event,
+      field = field,
+      value = value
+    )
+    return(value)
   }
 
   event_rows <- as.character(lookup_records[[event_col]]) == event
   event_records <- lookup_records[event_rows, , drop = FALSE]
   if (nrow(event_records) == 0 || !field %in% names(event_records)) {
-    return(rep(NA_character_, nrow(records)))
+    value <- rep(NA_character_, nrow(records))
+    .miss_branch_cache_set(
+      branch_cache,
+      event = event,
+      field = field,
+      value = value
+    )
+    return(value)
   }
 
   row_match <- match(records[[project$id_col]], event_records[[project$id_col]])
   value <- rep(NA_character_, nrow(records))
   hit <- !is.na(row_match)
   value[hit] <- .miss_chr_vec(event_records[[field]][row_match[hit]])
+  .miss_branch_cache_set(
+    branch_cache,
+    event = event,
+    field = field,
+    value = value
+  )
   value
+}
+
+.miss_new_branch_cache <- function(records, lookup_records, project) {
+  env <- new.env(parent = emptyenv())
+  env$values <- list()
+  env
+}
+
+.miss_branch_cache_key <- function(event, field) {
+  paste(.miss_chr(event), .miss_chr(field), sep = "\r")
+}
+
+.miss_branch_cache_get <- function(branch_cache, event, field) {
+  if (is.null(branch_cache)) {
+    return(NULL)
+  }
+
+  key <- .miss_branch_cache_key(event = event, field = field)
+  branch_cache$values[[key]] %||% NULL
+}
+
+.miss_branch_cache_set <- function(branch_cache, event, field, value) {
+  if (is.null(branch_cache)) {
+    return(invisible(value))
+  }
+
+  key <- .miss_branch_cache_key(event = event, field = field)
+  branch_cache$values[[key]] <- value
+  invisible(value)
 }
 
 .miss_field_present <- function(
@@ -443,44 +518,4 @@
     years = diff_days / 365.25,
     diff_days
   )
-}
-
-.miss_get_failed_rows <- function(agent) {
-  extracts <- pointblank::get_data_extracts(agent)
-  if (length(extracts) == 0) {
-    return(tibble::tibble())
-  }
-
-  out <- dplyr::bind_rows(extracts, .id = "pointblank_extract")
-  if (all(c("validation_check", "form") %in% names(out))) {
-    out$pointblank_step <- .miss_step_id(out$form, out$validation_check)
-  } else {
-    out$pointblank_step <- out$pointblank_extract
-  }
-
-  select_cols <- c(
-    "pointblank_step",
-    "pointblank_extract",
-    "record_id",
-    "redcap_event_name",
-    "redcap_repeat_instrument",
-    "redcap_repeat_instance",
-    "validation_context",
-    "form",
-    "validation_level",
-    "validation_check_type",
-    "validation_check",
-    "validation_label",
-    "validation_passed",
-    "field_name",
-    "field_label",
-    "field_type",
-    "branching_logic",
-    "branch_satisfied",
-    "value_summary",
-    "export_fields"
-  )
-
-  out |>
-    dplyr::select(dplyr::all_of(select_cols), dplyr::everything())
 }

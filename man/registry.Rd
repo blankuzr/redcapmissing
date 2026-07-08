@@ -19,11 +19,11 @@ resolve the contextual event/form level to \code{"event:form"} or
 \item{\code{validation_check}}{The canonical validation-check code.}
 \item{\code{validation_check_type}}{The check type: \code{"on-route"} or
 \code{"detour"}.}
-\item{\code{validation_label}}{The canonical pointblank label.}
+\item{\code{validation_label}}{The canonical validation label.}
 \item{\code{flex_label}}{The display label used by \code{\link[=flex]{flex()}}.}
 \item{\code{description}}{A short user-facing description of the check.}
 \item{\code{r_identifier}, \code{component_stem}, \code{step_suffix}}{Internal R-safe
-stems and pointblank step metadata.}
+stems and native validation-step metadata.}
 \item{\code{gates_downstream}}{Whether a failed check removes that context from
 downstream assessment.}
 }

@@ -42,30 +42,18 @@
   invisible(meta)
 }
 
-.miss_get_project <- function(rcon, meta, form) {
-  system_fields <- .miss_system_fields()
-  form_label <- .miss_get_form_label(rcon = rcon, form = form)
-  mapping <- .miss_normalize_mapping(.miss_get_rcon_table(
-    rcon,
-    c("mapping", "mappings")
-  ))
-  repeat_instrument_event <- .miss_normalize_repeat(
-    .miss_get_rcon_table(
-      rcon,
-      c(
-        "repeatInstrumentEvent",
-        "repeat_instrument",
-        "repeatInstrumentsEvents",
-        "repeatingInstrumentsEvents",
-        "repeat_instruments_events"
-      )
-    )
+.miss_get_project <- function(rcon, meta, form, project_cache = NULL) {
+  project_cache <- project_cache %||% .miss_get_project_cache(rcon = rcon)
+  system_fields <- project_cache$system_fields
+  form_label <- .miss_get_form_label(
+    rcon = rcon,
+    form = form,
+    project_cache = project_cache
   )
-  event_labels <- .miss_get_event_labels(rcon)
-  project_information <- .miss_get_rcon_table(
-    rcon,
-    c("projectInformation", "project_information", "projectInfo")
-  )
+  mapping <- project_cache$mapping
+  repeat_instrument_event <- project_cache$repeat_instrument_event
+  event_labels <- project_cache$event_labels
+  project_information <- project_cache$project_information
   form_events <- .miss_form_events(mapping = mapping, form = form)
   repeat_form_events <- .miss_repeat_form_events(
     repeat_instrument_event,
@@ -90,15 +78,51 @@
   )
 }
 
-.miss_get_form_label <- function(rcon, form) {
-  if (is.null(rcon$instruments) || !is.function(rcon$instruments)) {
-    stop(
-      "`rcon` must provide instrument labels through `rcon$instruments()`.",
-      call. = FALSE
+.miss_get_project_cache <- function(rcon) {
+  system_fields <- .miss_system_fields()
+  mapping <- .miss_normalize_mapping(.miss_get_rcon_table(
+    rcon,
+    c("mapping", "mappings")
+  ))
+  repeat_instrument_event <- .miss_normalize_repeat(
+    .miss_get_rcon_table(
+      rcon,
+      c(
+        "repeatInstrumentEvent",
+        "repeat_instrument",
+        "repeatInstrumentsEvents",
+        "repeatingInstrumentsEvents",
+        "repeat_instruments_events"
+      )
     )
-  }
+  )
+  events <- .miss_normalize_events(.miss_get_rcon_table(
+    rcon,
+    c("events", "exportEvents", "event_data", "eventData")
+  ))
+  instruments <- .miss_get_instruments(rcon)
+  project_information <- .miss_get_rcon_table(
+    rcon,
+    c("projectInformation", "project_information", "projectInfo")
+  )
 
-  instruments <- tibble::as_tibble(rcon$instruments())
+  list(
+    system_fields = system_fields,
+    mapping = mapping,
+    repeat_instrument_event = repeat_instrument_event,
+    events = events,
+    instruments = instruments,
+    event_labels = .miss_event_label_vector(events),
+    project_information = project_information
+  )
+}
+
+.miss_get_form_label <- function(rcon, form, project_cache = NULL) {
+  instruments <- if (is.null(project_cache)) {
+    .miss_get_instruments(rcon)
+  } else {
+    project_cache$instruments
+  }
   needed <- c("instrument_name", "instrument_label")
   missing_cols <- setdiff(needed, names(instruments))
   if (length(missing_cols) > 0) {
@@ -134,6 +158,18 @@
   form_label
 }
 
+.miss_get_instruments <- function(rcon) {
+  if (is.null(rcon$instruments) || !is.function(rcon$instruments)) {
+    stop(
+      "`rcon` must provide instrument labels through `rcon$instruments()`.",
+      call. = FALSE
+    )
+  }
+
+  instruments <- tibble::as_tibble(rcon$instruments())
+  instruments
+}
+
 .miss_get_event_labels <- function(rcon) {
   event_data <- .miss_normalize_events(.miss_get_rcon_table(
     rcon,
@@ -142,27 +178,11 @@
   .miss_event_label_vector(event_data)
 }
 
-.miss_get_project_event_names <- function(rcon) {
-  event_data <- .miss_normalize_events(.miss_get_rcon_table(
-    rcon,
-    c("events", "exportEvents", "event_data", "eventData")
-  ))
-  mapping <- .miss_normalize_mapping(.miss_get_rcon_table(
-    rcon,
-    c("mapping", "mappings")
-  ))
-  repeat_instrument_event <- .miss_normalize_repeat(
-    .miss_get_rcon_table(
-      rcon,
-      c(
-        "repeatInstrumentEvent",
-        "repeat_instrument",
-        "repeatInstrumentsEvents",
-        "repeatingInstrumentsEvents",
-        "repeat_instruments_events"
-      )
-    )
-  )
+.miss_get_project_event_names <- function(rcon = NULL, project_cache = NULL) {
+  project_cache <- project_cache %||% .miss_get_project_cache(rcon = rcon)
+  event_data <- project_cache$events
+  mapping <- project_cache$mapping
+  repeat_instrument_event <- project_cache$repeat_instrument_event
 
   event_names <- unique(c(
     event_data$unique_event_name,

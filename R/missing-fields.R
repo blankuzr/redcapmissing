@@ -104,6 +104,9 @@
       field_type = form_meta$field_type[[i]],
       field_label = form_meta$field_label[[i]],
       branching_logic = .miss_chr(form_meta$branching_logic[[i]]),
+      branch_plan = list(.miss_compile_branch_logic(
+        .miss_chr(form_meta$branching_logic[[i]])
+      )),
       child_fields = list(as.character(exports$export_field_name)),
       choice_values = list(as.character(stats::na.omit(exports$choice_value)))
     )
@@ -189,10 +192,17 @@
     redcap_repeat_instance = .miss_col_vec(records, fields$repeat_instance_col)
   )
 
+  branch_cache <- .miss_new_branch_cache(
+    records = records,
+    lookup_records = lookup_records,
+    project = project
+  )
   pieces <- lapply(seq_len(nrow(field_plan)), function(field_i) {
     logic <- field_plan$branching_logic[[field_i]]
     branch_satisfied <- .miss_branch_satisfied(
       logic = logic,
+      branch_plan = field_plan$branch_plan[[field_i]],
+      branch_cache = branch_cache,
       records = records,
       lookup_records = lookup_records,
       meta = meta,
@@ -638,13 +648,13 @@
   contexts <- unique(expected[, context_cols, drop = FALSE])
   context_keys <- .miss_report_context_key(contexts)
   expected_keys <- .miss_report_context_key(expected)
-  any_missing <- vapply(
-    context_keys,
-    function(context_key) {
-      any(!expected$validation_passed[expected_keys == context_key], na.rm = TRUE)
-    },
-    logical(1)
-  )
+  group_id <- match(expected_keys, context_keys)
+  missing_count <- rowsum(
+    as.integer(!expected$validation_passed),
+    group_id,
+    reorder = FALSE
+  )[, 1]
+  any_missing <- missing_count > 0L
 
   out <- .miss_build_issue_rows(
     contexts = contexts,
@@ -700,13 +710,13 @@
     "",
     ""
   )
-  event_passed <- vapply(
-    context_key,
-    function(key) {
-      all(rows$validation_passed[row_key == key] %in% TRUE)
-    },
-    logical(1)
-  )
+  group_id <- match(row_key, context_key)
+  failed_count <- rowsum(
+    as.integer(!(rows$validation_passed %in% TRUE)),
+    group_id,
+    reorder = FALSE
+  )[, 1]
+  event_passed <- failed_count == 0L
 
   contexts$redcap_repeat_instrument <- ""
   contexts$redcap_repeat_instance <- ""
@@ -932,188 +942,6 @@
 
   rows$validation_context <- context
   rows
-}
-
-.miss_add_validation_step <- function(
-  agent,
-  rows,
-  validation_check,
-  keep_zero = FALSE,
-  form = NULL
-) {
-  preconditions <- .miss_scope_precondition(
-    validation_check = validation_check,
-    form = form
-  )
-  step_id <- .miss_step_id(form, validation_check)
-  label <- .redcapmissing_registry_row(validation_check)$validation_label
-
-  if (nrow(rows) > 0) {
-    return(pointblank::col_vals_equal(
-      x = agent,
-      columns = dplyr::all_of("validation_passed"),
-      value = TRUE,
-      preconditions = preconditions,
-      segments = .miss_pointblank_vars("validation_context"),
-      step_id = step_id,
-      label = label
-    ))
-  }
-
-  if (isTRUE(keep_zero)) {
-    return(pointblank::col_vals_equal(
-      x = agent,
-      columns = dplyr::all_of("validation_passed"),
-      value = TRUE,
-      preconditions = preconditions,
-      step_id = step_id,
-      label = label
-    ))
-  }
-
-  agent
-}
-
-.miss_pointblank_vars <- function(columns) {
-  do.call(pointblank::vars, lapply(columns, as.name))
-}
-
-.miss_scope_precondition <- function(validation_check, form = NULL) {
-  force(validation_check)
-  force(form)
-  function(tbl) {
-    keep <- tbl$validation_check == validation_check
-    if (!is.null(form) && "form" %in% names(tbl)) {
-      keep <- keep & tbl$form == form
-    }
-    tbl[keep, , drop = FALSE]
-  }
-}
-
-.miss_annotate_agent_validation_set <- function(
-  agent,
-  validation_rows,
-  form_labels
-) {
-  validation_set <- agent$validation_set
-  if (nrow(validation_set) == 0) {
-    validation_set$validation_level <- character()
-    validation_set$validation_check_type <- character()
-    validation_set$validation_check <- character()
-    validation_set$validation_label <- character()
-    validation_set$validation_context <- character()
-    validation_set$form <- character()
-    validation_set$form_label <- character()
-    validation_set$redcap_event_name <- character()
-    validation_set$redcap_repeat_instrument <- character()
-    validation_set$redcap_repeat_instance <- character()
-    agent$validation_set <- validation_set
-    return(agent)
-  }
-
-  lookup_cols <- c(
-    "form",
-    "validation_check",
-    "validation_context",
-    "redcap_event_name",
-    "redcap_repeat_instrument",
-    "redcap_repeat_instance"
-  )
-  lookup <- unique(validation_rows[, lookup_cols, drop = FALSE])
-  if (nrow(lookup) == 0) {
-    lookup <- tibble::tibble(
-      form = names(form_labels),
-      validation_check = rep("event-row-started", length(form_labels)),
-      validation_context = rep("overall", length(form_labels)),
-      redcap_event_name = rep("", length(form_labels)),
-      redcap_repeat_instrument = rep("", length(form_labels)),
-      redcap_repeat_instance = rep("", length(form_labels))
-    )
-  }
-
-  validation_context <- .miss_chr_vec(validation_set$seg_val)
-  blank_context <- .miss_is_blank_vec(validation_context)
-  validation_context[blank_context] <- "overall"
-  validation_form <- .miss_form_from_step_id(
-    step_id = validation_set$step_id,
-    forms = names(form_labels)
-  )
-  validation_check <- .miss_validation_check_from_step_id(
-    step_id = validation_set$step_id,
-    forms = validation_form
-  )
-  registry <- .redcapmissing_registry_data()
-  registry_match <- match(validation_check, registry$validation_check)
-  context_match <- match(
-    paste(validation_form, validation_check, validation_context, sep = "\r"),
-    paste(lookup$form, lookup$validation_check, lookup$validation_context, sep = "\r")
-  )
-
-  validation_set$validation_level <- registry$validation_level[registry_match]
-  validation_set$validation_check_type <-
-    registry$validation_check_type[registry_match]
-  validation_set$validation_check <- validation_check
-  validation_set$validation_label <- registry$validation_label[registry_match]
-  validation_set$validation_context <- validation_context
-  validation_set$form <- validation_form
-  validation_set$form_label <- unname(form_labels[validation_form])
-  validation_set$form[is.na(validation_set$form)] <- ""
-  validation_set$form_label[is.na(validation_set$form_label)] <- ""
-  validation_set$redcap_event_name <- lookup$redcap_event_name[context_match]
-  validation_set$redcap_repeat_instrument <-
-    lookup$redcap_repeat_instrument[context_match]
-  validation_set$redcap_repeat_instance <-
-    lookup$redcap_repeat_instance[context_match]
-  validation_set$redcap_event_name[is.na(validation_set$redcap_event_name)] <- ""
-  validation_set$redcap_repeat_instrument[
-    is.na(validation_set$redcap_repeat_instrument)
-  ] <- ""
-  validation_set$redcap_repeat_instance[
-    is.na(validation_set$redcap_repeat_instance)
-  ] <- ""
-  validation_set$validation_level <- .redcapmissing_context_validation_level(
-    validation_check = validation_check,
-    repeat_instance = validation_set$redcap_repeat_instance
-  )
-
-  zero_n <- !is.na(validation_set$n) & validation_set$n == 0
-  validation_set$f_passed[zero_n] <- 0
-  validation_set$f_failed[zero_n] <- 0
-
-  agent$validation_set <- validation_set
-  agent
-}
-
-.miss_validation_check_from_step_id <- function(step_id, forms) {
-  vapply(seq_along(step_id), function(i) {
-    form <- forms[[i]]
-    if (is.na(form) || .miss_is_blank_scalar(form)) {
-      return(step_id[[i]])
-    }
-    prefix <- paste0(form, "_")
-    substring(step_id[[i]], nchar(prefix) + 1)
-  }, character(1), USE.NAMES = FALSE)
-}
-
-.miss_form_from_step_id <- function(step_id, forms) {
-  vapply(step_id, function(step) {
-    registry <- .redcapmissing_registry_data()
-    if (step %in% registry$step_suffix) {
-      return("")
-    }
-    matches <- forms[vapply(
-      forms,
-      function(form) {
-        startsWith(step, paste0(form, "_"))
-      },
-      logical(1)
-    )]
-    if (length(matches) == 0) {
-      return(NA_character_)
-    }
-
-    matches[which.max(nchar(matches))]
-  }, character(1), USE.NAMES = FALSE)
 }
 
 .miss_drop_unstarted_form_records <- function(records, form_started_failures, project) {

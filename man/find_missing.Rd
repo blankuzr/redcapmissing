@@ -14,7 +14,9 @@ find_missing(
   ignore_fields = NULL,
   ignore_ids = NULL,
   exclude_types = "descriptive",
-  instances = NULL
+  instances = NULL,
+  details = FALSE,
+  progress = interactive()
 )
 }
 \arguments{
@@ -91,50 +93,31 @@ setting is supplied for it, the function warns once and assumes instance
 \code{1}. Global \code{instances} values apply only to forms with requested repeating
 contexts; named non-\code{NULL} entries for non-repeating requested contexts
 error.}
+
+\item{details}{Logical scalar. When \code{FALSE}, the report omits full
+validation-row tables and check-specific row tables. When \code{TRUE}, these
+row-level tables are stored under \code{report$details}. Defaults to \code{FALSE}.}
+
+\item{progress}{Logical scalar. When \code{TRUE}, line-based progress messages
+are emitted with \code{cli::cat_line()} as each requested form starts and
+finishes, followed by a final overall completion line. Defaults to
+\code{interactive()}.}
 }
 \value{
 A list with class \code{"redcapmissing"} containing:
 \describe{
-\item{\code{agent}}{An interrogated \code{pointblank} agent.}
-\item{\code{missing}}{A tibble of failed rows from the \code{pointblank} extract,
-keyed by record, event, repeat context, form, and field.}
-\item{\code{validation_rows}}{The full table supplied to \code{pointblank}, including
-validation metadata and the \code{validation_passed} result column.}
-\item{\code{event_row_started_checks}, \code{event_row_started_failures}}{All
-event-row-started validation rows and their failed rows.}
-\item{\code{instance_row_started_checks},
-\code{instance_row_started_failures}}{All instance-row-started validation
-rows and their failed rows.}
-\item{\code{form_started_checks}, \code{form_started_failures}}{All form-started
-validation rows and their failed rows.}
-\item{\code{form_complete_checks}, \code{form_complete_failures}}{All form-complete
-validation rows and their failed rows.}
-\item{\code{event_complete_checks}, \code{event_complete_failures}}{All
-event-complete validation rows and their failed rows.}
-\item{\code{field_complete_checks}, \code{field_complete_failures}}{All
-field-complete validation rows and their failed rows.}
-\item{\code{field_plan}}{The metadata-derived field plan for the requested
-forms, including checkbox child export columns and a \code{form} column.}
-\item{\code{required_fields}}{Whether the report was limited to REDCap-required
-fields.}
-\item{\code{events}}{Named list of REDCap events actually used for assessment
-by form, or \code{character(0)} for forms where no event restriction applied.}
-\item{\code{event_labels}}{Named REDCap event labels from event metadata, keyed
-by raw \code{redcap_event_name}, when available.}
-\item{\code{eligible_records}}{Named list of active event-level record ID
-restrictions used for assessment. Events omitted from this list were not
-restricted by \code{records}.}
-\item{\code{instances}}{Named list of expanded repeat-instance IDs by form, or
-\code{NULL} for forms without requested repeating contexts.}
-\item{\code{ignored_fields}}{Root field names skipped because of
-\code{ignore_fields}.}
-\item{\code{ignored_ids}}{Record IDs skipped because of \code{ignore_ids}.}
-\item{\code{project}}{Named list of compact REDCap project structures inferred
-from \code{rcon}, one per requested form.}
-\item{\code{forms}}{The assessed form names.}
-\item{\code{form_labels}}{Named REDCap instrument labels for \code{forms}.}
-\item{\code{id_col}}{The REDCap record identifier field.}
-\item{\code{system_fields}}{The REDCap system field names used internally.}
+\item{\code{summary}}{Compact validation summary rows used by \code{tidy()},
+including assessed, passed, failed, pass-rate, and fail-rate columns.}
+\item{\code{missing}}{Failed validation rows keyed by generic native
+\code{validation_step} and \code{validation_row_id} identifiers plus REDCap record,
+event, repeat, form, and field context.}
+\item{\code{spec}}{Normalized report context, including requested forms,
+events, labels, eligible records, instances, ignored fields/IDs, REDCap
+ID column, system fields, project cache, and total eligible record count.}
+\item{\code{diagnostics}}{Timing and row-count metadata useful for benchmarking
+and troubleshooting.}
+\item{\code{details}}{\code{NULL} by default. When \code{details = TRUE}, a list with
+\code{validation_rows}, \code{checks}, and \code{failures} row tables.}
 }
 }
 \description{
@@ -161,8 +144,8 @@ considered answered when at least one exported child column
 (\code{field___choice}) is selected. Unselected sibling checkboxes are not flagged
 as missing once the root question has at least one selected child.
 
-Validation is split between REDCap-specific R preprocessing and \code{pointblank}
-reporting. The package builds validation rows with:
+Validation is performed by native \code{redcapmissing} code. The package builds
+validation rows with:
 \describe{
 \item{\code{validation_level}}{The emitted context label. Event/form checks use
 \code{"event:form"} for non-repeating contexts and
@@ -185,9 +168,9 @@ meaning "all forms on event complete": it checks only downstream-gating
 on-route results for each record/event context and does not count
 \code{form-complete} because \code{form-complete} is also a detour.
 
-The returned \code{pointblank} agent is interrogated with failed-row extraction
-enabled. The failed-row extract is also returned as \code{missing} for easier
-review and downstream correction workflows.
+By default, the returned report keeps only compact summaries, failed rows,
+project specification metadata, and diagnostics. Set \code{details = TRUE} when
+row-level check tables are needed for debugging or regression tests.
 }
 \examples{
 \dontrun{
@@ -215,8 +198,17 @@ baseline_missing <- find_missing(
   ignore_fields = c("status_flag", "screening_code")
 )
 
-baseline_missing$agent
+tidy(baseline_missing)
 baseline_missing$missing
+
+detailed_missing <- find_missing(
+  data = records,
+  rcon = rcon,
+  forms = "baseline_form",
+  details = TRUE
+)
+
+detailed_missing$details$checks[["field-complete"]]
 
 repeat_missing <- find_missing(
   data = records,

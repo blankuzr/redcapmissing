@@ -260,7 +260,7 @@ staged_report <- find_missing(
   )
 )
 
-staged_report$eligible_records
+staged_report$spec$eligible_records
 
 staged_summary <- tidy(staged_report)
 staged_summary[
@@ -323,8 +323,8 @@ repeat_report <- find_missing(
   instances = 2L
 )
 
-repeat_report$instance_row_started_failures[
-  ,
+repeat_report$missing[
+  repeat_report$missing$validation_check == "instance-row-started",
   c("record_id", "redcap_repeat_instance", "validation_check")
 ]
 ```
@@ -369,14 +369,13 @@ html <- flex_html(ft)
 `flex()` displays the canonical checks with human-readable event, form, and
 repeat labels. Its `events`, `forms`, and `validation_check` arguments use raw
 values from `tidy(report)` to filter rows before labels are applied. `tidy()`
-and the `pointblank` agent keep the canonical hyphenated `validation_check`
-values. `flex_event_forms()` returns a reduced event/form table with total
-record N in the N column label, event row-started passed/assessed counts on
-event rows, form-complete counts, and fields-missing counts nested under each
-event. Repeat form rows show repeat-instance passed/assessed counts in the N
-column, while non-repeat form rows leave that cell blank. Projects whose REDCap
-record ID field has another name still produce populated event and form rows.
-The public
+and `report$summary` keep the canonical hyphenated `validation_check` values.
+`flex_event_forms()` returns a reduced event/form table with total record N in
+the N column label, event row-started passed/assessed counts on event rows,
+form-complete counts, and fields-missing counts nested under each event. Repeat
+form rows show repeat-instance passed/assessed counts in the N column, while
+non-repeat form rows leave that cell blank. Projects whose REDCap record ID
+field has another name still produce populated event and form rows. The public
 `validation_level` values are `event:form`, `event:form:instance`, and `event`.
 
 ## Citation and acknowledgement

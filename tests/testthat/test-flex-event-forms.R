@@ -3,7 +3,7 @@ skip_flex_event_forms_packages <- function() {
   testthat::skip_if_not_installed("glue")
 }
 
-flex_event_forms_longitudinal_report <- function() {
+flex_event_forms_longitudinal_report <- function(details = FALSE) {
   status_meta <- dplyr::bind_rows(
     meta_row("record_id", "status_form", field_label = "Record ID", required = "y"),
     meta_row("status_started", "status_form", field_label = "Status started", required = "y"),
@@ -44,7 +44,8 @@ flex_event_forms_longitudinal_report <- function() {
   find_missing(
     data = records,
     rcon = fake_rcon(status_meta, events = events, mapping = mapping),
-    forms = c("status_form", "survey_form")
+    forms = c("status_form", "survey_form"),
+    details = details
   )
 }
 
@@ -94,7 +95,8 @@ flex_event_forms_missing_event_report <- function() {
   find_missing(
     data = records,
     rcon = fake_rcon(status_meta, events = events, mapping = mapping),
-    forms = "status_form"
+    forms = "status_form",
+    details = TRUE
   )
 }
 
@@ -145,7 +147,8 @@ flex_event_forms_repeat_report <- function() {
       repeat_instrument_event = repeat_instrument_event
     ),
     forms = "mixed_form",
-    instances = 2L
+    instances = 2L,
+    details = TRUE
   )
 }
 
@@ -181,7 +184,8 @@ flex_event_forms_custom_id_report <- function() {
   find_missing(
     data = records,
     rcon = fake_rcon(status_meta, events = events, mapping = mapping),
-    forms = "status_form"
+    forms = "status_form",
+    details = TRUE
   )
 }
 
@@ -232,7 +236,8 @@ flex_event_forms_custom_id_repeat_report <- function() {
       repeat_instrument_event = repeat_instrument_event
     ),
     forms = "mixed_form",
-    instances = 2L
+    instances = 2L,
+    details = TRUE
   )
 }
 
@@ -286,9 +291,9 @@ test_that("flex_event_forms reduces longitudinal forms under event rows", {
 test_that("flex_event_forms event headers follow tidy summaries over raw checks", {
   skip_flex_event_forms_packages()
 
-  report <- flex_event_forms_longitudinal_report()
-  raw_checks <- report$event_row_started_checks
-  report$event_row_started_checks <- raw_checks[
+  report <- flex_event_forms_longitudinal_report(details = TRUE)
+  raw_checks <- report$details$checks[["event-row-started"]]
+  report$details$checks[["event-row-started"]] <- raw_checks[
     raw_checks$redcap_event_name != "event_2_arm_1" |
       raw_checks$record_id != "r2",
     ,
@@ -316,14 +321,14 @@ test_that("flex_event_forms errors on conflicting event-row-started summaries", 
   skip_flex_event_forms_packages()
 
   report <- flex_event_forms_longitudinal_report()
-  validation_set <- report$agent$validation_set
+  validation_set <- report$summary
   conflict_source <- which(
     validation_set$validation_check == "event-row-started" &
       validation_set$redcap_event_name == "event_2_arm_1"
   )[[1]]
   conflict_row <- validation_set[conflict_source, , drop = FALSE]
-  conflict_row$n_passed <- conflict_row$n_passed - 1L
-  report$agent$validation_set <- rbind(validation_set, conflict_row)
+  conflict_row$passed <- conflict_row$passed - 1L
+  report$summary <- rbind(validation_set, conflict_row)
 
   expect_error(
     flex_event_forms(report),
@@ -339,9 +344,9 @@ test_that("flex_event_forms counts reports whose REDCap ID field is not record_i
   flex_body <- tibble::as_tibble(flex(report)$body$dataset)
   event_form_body <- tibble::as_tibble(flex_event_forms(report)$body$dataset)
 
-  expect_equal(report$id_col, "study_id")
-  expect_true("record_id" %in% names(report$validation_rows))
-  expect_false("study_id" %in% names(report$validation_rows))
+  expect_equal(report$spec$id_col, "study_id")
+  expect_true("record_id" %in% names(report$details$validation_rows))
+  expect_false("study_id" %in% names(report$details$validation_rows))
   expect_true(nrow(tidy_out) > 0)
   expect_true(any(tidy_out$passed > 0))
   expect_true(nrow(flex_body) > 0)
@@ -371,7 +376,7 @@ test_that("flex_event_forms repeat denominators use normalized record_id", {
   report <- flex_event_forms_custom_id_repeat_report()
   body <- tibble::as_tibble(flex_event_forms(report)$body$dataset)
 
-  expect_equal(report$id_col, "study_id")
+  expect_equal(report$spec$id_col, "study_id")
   expect_true("Repeat Instrument" %in% names(body))
   expect_equal(body[body$Event == "Regular A", "N = 2", drop = TRUE], "2/2")
   expect_equal(body[body$Event == "Repeat B", "N = 2", drop = TRUE], "2/2")

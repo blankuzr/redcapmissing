@@ -39,8 +39,8 @@ report contains no repeat context.}
 }
 \description{
 \code{tidy()} returns a focused validation-summary tibble from a
-\code{\link[=find_missing]{find_missing()}} report. Each row represents one pointblank validation
-step and REDCap context from the report's \code{agent$validation_set}.
+\code{\link[=find_missing]{find_missing()}} report. Each row represents one native validation
+step and REDCap context from the report's \code{summary} table.
 }
 \seealso{
 \code{\link[=find_missing]{find_missing()}}, \code{\link[=flex]{flex()}}, \code{\link[=flex_html]{flex_html()}}

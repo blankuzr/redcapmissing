@@ -2,8 +2,8 @@
 #'
 #' @description
 #' `tidy()` returns a focused validation-summary tibble from a
-#' [find_missing()] report. Each row represents one pointblank validation
-#' step and REDCap context from the report's `agent$validation_set`.
+#' [find_missing()] report. Each row represents one native validation
+#' step and REDCap context from the report's `summary` table.
 #'
 #' @param x A `redcapmissing` object created by [find_missing()].
 #' @param ... Unused.
@@ -39,7 +39,7 @@
 tidy.redcapmissing <- function(x, ...) {
   .redcapmissing_check_report(x)
 
-  validation_set <- x$agent$validation_set
+  validation_set <- x$summary
   .redcapmissing_check_tidy_validation_set(validation_set)
 
   out <- tibble::tibble(
@@ -49,11 +49,11 @@ tidy.redcapmissing <- function(x, ...) {
     redcap_repeat_instance = validation_set$redcap_repeat_instance,
     validation_level = validation_set$validation_level,
     validation_check = validation_set$validation_check,
-    assessed = validation_set$n,
-    passed = validation_set$n_passed,
-    failed = validation_set$n_failed,
-    pass_rate = validation_set$f_passed,
-    fail_rate = validation_set$f_failed,
+    assessed = validation_set$assessed,
+    passed = validation_set$passed,
+    failed = validation_set$failed,
+    pass_rate = validation_set$pass_rate,
+    fail_rate = validation_set$fail_rate,
     validation_check_type = validation_set$validation_check_type
   )
 
@@ -75,11 +75,11 @@ generics::tidy
     "validation_level",
     "validation_check",
     "validation_check_type",
-    "n",
-    "n_passed",
-    "n_failed",
-    "f_passed",
-    "f_failed"
+    "assessed",
+    "passed",
+    "failed",
+    "pass_rate",
+    "fail_rate"
   )
 }
 
@@ -89,7 +89,7 @@ generics::tidy
 
   if (length(missing_columns) > 0) {
     stop(
-      "`x$agent$validation_set` must include the current validation summary ",
+      "`x$summary` must include the current validation summary ",
       "columns: ",
       paste(required_columns, collapse = ", "),
       ".",
