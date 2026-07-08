@@ -14,7 +14,7 @@
 #' `event-row-started` summary rows are present for the same event, they must
 #' agree on `passed` and `assessed` counts. Form rows show failed
 #' `form-started` plus failed `form-complete` counts as a percentage of the
-#' event or repeat-instance started count.
+#' assessed count for the event where the form is offered.
 #'
 #' `event-complete` rows are not shown. `form-started` is not shown as a
 #' separate metric row, but failed `form-started` contexts contribute to
@@ -423,7 +423,7 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   } else {
     event_stats
   }
-  row_n <- row_stats$passed
+  form_incomplete_denominator <- event_stats$assessed
 
   form_incomplete <- .redcapmissing_flex_event_forms_incomplete_count(
     validation_set = validation_set,
@@ -445,7 +445,7 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     n = if (repeat_context) .redcapmissing_flex_event_forms_format_stats(row_stats) else "",
     form_incomplete = .redcapmissing_flex_event_forms_format_count(
       count = form_incomplete,
-      denominator = row_n
+      denominator = form_incomplete_denominator
     ),
     has_repeat = has_repeat
   )

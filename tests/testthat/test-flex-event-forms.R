@@ -49,6 +49,38 @@ flex_event_forms_longitudinal_report <- function(details = FALSE) {
   )
 }
 
+flex_event_forms_partly_started_event_report <- function() {
+  status_meta <- dplyr::bind_rows(
+    meta_row("record_id", "status_form", field_label = "Record ID", required = "y"),
+    meta_row("status_started", "status_form", field_label = "Status started", required = "y"),
+    meta_row("status_value", "status_form", field_label = "Status value", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1),
+    unique_event_name = c("baseline_event", "followup_event"),
+    form = c("status_form", "status_form")
+  )
+  events <- tibble::tibble(
+    arm_num = c(1, 1),
+    unique_event_name = c("baseline_event", "followup_event"),
+    event_name = c("Baseline", "Follow-up"),
+    custom_event_label = c("", "")
+  )
+  records <- tibble::tibble(
+    record_id = c("r1", "r2", "r1"),
+    redcap_event_name = c("baseline_event", "baseline_event", "followup_event"),
+    status_started = c("yes", "yes", "yes"),
+    status_value = c("entered", "entered", "")
+  )
+
+  find_missing(
+    data = records,
+    rcon = fake_rcon(status_meta, events = events, mapping = mapping),
+    forms = "status_form",
+    details = TRUE
+  )
+}
+
 flex_event_forms_nonlongitudinal_report <- function() {
   records <- tibble::tibble(
     record_id = "r1",
@@ -349,6 +381,28 @@ test_that("flex_event_forms event headers follow tidy summaries over raw checks"
     body[body$Event == "Follow-up", "N (started/due)", drop = TRUE],
     tidy_event_n
   )
+})
+
+test_that("flex_event_forms form-incomplete percentage uses event assessed denominator", {
+  skip_flex_event_forms_packages()
+
+  report <- flex_event_forms_partly_started_event_report()
+  summary_out <- tidy(report)
+  followup_event <- summary_out[
+    summary_out$validation_check == "event-row-started" &
+      summary_out$redcap_event_name == "followup_event",
+    ,
+    drop = FALSE
+  ]
+  body <- tibble::as_tibble(flex_event_forms(report)$body$dataset)
+  followup_row <- which(body$Event == "Follow-up")
+  followup_form_row <- followup_row + 1L
+
+  expect_equal(followup_event$passed, 1L)
+  expect_equal(followup_event$assessed, 2L)
+  expect_equal(body[["N (started/due)"]][[followup_row]], "1/2 (50%)")
+  expect_equal(body$Form[[followup_form_row]], "status_form label")
+  expect_equal(body$`Form Incomplete`[[followup_form_row]], "1 (50%)")
 })
 
 test_that("flex_event_forms errors on conflicting event-row-started summaries", {

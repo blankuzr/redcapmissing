@@ -5,6 +5,8 @@
 - Fixed `flex_event_forms()` so started form contexts with no assessed
   `form-complete` summary row are not reported as incomplete. Unstarted forms
   and failed `form-complete` contexts still contribute to `Form Incomplete`.
+- Updated `Form Incomplete` percentages to use the event-level assessed N as
+  the denominator instead of the event-started passed N.
 - Regenerated the vignette HTML with UTF-8 output to remove encoded character
   artifacts.
 

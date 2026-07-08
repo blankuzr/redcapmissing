@@ -36,7 +36,7 @@ row with \verb{Total N/Total N}. If multiple
 \code{event-row-started} summary rows are present for the same event, they must
 agree on \code{passed} and \code{assessed} counts. Form rows show failed
 \code{form-started} plus failed \code{form-complete} counts as a percentage of the
-event or repeat-instance started count.
+assessed count for the event where the form is offered.
 
 \code{event-complete} rows are not shown. \code{form-started} is not shown as a
 separate metric row, but failed \code{form-started} contexts contribute to
