@@ -14,6 +14,8 @@
   incomplete/assessed form opportunities, and aligned repeat form rows so
   failed `instance-row-started` contexts contribute to the displayed
   `Form Incomplete` numerator.
+- Updated `flex_event_forms()` form-row `Form Incomplete` denominators to use
+  the exact event/form/repeat context instead of reusing the event header N.
 - Regenerated the vignette HTML with UTF-8 output to remove encoded character
   artifacts.
 

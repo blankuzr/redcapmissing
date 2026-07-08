@@ -38,8 +38,8 @@ agree on \code{passed} and \code{assessed} counts. The first body row summarizes
 displayed form opportunities as incomplete/assessed (\%). In this reduced
 table, form rows show failed \code{event-row-started}, failed
 \code{instance-row-started}, failed \code{form-started}, plus failed \code{form-complete}
-counts as a percentage of the assessed count for the event where the form is
-offered.
+counts as a percentage of the assessed count for the exact
+event/form/repeat context.
 
 \code{event-complete} rows are not shown. \code{form-started} is not shown as a
 separate metric row, but failed \code{form-started} contexts contribute to

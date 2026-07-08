@@ -16,8 +16,8 @@
 #' displayed form opportunities as incomplete/assessed (%). In this reduced
 #' table, form rows show failed `event-row-started`, failed
 #' `instance-row-started`, failed `form-started`, plus failed `form-complete`
-#' counts as a percentage of the assessed count for the event where the form is
-#' offered.
+#' counts as a percentage of the assessed count for the exact
+#' event/form/repeat context.
 #'
 #' `event-complete` rows are not shown. `form-started` is not shown as a
 #' separate metric row, but failed `form-started` contexts contribute to
@@ -287,10 +287,11 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     validation_check = "event-row-started"
   )
   if (nrow(event_rows) > 0) {
-    return(.redcapmissing_flex_event_forms_agreeing_event_stats(
+    .redcapmissing_flex_event_forms_check_event_summary_conflicts(
       rows = event_rows,
       event = event
-    ))
+    )
+    return(.redcapmissing_flex_event_forms_largest_stats(event_rows))
   }
 
   repeat_rows <- .redcapmissing_flex_event_forms_event_summary_rows(
@@ -318,26 +319,30 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   ]
 }
 
-.redcapmissing_flex_event_forms_agreeing_event_stats <- function(rows, event) {
-  stats <- unique(rows[, c("passed", "assessed"), drop = FALSE])
-  if (nrow(stats) == 0) {
-    return(.redcapmissing_flex_event_forms_stats(0, 0))
+.redcapmissing_flex_event_forms_check_event_summary_conflicts <- function(rows, event) {
+  if (nrow(rows) == 0) {
+    return(invisible(rows))
   }
 
-  if (nrow(stats) > 1) {
-    stats_text <- paste0(stats$passed, "/", stats$assessed)
-    stop(
-      "`flex_event_forms()` found conflicting `event-row-started` summaries ",
-      "for event `",
-      event,
-      "`: ",
-      paste(stats_text, collapse = ", "),
-      ".",
-      call. = FALSE
-    )
+  context_key <- .redcapmissing_flex_event_forms_key(rows)
+  unique_context_key <- unique(context_key)
+  for (key in unique_context_key) {
+    stats <- unique(rows[context_key == key, c("passed", "assessed"), drop = FALSE])
+    if (nrow(stats) > 1) {
+      stats_text <- paste0(stats$passed, "/", stats$assessed)
+      stop(
+        "`flex_event_forms()` found conflicting `event-row-started` summaries ",
+        "for event `",
+        event,
+        "`: ",
+        paste(stats_text, collapse = ", "),
+        ".",
+        call. = FALSE
+      )
+    }
   }
 
-  .redcapmissing_flex_event_forms_stats(stats$passed[[1]], stats$assessed[[1]])
+  invisible(rows)
 }
 
 .redcapmissing_flex_event_forms_largest_stats <- function(rows) {
@@ -453,7 +458,12 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   } else {
     event_stats
   }
-  form_incomplete_denominator <- event_stats$assessed
+  form_incomplete_denominator <- .redcapmissing_flex_event_forms_denominator(
+    validation_set = validation_set,
+    context = context,
+    event_stats = event_stats,
+    repeat_context = repeat_context
+  )
 
   form_incomplete <- .redcapmissing_flex_event_forms_incomplete_count(
     validation_set = validation_set,
@@ -481,6 +491,33 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     form_incomplete_count = form_incomplete,
     form_incomplete_denominator = form_incomplete_denominator
   )
+}
+
+.redcapmissing_flex_event_forms_denominator <- function(
+  validation_set,
+  context,
+  event_stats,
+  repeat_context
+) {
+  validation_checks <- if (isTRUE(repeat_context)) {
+    c("instance-row-started", "event-row-started", "form-started", "form-complete")
+  } else {
+    c("event-row-started", "form-started", "form-complete")
+  }
+
+  for (validation_check in validation_checks) {
+    assessed <- .redcapmissing_flex_event_forms_summary_value(
+      validation_set = validation_set,
+      context = context,
+      validation_check = validation_check,
+      column = "assessed"
+    )
+    if (assessed > 0) {
+      return(assessed)
+    }
+  }
+
+  event_stats$assessed
 }
 
 .redcapmissing_flex_event_forms_incomplete_count <- function(

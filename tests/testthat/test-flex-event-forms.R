@@ -392,7 +392,7 @@ test_that("flex_event_forms event headers follow tidy summaries over raw checks"
   )
 })
 
-test_that("flex_event_forms form-incomplete percentage uses event assessed denominator", {
+test_that("flex_event_forms form-incomplete percentage uses context assessed denominator", {
   skip_flex_event_forms_packages()
 
   report <- flex_event_forms_partly_started_event_report()
@@ -412,6 +412,32 @@ test_that("flex_event_forms form-incomplete percentage uses event assessed denom
   expect_equal(body[["N (started/due)"]][[followup_row]], "1/2 (50%)")
   expect_equal(body$Form[[followup_form_row]], "status_form label")
   expect_equal(body$`Form Incomplete`[[followup_form_row]], "1 (50%)")
+})
+
+test_that("flex_event_forms form denominators follow exact form context", {
+  skip_flex_event_forms_packages()
+
+  report <- flex_event_forms_longitudinal_report()
+  status_followup <- report$summary$validation_check == "event-row-started" &
+    report$summary$redcap_event_name == "event_2_arm_1" &
+    report$summary$form == "status_form"
+  report$summary$assessed[status_followup] <- 1L
+  report$summary$passed[status_followup] <- 1L
+  report$summary$failed[status_followup] <- 0L
+  report$summary$pass_rate[status_followup] <- 1
+  report$summary$fail_rate[status_followup] <- 0
+
+  body <- tibble::as_tibble(flex_event_forms(report)$body$dataset)
+  followup_row <- which(body$Event == "Follow-up")
+  status_form_row <- followup_row + 1L
+  survey_form_row <- followup_row + 2L
+
+  expect_equal(body$`Form Incomplete`[[1]], "3/7 (42.9%)")
+  expect_equal(body[["N (started/due)"]][[followup_row]], "2/2 (100%)")
+  expect_equal(body$Form[[status_form_row]], "status_form label")
+  expect_equal(body$`Form Incomplete`[[status_form_row]], "1 (100%)")
+  expect_equal(body$Form[[survey_form_row]], "survey_form label")
+  expect_equal(body$`Form Incomplete`[[survey_form_row]], "1 (50%)")
 })
 
 test_that("flex_event_forms errors on conflicting event-row-started summaries", {
