@@ -12,12 +12,21 @@
 #' `started/due (%)`; non-longitudinal reports use a synthetic `Single event`
 #' row with `Total N/Total N`. If multiple
 #' `event-row-started` summary rows are present for the same event, they must
-#' agree on `passed` and `assessed` counts. Form rows show incomplete
-#' `form-complete` counts as a percentage of the event or repeat-instance
-#' started count.
+#' agree on `passed` and `assessed` counts. The first body row summarizes all
+#' displayed form opportunities as the sum of form-row incomplete numerators
+#' over the sum of form-row assessed denominators. In this reduced table, form
+#' rows show failed `event-row-started`, failed `instance-row-started`, failed
+#' `form-started`, plus failed `form-complete` counts for the exact
+#' event/form/repeat context. The form-row denominator is the exact row-started
+#' assessed N for that same context: `event-row-started` for non-repeat
+#' longitudinal rows and `instance-row-started` for repeat rows. Missing or
+#' invalid exact row-started denominators are treated as broken report objects.
+#' Non-longitudinal reports use `Total N` as the display-only row-started
+#' denominator for the synthetic `Single event` display row.
 #'
-#' `event-complete` rows are not shown. `form-started` acts only as an upstream
-#' gate for downstream assessment and is not shown as a metric row.
+#' `event-complete` rows are not shown. `form-started` is not shown as a
+#' separate metric row, but failed `form-started` contexts contribute to
+#' `Form Incomplete`.
 #'
 #' @param x A `redcapmissing` object created by [find_missing()].
 #' @param ... Additional arguments passed to methods.
@@ -69,7 +78,7 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     flextable::bold(part = "header") |>
     flextable::padding(padding = 4, part = "all")
 
-  header_rows <- which(flex_parts$row_type == "event")
+  header_rows <- which(flex_parts$row_type %in% c("all", "event"))
   if (length(header_rows) > 0) {
     out <- flextable::bold(out, i = header_rows, bold = TRUE, part = "body")
   }
@@ -132,11 +141,13 @@ flex_event_forms.redcapmissing <- function(x, ...) {
           event_stats = event_stats,
           validation_set = validation_set,
           x = x,
-          has_repeat = has_repeat
+          has_repeat = has_repeat,
+          single_event = single_event
         )
       )
     }
   }
+  out <- .redcapmissing_flex_event_forms_add_all_row(out, has_repeat)
 
   display_columns <- c("Event", "Form")
   if (has_repeat) {
@@ -282,10 +293,11 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     validation_check = "event-row-started"
   )
   if (nrow(event_rows) > 0) {
-    return(.redcapmissing_flex_event_forms_agreeing_event_stats(
+    .redcapmissing_flex_event_forms_check_event_summary_conflicts(
       rows = event_rows,
       event = event
-    ))
+    )
+    return(.redcapmissing_flex_event_forms_largest_stats(event_rows))
   }
 
   repeat_rows <- .redcapmissing_flex_event_forms_event_summary_rows(
@@ -313,26 +325,30 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   ]
 }
 
-.redcapmissing_flex_event_forms_agreeing_event_stats <- function(rows, event) {
-  stats <- unique(rows[, c("passed", "assessed"), drop = FALSE])
-  if (nrow(stats) == 0) {
-    return(.redcapmissing_flex_event_forms_stats(0, 0))
+.redcapmissing_flex_event_forms_check_event_summary_conflicts <- function(rows, event) {
+  if (nrow(rows) == 0) {
+    return(invisible(rows))
   }
 
-  if (nrow(stats) > 1) {
-    stats_text <- paste0(stats$passed, "/", stats$assessed)
-    stop(
-      "`flex_event_forms()` found conflicting `event-row-started` summaries ",
-      "for event `",
-      event,
-      "`: ",
-      paste(stats_text, collapse = ", "),
-      ".",
-      call. = FALSE
-    )
+  context_key <- .redcapmissing_flex_event_forms_key(rows)
+  unique_context_key <- unique(context_key)
+  for (key in unique_context_key) {
+    stats <- unique(rows[context_key == key, c("passed", "assessed"), drop = FALSE])
+    if (nrow(stats) > 1) {
+      stats_text <- paste0(stats$passed, "/", stats$assessed)
+      stop(
+        "`flex_event_forms()` found conflicting `event-row-started` summaries ",
+        "for event `",
+        event,
+        "`: ",
+        paste(stats_text, collapse = ", "),
+        ".",
+        call. = FALSE
+      )
+    }
   }
 
-  .redcapmissing_flex_event_forms_stats(stats$passed[[1]], stats$assessed[[1]])
+  invisible(rows)
 }
 
 .redcapmissing_flex_event_forms_largest_stats <- function(rows) {
@@ -373,8 +389,34 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     repeat_instance = character(),
     n = character(),
     form_incomplete = character(),
-    has_repeat = has_repeat
+    has_repeat = has_repeat,
+    form_incomplete_count = numeric(),
+    form_incomplete_denominator = numeric()
   )
+}
+
+.redcapmissing_flex_event_forms_add_all_row <- function(out, has_repeat) {
+  form_rows <- out$row_type == "form"
+  all_count <- sum(out$.form_incomplete_count[form_rows], na.rm = TRUE)
+  all_denominator <- sum(out$.form_incomplete_denominator[form_rows], na.rm = TRUE)
+
+  all_row <- .redcapmissing_flex_event_forms_row(
+    row_type = "all",
+    event = "All",
+    form = "",
+    repeat_instrument = "",
+    repeat_instance = "",
+    n = "",
+    form_incomplete = .redcapmissing_flex_event_forms_format_fraction(
+      count = all_count,
+      denominator = all_denominator
+    ),
+    has_repeat = has_repeat,
+    form_incomplete_count = all_count,
+    form_incomplete_denominator = all_denominator
+  )
+
+  rbind(all_row, out)
 }
 
 .redcapmissing_flex_event_forms_event_row <- function(
@@ -410,7 +452,8 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   event_stats,
   validation_set,
   x,
-  has_repeat
+  has_repeat,
+  single_event
 ) {
   repeat_context <- .redcapmissing_flex_event_forms_is_repeat_context(context)
   row_stats <- if (repeat_context) {
@@ -422,15 +465,18 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   } else {
     event_stats
   }
-  row_n <- row_stats$passed
-
-  form_complete_passed <- .redcapmissing_flex_event_forms_summary_value(
+  form_incomplete_denominator <- .redcapmissing_flex_event_forms_denominator(
     validation_set = validation_set,
     context = context,
-    validation_check = "form-complete",
-    column = "passed"
+    x = x,
+    repeat_context = repeat_context,
+    single_event = single_event
   )
-  form_incomplete <- max(row_n - form_complete_passed, 0)
+
+  form_incomplete <- .redcapmissing_flex_event_forms_incomplete_count(
+    validation_set = validation_set,
+    context = context
+  )
 
   .redcapmissing_flex_event_forms_row(
     row_type = "form",
@@ -447,10 +493,94 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     n = if (repeat_context) .redcapmissing_flex_event_forms_format_stats(row_stats) else "",
     form_incomplete = .redcapmissing_flex_event_forms_format_count(
       count = form_incomplete,
-      denominator = row_n
+      denominator = form_incomplete_denominator
     ),
-    has_repeat = has_repeat
+    has_repeat = has_repeat,
+    form_incomplete_count = form_incomplete,
+    form_incomplete_denominator = form_incomplete_denominator
   )
+}
+
+.redcapmissing_flex_event_forms_denominator <- function(
+  validation_set,
+  context,
+  x,
+  repeat_context,
+  single_event
+) {
+  if (isTRUE(single_event) && !isTRUE(repeat_context)) {
+    return(.redcapmissing_flex_event_forms_single_event_denominator(x))
+  }
+
+  validation_check <- if (isTRUE(repeat_context)) {
+    "instance-row-started"
+  } else {
+    "event-row-started"
+  }
+  summary_row <- .redcapmissing_flex_event_forms_required_summary_row(
+    validation_set = validation_set,
+    context = context,
+    validation_check = validation_check
+  )
+  assessed <- summary_row$assessed[[1]]
+  if (length(assessed) != 1 || is.na(assessed) || assessed <= 0) {
+    stop(
+      "`flex_event_forms()` found invalid `",
+      validation_check,
+      "` assessed N for ",
+      .redcapmissing_flex_event_forms_context_label(context),
+      ".",
+      call. = FALSE
+    )
+  }
+
+  assessed
+}
+
+.redcapmissing_flex_event_forms_single_event_denominator <- function(x) {
+  total_n <- .redcapmissing_flex_event_forms_total_n(x)
+  if (length(total_n) != 1 || is.na(total_n) || total_n <= 0) {
+    stop(
+      "`flex_event_forms()` requires a positive `x$spec$total_n` for ",
+      "non-longitudinal `Single event` reports.",
+      call. = FALSE
+    )
+  }
+
+  total_n
+}
+
+.redcapmissing_flex_event_forms_incomplete_count <- function(
+  validation_set,
+  context
+) {
+  event_row_started_failed <- .redcapmissing_flex_event_forms_summary_value(
+    validation_set = validation_set,
+    context = context,
+    validation_check = "event-row-started",
+    column = "failed"
+  )
+  instance_row_started_failed <- .redcapmissing_flex_event_forms_summary_value(
+    validation_set = validation_set,
+    context = context,
+    validation_check = "instance-row-started",
+    column = "failed"
+  )
+  form_started_failed <- .redcapmissing_flex_event_forms_summary_value(
+    validation_set = validation_set,
+    context = context,
+    validation_check = "form-started",
+    column = "failed"
+  )
+  form_complete_failed <- .redcapmissing_flex_event_forms_summary_value(
+    validation_set = validation_set,
+    context = context,
+    validation_check = "form-complete",
+    column = "failed"
+  )
+
+  event_row_started_failed + instance_row_started_failed +
+    form_started_failed + form_complete_failed
 }
 
 .redcapmissing_flex_event_forms_summary_stats <- function(
@@ -495,6 +625,30 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   value
 }
 
+.redcapmissing_flex_event_forms_required_summary_row <- function(
+  validation_set,
+  context,
+  validation_check
+) {
+  summary_row <- .redcapmissing_flex_event_forms_summary_row(
+    validation_set = validation_set,
+    context = context,
+    validation_check = validation_check
+  )
+  if (nrow(summary_row) == 0) {
+    stop(
+      "`flex_event_forms()` could not find exact `",
+      validation_check,
+      "` summary for ",
+      .redcapmissing_flex_event_forms_context_label(context),
+      ".",
+      call. = FALSE
+    )
+  }
+
+  summary_row
+}
+
 .redcapmissing_flex_event_forms_summary_row <- function(
   validation_set,
   context,
@@ -521,6 +675,14 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   as.character(glue::glue("{count} ({pct}%)"))
 }
 
+.redcapmissing_flex_event_forms_format_fraction <- function(
+  count,
+  denominator
+) {
+  pct <- .redcapmissing_flex_event_forms_pct(count, denominator)
+  as.character(glue::glue("{count}/{denominator} ({pct}%)"))
+}
+
 .redcapmissing_flex_event_forms_pct <- function(count, denominator) {
   if (length(denominator) != 1 || is.na(denominator) || denominator <= 0) {
     return(0)
@@ -537,7 +699,9 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   repeat_instance,
   n,
   form_incomplete,
-  has_repeat
+  has_repeat,
+  form_incomplete_count = NA_real_,
+  form_incomplete_denominator = NA_real_
 ) {
   out <- tibble::tibble(
     row_type = row_type,
@@ -550,6 +714,8 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   }
   out[["N"]] <- n
   out[["Form Incomplete"]] <- form_incomplete
+  out[[".form_incomplete_count"]] <- form_incomplete_count
+  out[[".form_incomplete_denominator"]] <- form_incomplete_denominator
   out
 }
 
@@ -561,6 +727,26 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     x$redcap_repeat_instance,
     sep = "\r"
   )
+}
+
+.redcapmissing_flex_event_forms_context_label <- function(context) {
+  event <- context$redcap_event_name[[1]]
+  form <- context$form[[1]]
+  repeat_instrument <- context$redcap_repeat_instrument[[1]]
+  repeat_instance <- context$redcap_repeat_instance[[1]]
+
+  parts <- c(
+    paste0("event `", event, "`"),
+    paste0("form `", form, "`")
+  )
+  if (!.miss_is_blank_scalar(repeat_instrument)) {
+    parts <- c(parts, paste0("repeat instrument `", repeat_instrument, "`"))
+  }
+  if (!.miss_is_blank_scalar(repeat_instance)) {
+    parts <- c(parts, paste0("repeat instance `", repeat_instance, "`"))
+  }
+
+  paste(parts, collapse = ", ")
 }
 
 .redcapmissing_flex_event_forms_has_repeat <- function(contexts) {

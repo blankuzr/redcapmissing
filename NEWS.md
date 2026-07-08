@@ -1,3 +1,30 @@
+# redcapmissing 4.0.2
+
+## 2026-07-08
+
+- Fixed `flex_event_forms()` so started form contexts with no assessed
+  `form-complete` summary row are not reported as incomplete. Unstarted forms
+  and failed `form-complete` contexts still contribute to `Form Incomplete`.
+- Updated `Form Incomplete` percentages to use exact-context row-started
+  assessed N as the denominator instead of the event-started passed N.
+- Updated `flex_event_forms()` form-row `Form Incomplete` display counts so
+  failed `event-row-started` contexts also contribute to the displayed numerator
+  without changing the underlying validation summaries.
+- Added an `All` summary row to `flex_event_forms()` that reports aggregate
+  incomplete/assessed form opportunities, and aligned repeat form rows so
+  failed `instance-row-started` contexts contribute to the displayed
+  `Form Incomplete` numerator.
+- Updated `flex_event_forms()` form-row `Form Incomplete` denominators to use
+  the exact event/form/repeat context instead of reusing the event header N.
+- Hardened `flex_event_forms()` so shown longitudinal and repeat form rows
+  require valid exact `event-row-started` or `instance-row-started`
+  denominators. Non-longitudinal `Single event` rows use positive `Total N` as
+  the display-only denominator.
+- Made `find_missing()` stop when no records remain assessable after filtering
+  unless explicit `records` entries create expected row-started assessments.
+- Regenerated the vignette HTML with UTF-8 output to remove encoded character
+  artifacts.
+
 # redcapmissing 4.0.1
 
 ## 2026-07-08

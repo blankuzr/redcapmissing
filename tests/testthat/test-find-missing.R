@@ -356,13 +356,37 @@ test_that("compact reports match details reports across validation contexts", {
     ignore_fields = c("optional_note", "checkbox_field___2"),
     ignore_ids = "drop"
   ))
+})
 
-  zero_records <- baseline_records[0, , drop = FALSE]
-  expect_compact_matches_details(list(
-    data = zero_records,
-    rcon = fake_rcon(baseline_form_meta()),
-    forms = "baseline_form"
-  ))
+test_that("find_missing stops when no records remain assessable after filtering", {
+  records <- tibble::tibble(
+    record_id = c("r1", "r2"),
+    branch_flag = c("0", "0"),
+    required_note = c("entered", ""),
+    optional_note = c("", ""),
+    checkbox_field___1 = c("1", "1"),
+    checkbox_field___2 = c("0", "0"),
+    checkbox_other = c("", ""),
+    conditional_note = c("", "")
+  )
+
+  expect_error(
+    find_missing(
+      data = records[0, , drop = FALSE],
+      rcon = fake_rcon(baseline_form_meta()),
+      forms = "baseline_form"
+    ),
+    "no records to assess"
+  )
+  expect_error(
+    find_missing(
+      data = records,
+      rcon = fake_rcon(baseline_form_meta()),
+      forms = "baseline_form",
+      ignore_ids = c("r1", "r2")
+    ),
+    "no records to assess"
+  )
 })
 
 test_that("non-field validation rows use typed NA field columns", {
@@ -1281,6 +1305,41 @@ test_that("records IDs absent from data create upstream failures", {
   ))
   expect_false(any(fm_checks(report, "form-started")$record_id == "missing_id"))
   expect_false(any(fm_checks(report, "field-complete")$record_id == "missing_id"))
+})
+
+test_that("explicit records create row-started failures from empty exports", {
+  status_meta <- dplyr::bind_rows(
+    meta_row("record_id", "status_form", field_label = "Record ID", required = "y"),
+    meta_row("status_started", "status_form", required = "y"),
+    meta_row("status_value", "status_form", required = "y")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1),
+    unique_event_name = c("event_1", "event_2"),
+    form = c("status_form", "status_form")
+  )
+  records <- tibble::tibble(
+    record_id = character(),
+    redcap_event_name = character(),
+    status_started = character(),
+    status_value = character()
+  )
+
+  report <- find_missing_with_details(
+    data = records,
+    rcon = fake_rcon(status_meta, mapping = mapping),
+    forms = "status_form",
+    records = list(event_2 = "missing_id")
+  )
+  event_checks <- fm_checks(report, "event-row-started")
+
+  expect_equal(report$spec$total_n, 1L)
+  expect_equal(nrow(event_checks), 1)
+  expect_equal(event_checks$record_id, "missing_id")
+  expect_equal(event_checks$redcap_event_name, "event_2")
+  expect_false(event_checks$validation_passed)
+  expect_equal(nrow(fm_checks(report, "form-started")), 0)
+  expect_equal(nrow(fm_checks(report, "field-complete")), 0)
 })
 
 test_that("records eligibility applies to repeat-instance checks", {

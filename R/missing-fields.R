@@ -412,7 +412,7 @@
   }
 
   form_events <- .miss_missing_event_form_events(project)
-  if (length(form_events) == 0 || nrow(records) == 0) {
+  if (length(form_events) == 0) {
     return(.miss_empty_expected())
   }
 
@@ -472,9 +472,6 @@
 
   records <- tibble::as_tibble(records)
   form_records <- tibble::as_tibble(form_records)
-  if (nrow(records) == 0) {
-    return(.miss_empty_expected())
-  }
 
   contexts <- .miss_expected_repeat_contexts(
     records = records,
