@@ -115,6 +115,25 @@
   dplyr::bind_rows(rows)
 }
 
+.miss_build_form_presence_plan <- function(form_meta, field_names) {
+  rows <- lapply(seq_len(nrow(form_meta)), function(i) {
+    field <- form_meta$field_name[[i]]
+    exports <- field_names[
+      field_names$original_field_name == field,
+      ,
+      drop = FALSE
+    ]
+
+    tibble::tibble(
+      field_name = field,
+      field_type = form_meta$field_type[[i]],
+      child_fields = list(as.character(exports$export_field_name))
+    )
+  })
+
+  dplyr::bind_rows(rows)
+}
+
 .miss_build_choice_map <- function(meta) {
   rows <- lapply(seq_len(nrow(meta)), function(i) {
     field <- meta$field_name[[i]]
@@ -296,34 +315,34 @@
   }
 
   field_names <- .miss_get_field_names(data_meta)
-  field_plan <- .miss_build_field_plan(
+  presence_plan <- .miss_build_form_presence_plan(
     form_meta = data_meta,
     field_names = field_names
   )
-  if (nrow(field_plan) == 0) {
+  if (nrow(presence_plan) == 0) {
     return(.miss_empty_expected())
   }
 
-  export_fields <- unique(unlist(field_plan$child_fields, use.names = FALSE))
+  export_fields <- unique(unlist(presence_plan$child_fields, use.names = FALSE))
   actual_contexts <- .miss_context_from_records(records, project)
   actual_started <- logical(nrow(records))
 
   if (nrow(records) > 0) {
     present <- vapply(
-      seq_len(nrow(field_plan)),
+      seq_len(nrow(presence_plan)),
       function(field_i) {
         .miss_field_present(
           records = records,
-          field = field_plan$field_name[[field_i]],
-          field_type = field_plan$field_type[[field_i]],
-          child_fields = field_plan$child_fields[[field_i]],
+          field = presence_plan$field_name[[field_i]],
+          field_type = presence_plan$field_type[[field_i]],
+          child_fields = presence_plan$child_fields[[field_i]],
           choice_map = tibble::tibble()
         )$field_complete
       },
       logical(nrow(records))
     )
     if (is.null(dim(present))) {
-      present <- matrix(present, ncol = nrow(field_plan))
+      present <- matrix(present, ncol = nrow(presence_plan))
     }
 
     actual_started <- rowSums(present, na.rm = TRUE) > 0
@@ -667,56 +686,97 @@
 
 .miss_build_event_complete_check_rows <- function(validation_rows) {
   validation_rows <- tibble::as_tibble(validation_rows)
-  if (nrow(validation_rows) == 0) {
-    return(.miss_empty_expected())
+  status <- .miss_build_on_route_event_status(list(validation_rows))
+  .miss_build_event_complete_check_rows_from_status(status)
+}
+
+.miss_build_on_route_event_status <- function(check_rows) {
+  rows <- dplyr::bind_rows(check_rows)
+  if (nrow(rows) == 0) {
+    return(.miss_empty_event_status())
   }
 
-  on_route_checks <- .redcapmissing_on_route_checks()
-  rows <- validation_rows[
-    validation_rows$validation_check %in% on_route_checks,
+  rows <- rows[
+    rows$validation_check %in% .redcapmissing_on_route_checks(),
     ,
     drop = FALSE
   ]
   if (nrow(rows) == 0) {
-    return(.miss_empty_expected())
+    return(.miss_empty_event_status())
   }
 
+  rows <- .miss_normalize_validation_context_columns(rows)
   rows <- rows[
     !.miss_is_blank_vec(rows$record_id),
     ,
     drop = FALSE
   ]
   if (nrow(rows) == 0) {
-    return(.miss_empty_expected())
+    return(.miss_empty_event_status())
   }
 
-  rows$redcap_event_name <- .miss_chr_vec(rows$redcap_event_name)
-  rows$redcap_event_name[is.na(rows$redcap_event_name)] <- ""
-
-  context_cols <- c("record_id", "redcap_event_name")
-  contexts <- unique(rows[, context_cols, drop = FALSE])
+  contexts <- rows[, c("record_id", "redcap_event_name"), drop = FALSE]
   context_key <- .miss_context_key(
     contexts$record_id,
     contexts$redcap_event_name,
     "",
     ""
   )
-  keep_context <- !duplicated(context_key)
-  contexts <- contexts[keep_context, , drop = FALSE]
-  context_key <- context_key[keep_context]
-  row_key <- .miss_context_key(
-    rows$record_id,
-    rows$redcap_event_name,
-    "",
-    ""
-  )
-  group_id <- match(row_key, context_key)
-  failed_count <- rowsum(
+  unique_key <- unique(context_key)
+  group_id <- match(context_key, unique_key)
+  contexts <- contexts[match(unique_key, context_key), , drop = FALSE]
+  failed <- rowsum(
     as.integer(!(rows$validation_passed %in% TRUE)),
     group_id,
     reorder = FALSE
-  )[, 1]
-  event_passed <- failed_count == 0L
+  )[, 1] > 0L
+
+  tibble::tibble(
+    record_id = contexts$record_id,
+    redcap_event_name = contexts$redcap_event_name,
+    on_route_failed = failed
+  )
+}
+
+.miss_empty_event_status <- function() {
+  tibble::tibble(
+    record_id = character(),
+    redcap_event_name = character(),
+    on_route_failed = logical()
+  )
+}
+
+.miss_build_event_complete_check_rows_from_status <- function(status) {
+  status <- tibble::as_tibble(status)
+  if (nrow(status) == 0) {
+    return(.miss_empty_expected())
+  }
+
+  status <- .miss_normalize_validation_context_columns(status)
+  status <- status[
+    !.miss_is_blank_vec(status$record_id),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(status) == 0) {
+    return(.miss_empty_expected())
+  }
+
+  contexts <- status[, c("record_id", "redcap_event_name"), drop = FALSE]
+  context_key <- .miss_context_key(
+    contexts$record_id,
+    contexts$redcap_event_name,
+    "",
+    ""
+  )
+  unique_key <- unique(context_key)
+  group_id <- match(context_key, unique_key)
+  contexts <- contexts[match(unique_key, context_key), , drop = FALSE]
+  failed <- rowsum(
+    as.integer(status$on_route_failed),
+    group_id,
+    reorder = FALSE
+  )[, 1] > 0L
 
   contexts$redcap_repeat_instrument <- ""
   contexts$redcap_repeat_instance <- ""
@@ -724,7 +784,7 @@
     contexts = contexts,
     form = "",
     validation_check = "event-complete",
-    validation_passed = event_passed
+    validation_passed = !failed
   )
   .miss_add_validation_context(out)
 }
@@ -914,6 +974,7 @@
 
 .miss_add_validation_context <- function(rows) {
   rows <- tibble::as_tibble(rows)
+  rows <- .miss_normalize_validation_context_columns(rows)
   if (nrow(rows) == 0) {
     rows$validation_context <- character()
     return(rows)
@@ -941,6 +1002,21 @@
   )
 
   rows$validation_context <- context
+  rows
+}
+
+.miss_normalize_validation_context_columns <- function(rows) {
+  rows <- tibble::as_tibble(rows)
+  context_cols <- c(
+    "redcap_event_name",
+    "redcap_repeat_instrument",
+    "redcap_repeat_instance",
+    "form"
+  )
+  for (column in intersect(context_cols, names(rows))) {
+    rows[[column]] <- .miss_chr_vec(rows[[column]])
+    rows[[column]][is.na(rows[[column]])] <- ""
+  }
   rows
 }
 

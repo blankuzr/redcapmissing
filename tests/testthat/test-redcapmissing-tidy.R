@@ -99,6 +99,25 @@ test_that("tidy preserves zero-denominator event-row-started rows", {
   expect_equal(event_complete_summary$failed, 1)
 })
 
+test_that("tidy uses blank event context for non-longitudinal form and field rows", {
+  report <- tidy_baseline_report()
+  tidy_tbl <- tidy(report)
+  context_rows <- tidy_tbl[
+    tidy_tbl$validation_check %in% c("form-complete", "field-complete"),
+    ,
+    drop = FALSE
+  ]
+
+  expect_false(any(is.na(context_rows$redcap_event_name)))
+  expect_equal(unique(context_rows$redcap_event_name), "")
+  expect_equal(
+    unique(report$summary$redcap_event_name[
+      report$summary$validation_check %in% c("form-complete", "field-complete")
+    ]),
+    ""
+  )
+})
+
 test_that("tidy returns focused summaries for combined multi-form reports", {
   metadata <- dplyr::bind_rows(
     meta_row("record_id", "alpha_form", field_label = "Record ID", required = "y"),

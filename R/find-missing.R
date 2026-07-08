@@ -330,7 +330,8 @@ find_missing <- function(
       ignore_fields = ignore_fields,
       exclude_types = exclude_types,
       instances = instance_settings$values[[form]],
-      instances_explicit = instance_settings$explicit[[form]]
+      instances_explicit = instance_settings$explicit[[form]],
+      details = details
     )
     .miss_cli_form_progress(
       form = form,
@@ -355,32 +356,29 @@ find_missing <- function(
     )
   }
 
-  validation_rows <- .miss_bind_report_component(
-    reports = form_reports,
-    component = "validation_rows"
-  )
   form_labels <- stats::setNames(
     vapply(form_reports, `[[`, character(1), "form_label"),
     forms
   )
   event_labels <- .miss_combine_event_labels(form_reports)
-  event_complete_checks <- .miss_build_event_complete_check_rows(
-    validation_rows
+  event_status <- .miss_bind_report_component(
+    reports = form_reports,
+    component = "event_status"
   )
-  event_complete_failures <- event_complete_checks[
-    !event_complete_checks$validation_passed,
-    ,
-    drop = FALSE
-  ]
-  validation_rows <- dplyr::bind_rows(
-    validation_rows,
-    event_complete_checks
+  event_complete_checks <- .miss_build_event_complete_check_rows_from_status(
+    event_status
   )
   summary <- .miss_build_validation_summary(
     form_reports = form_reports,
     event_complete_checks = event_complete_checks
   )
-  missing <- .miss_build_missing_rows(validation_rows)
+  form_validation_rows <- .miss_count_form_validation_rows(form_reports)
+  validation_row_count <- form_validation_rows + nrow(event_complete_checks)
+  missing <- .miss_build_report_missing_rows(
+    form_reports = form_reports,
+    event_complete_checks = event_complete_checks,
+    form_validation_rows = form_validation_rows
+  )
   ignored_fields <- unique(unlist(.miss_named_report_component(
     form_reports,
     "ignored_fields"
@@ -390,6 +388,14 @@ find_missing <- function(
   .miss_cli_overall_progress(progress = progress)
 
   details_out <- if (isTRUE(details)) {
+    validation_rows <- .miss_bind_report_component(
+      reports = form_reports,
+      component = "validation_rows"
+    )
+    validation_rows <- dplyr::bind_rows(
+      validation_rows,
+      event_complete_checks
+    )
     .miss_build_report_details(
       validation_rows = validation_rows
     )
@@ -398,7 +404,6 @@ find_missing <- function(
   }
   spec <- .miss_build_report_spec(
     form_reports = form_reports,
-    validation_rows = validation_rows,
     required_fields = required_fields,
     eligible_records = eligible_records,
     ignored_fields = ignored_fields,
@@ -406,13 +411,14 @@ find_missing <- function(
     forms = forms,
     form_labels = form_labels,
     event_labels = event_labels,
-    id_col = id_col
+    id_col = id_col,
+    total_n = .miss_count_form_report_records(form_reports)
   )
   diagnostics <- .miss_build_report_diagnostics(
     started_at = report_started_at,
     finished_at = report_finished_at,
     form_reports = form_reports,
-    validation_rows = validation_rows,
+    validation_row_count = validation_row_count,
     summary = summary,
     missing = missing
   )
@@ -442,7 +448,8 @@ find_missing <- function(
   ignore_fields,
   exclude_types,
   instances,
-  instances_explicit
+  instances_explicit,
+  details
 ) {
 
   project <- .miss_get_project(
@@ -627,28 +634,24 @@ find_missing <- function(
     ,
     drop = FALSE
   ]
-  validation_rows <- dplyr::bind_rows(
-    event_checks,
-    repeat_checks,
-    form_checks,
-    form_complete_checks,
-    expected
-  )
-  validation_rows <- .miss_add_validation_context(validation_rows)
 
-  list(
-    validation_rows = validation_rows,
+  check_rows <- list(
     event_row_started_checks = event_checks,
-    event_row_started_failures = event_row_started_failures,
     instance_row_started_checks = repeat_checks,
-    instance_row_started_failures = instance_row_started_failures,
     form_started_checks = form_checks,
-    form_started_failures = form_started_failures,
     form_complete_checks = form_complete_checks,
-    form_complete_failures = form_complete_failures,
-    field_complete_checks = expected,
-    field_complete_failures = field_complete_failures,
-    field_plan = field_plan,
+    field_complete_checks = expected
+  )
+  row_counts <- vapply(check_rows, nrow, integer(1))
+
+  out <- list(
+    summary = .miss_build_form_validation_summary(
+      c(check_rows, list(form = form))
+    ),
+    missing = .miss_build_form_missing_rows(check_rows),
+    row_counts = row_counts,
+    event_status = .miss_build_on_route_event_status(check_rows),
+    record_ids = .miss_validation_record_ids(check_rows),
     events = project$events %||% character(),
     event_labels = project$event_labels,
     instances = instances,
@@ -660,43 +663,34 @@ find_missing <- function(
     id_col = project$id_col,
     system_fields = project$system_fields
   )
+
+  if (isTRUE(details)) {
+    validation_rows <- dplyr::bind_rows(check_rows)
+    validation_rows <- .miss_add_validation_context(validation_rows)
+    out <- c(out, list(
+      validation_rows = validation_rows,
+    event_row_started_checks = event_checks,
+    event_row_started_failures = event_row_started_failures,
+    instance_row_started_checks = repeat_checks,
+    instance_row_started_failures = instance_row_started_failures,
+    form_started_checks = form_checks,
+    form_started_failures = form_started_failures,
+    form_complete_checks = form_complete_checks,
+    form_complete_failures = form_complete_failures,
+    field_complete_checks = expected,
+    field_complete_failures = field_complete_failures,
+      field_plan = field_plan
+    ))
+  }
+
+  out
 }
 
 .miss_build_validation_summary <- function(form_reports, event_complete_checks) {
-  registry <- .redcapmissing_registry_data()
-  summary_rows <- list()
-  row_i <- 0L
-
-  form_registry <- registry[
-    registry$validation_check != "event-complete",
-    ,
-    drop = FALSE
-  ]
-  for (form_report in form_reports) {
-    for (row in seq_len(nrow(form_registry))) {
-      check <- form_registry[row, , drop = FALSE]
-      component <- paste0(check$component_stem, "_checks")
-      rows <- form_report[[component]] %||% .miss_empty_expected()
-      keep_zero <- .miss_keep_zero_validation_step(
-        validation_check = check$validation_check,
-        form_report = form_report
-      )
-      if (nrow(rows) == 0 && !isTRUE(keep_zero)) {
-        next
-      }
-      row_i <- row_i + 1L
-      summary_rows[[row_i]] <- .miss_summarise_validation_rows(
-        rows = rows,
-        validation_check = check$validation_check,
-        form = form_report$form,
-        keep_zero = keep_zero
-      )
-    }
-  }
+  summary_rows <- lapply(form_reports, `[[`, "summary")
 
   if (nrow(event_complete_checks) > 0) {
-    row_i <- row_i + 1L
-    summary_rows[[row_i]] <- .miss_summarise_validation_rows(
+    summary_rows[[length(summary_rows) + 1L]] <- .miss_summarise_validation_rows(
       rows = event_complete_checks,
       validation_check = "event-complete",
       form = "",
@@ -709,6 +703,43 @@ find_missing <- function(
     return(.miss_empty_validation_summary())
   }
 
+  out
+}
+
+.miss_build_form_validation_summary <- function(form_report) {
+  registry <- .redcapmissing_registry_data()
+  summary_rows <- list()
+  row_i <- 0L
+  form_registry <- registry[
+    registry$validation_check != "event-complete",
+    ,
+    drop = FALSE
+  ]
+
+  for (row in seq_len(nrow(form_registry))) {
+    check <- form_registry[row, , drop = FALSE]
+    component <- paste0(check$component_stem, "_checks")
+    rows <- form_report[[component]] %||% .miss_empty_expected()
+    keep_zero <- .miss_keep_zero_validation_step(
+      validation_check = check$validation_check,
+      form_report = form_report
+    )
+    if (nrow(rows) == 0 && !isTRUE(keep_zero)) {
+      next
+    }
+    row_i <- row_i + 1L
+    summary_rows[[row_i]] <- .miss_summarise_validation_rows(
+      rows = rows,
+      validation_check = check$validation_check,
+      form = form_report$form,
+      keep_zero = keep_zero
+    )
+  }
+
+  out <- dplyr::bind_rows(summary_rows)
+  if (nrow(out) == 0) {
+    return(.miss_empty_validation_summary())
+  }
   out
 }
 
@@ -834,22 +865,95 @@ find_missing <- function(
 }
 
 .miss_build_missing_rows <- function(validation_rows) {
-  validation_rows <- .miss_add_validation_context(validation_rows)
-  if (nrow(validation_rows) == 0) {
-    return(tibble::tibble())
+  .miss_build_component_missing_rows(validation_rows, validation_row_offset = 0L)
+}
+
+.miss_build_form_missing_rows <- function(check_rows) {
+  pieces <- vector("list", length(check_rows))
+  offset <- 0L
+  for (i in seq_along(check_rows)) {
+    rows <- check_rows[[i]]
+    pieces[[i]] <- .miss_build_component_missing_rows(
+      rows,
+      validation_row_offset = offset
+    )
+    offset <- offset + nrow(rows)
   }
 
-  validation_rows$validation_row_id <- seq_len(nrow(validation_rows))
+  out <- dplyr::bind_rows(pieces)
+  if (nrow(out) == 0) {
+    return(.miss_empty_missing_rows())
+  }
+  out
+}
+
+.miss_build_report_missing_rows <- function(
+  form_reports,
+  event_complete_checks,
+  form_validation_rows
+) {
+  pieces <- vector("list", length(form_reports) + 1L)
+  offset <- 0L
+  for (i in seq_along(form_reports)) {
+    form_missing <- form_reports[[i]]$missing %||% .miss_empty_missing_rows()
+    pieces[[i]] <- .miss_offset_missing_rows(form_missing, offset)
+    offset <- offset + sum(form_reports[[i]]$row_counts)
+  }
+  pieces[[length(pieces)]] <- .miss_build_component_missing_rows(
+    event_complete_checks,
+    validation_row_offset = form_validation_rows
+  )
+
+  out <- dplyr::bind_rows(pieces)
+  if (nrow(out) == 0) {
+    return(.miss_empty_missing_rows())
+  }
+  out
+}
+
+.miss_validation_record_ids <- function(check_rows) {
+  rows <- dplyr::bind_rows(check_rows)
+  if (nrow(rows) == 0 || !"record_id" %in% names(rows)) {
+    return(character())
+  }
+
+  record_ids <- unique(.miss_chr_vec(rows$record_id))
+  record_ids[!.miss_is_blank_vec(record_ids)]
+}
+
+.miss_build_component_missing_rows <- function(
+  validation_rows,
+  validation_row_offset = 0L
+) {
+  validation_rows <- .miss_add_validation_context(validation_rows)
+  if (nrow(validation_rows) == 0) {
+    return(.miss_empty_missing_rows())
+  }
+
+  validation_rows$validation_row_id <-
+    validation_row_offset + seq_len(nrow(validation_rows))
   out <- validation_rows[
-    !validation_rows$validation_passed,
+    !(validation_rows$validation_passed %in% TRUE),
     ,
     drop = FALSE
   ]
   if (nrow(out) == 0) {
-    return(tibble::tibble())
+    return(.miss_empty_missing_rows())
   }
 
   out$validation_step <- .miss_step_id(out$form, out$validation_check)
+  .miss_select_missing_rows(out)
+}
+
+.miss_offset_missing_rows <- function(rows, offset) {
+  if (nrow(rows) == 0) {
+    return(rows)
+  }
+  rows$validation_row_id <- rows$validation_row_id + offset
+  rows
+}
+
+.miss_select_missing_rows <- function(rows) {
   select_cols <- c(
     "validation_step",
     "validation_row_id",
@@ -873,8 +977,33 @@ find_missing <- function(
     "export_fields"
   )
 
-  out |>
+  rows |>
     dplyr::select(dplyr::all_of(select_cols), dplyr::everything())
+}
+
+.miss_empty_missing_rows <- function() {
+  tibble::tibble(
+    validation_step = character(),
+    validation_row_id = integer(),
+    record_id = character(),
+    redcap_event_name = character(),
+    redcap_repeat_instrument = character(),
+    redcap_repeat_instance = character(),
+    validation_context = character(),
+    form = character(),
+    validation_level = character(),
+    validation_check_type = character(),
+    validation_check = character(),
+    validation_label = character(),
+    validation_passed = logical(),
+    field_name = character(),
+    field_label = character(),
+    field_type = character(),
+    branching_logic = character(),
+    branch_satisfied = logical(),
+    value_summary = character(),
+    export_fields = character()
+  )
 }
 
 .miss_build_report_details <- function(validation_rows) {
@@ -904,7 +1033,6 @@ find_missing <- function(
 
 .miss_build_report_spec <- function(
   form_reports,
-  validation_rows,
   required_fields,
   eligible_records,
   ignored_fields,
@@ -912,7 +1040,8 @@ find_missing <- function(
   forms,
   form_labels,
   event_labels,
-  id_col
+  id_col,
+  total_n
 ) {
   list(
     required_fields = required_fields,
@@ -927,25 +1056,32 @@ find_missing <- function(
     project = .miss_named_report_component(form_reports, "project"),
     id_col = id_col,
     system_fields = form_reports[[1]]$system_fields,
-    total_n = .miss_count_unique_records(validation_rows)
+    total_n = total_n
   )
 }
 
-.miss_count_unique_records <- function(validation_rows) {
-  if (!"record_id" %in% names(validation_rows)) {
-    return(0L)
-  }
-
-  record_ids <- unique(.miss_chr_vec(validation_rows$record_id))
+.miss_count_form_report_records <- function(form_reports) {
+  record_ids <- unique(unlist(
+    lapply(form_reports, `[[`, "record_ids"),
+    use.names = FALSE
+  ))
   record_ids <- record_ids[!.miss_is_blank_vec(record_ids)]
   length(record_ids)
+}
+
+.miss_count_form_validation_rows <- function(form_reports) {
+  sum(vapply(
+    form_reports,
+    function(form_report) sum(form_report$row_counts),
+    integer(1)
+  ))
 }
 
 .miss_build_report_diagnostics <- function(
   started_at,
   finished_at,
   form_reports,
-  validation_rows,
+  validation_row_count,
   summary,
   missing
 ) {
@@ -956,7 +1092,7 @@ find_missing <- function(
       difftime(finished_at, started_at, units = "secs")
     )),
     forms_processed = length(form_reports),
-    validation_rows = nrow(validation_rows),
+    validation_rows = validation_row_count,
     summary_rows = nrow(summary),
     missing_rows = nrow(missing)
   )

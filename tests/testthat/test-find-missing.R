@@ -14,6 +14,73 @@ fm_failures <- function(report, validation_check) {
   report$details$failures[[validation_check]]
 }
 
+missing_expected_columns <- function() {
+  c(
+    "validation_step",
+    "validation_row_id",
+    "record_id",
+    "redcap_event_name",
+    "redcap_repeat_instrument",
+    "redcap_repeat_instance",
+    "validation_context",
+    "form",
+    "validation_level",
+    "validation_check_type",
+    "validation_check",
+    "validation_label",
+    "validation_passed",
+    "field_name",
+    "field_label",
+    "field_type",
+    "branching_logic",
+    "branch_satisfied",
+    "value_summary",
+    "export_fields"
+  )
+}
+
+expect_compact_matches_details <- function(args) {
+  compact <- do.call(find_missing, c(args, list(details = FALSE)))
+  detailed <- do.call(find_missing, c(args, list(details = TRUE)))
+
+  expect_null(compact$details)
+  expect_equal(compact$summary, detailed$summary, ignore_attr = TRUE)
+  expect_equal(compact$missing, detailed$missing, ignore_attr = TRUE)
+  expect_equal(
+    compact$diagnostics$validation_rows,
+    nrow(detailed$details$validation_rows)
+  )
+  expect_equal(
+    compact$diagnostics$validation_rows,
+    detailed$diagnostics$validation_rows
+  )
+  expect_equal(
+    compact$missing$validation_row_id,
+    which(!(detailed$details$validation_rows$validation_passed %in% TRUE))
+  )
+  expect_equal(compact$diagnostics$summary_rows, nrow(compact$summary))
+  expect_equal(compact$diagnostics$missing_rows, nrow(compact$missing))
+  expect_equal(compact$spec$total_n, detailed$spec$total_n)
+  expect_false(any(c(
+    "agent",
+    "validation_rows",
+    "event_row_started_checks",
+    "event_row_started_failures",
+    "instance_row_started_checks",
+    "instance_row_started_failures",
+    "form_started_checks",
+    "form_started_failures",
+    "form_complete_checks",
+    "form_complete_failures",
+    "event_complete_checks",
+    "event_complete_failures",
+    "field_complete_checks",
+    "field_complete_failures"
+  ) %in% names(compact)))
+
+  invisible(compact)
+}
+
 test_that("public report API exposes canonical validation surfaces", {
   report_args <- formals(find_missing)
 
@@ -170,6 +237,132 @@ test_that("report object uses validation-check canon and removes old names", {
   expect_true(all(report$summary$validation_label %in% registry()$validation_check))
   expect_true(any(report$summary$validation_step == "baseline_form_event-row-started"))
   expect_true(any(report$summary$validation_step == "event-complete"))
+})
+
+test_that("all-pass reports keep the documented missing-row schema", {
+  records <- tibble::tibble(
+    record_id = c("r1", "r2"),
+    branch_flag = c("0", "0"),
+    required_note = c("entered", "entered"),
+    optional_note = c("", ""),
+    checkbox_field___1 = c("1", "1"),
+    checkbox_field___2 = c("0", "0"),
+    checkbox_other = c("", ""),
+    conditional_note = c("", "")
+  )
+
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(baseline_form_meta()),
+    forms = "baseline_form"
+  )
+
+  expect_equal(nrow(report$missing), 0)
+  expect_identical(names(report$missing), missing_expected_columns())
+})
+
+test_that("compact reports match details reports across validation contexts", {
+  baseline_records <- tibble::tibble(
+    record_id = c("r1", "r2"),
+    branch_flag = c("1", "0"),
+    required_note = c("entered", ""),
+    optional_note = c("", ""),
+    checkbox_field___1 = c("1", "1"),
+    checkbox_field___2 = c("0", "0"),
+    checkbox_other = c("", ""),
+    conditional_note = c("", "")
+  )
+  expect_compact_matches_details(list(
+    data = baseline_records,
+    rcon = fake_rcon(baseline_form_meta()),
+    forms = "baseline_form",
+    required_fields = FALSE
+  ))
+
+  status_meta <- dplyr::bind_rows(
+    meta_row("record_id", "status_form", field_label = "Record ID", required = "y"),
+    meta_row("status_started", "status_form", required = "y"),
+    meta_row("status_value", "status_form", required = "y")
+  )
+  status_mapping <- tibble::tibble(
+    arm_num = c(1, 1, 1),
+    unique_event_name = c("event_1", "event_2", "event_3"),
+    form = c("status_form", "status_form", "status_form")
+  )
+  status_records <- tibble::tibble(
+    record_id = c("r1", "r1", "r2", "r2"),
+    redcap_event_name = c("event_1", "event_2", "event_1", "event_2"),
+    status_started = "yes",
+    status_value = c("entered", "", "entered", "entered")
+  )
+  expect_compact_matches_details(list(
+    data = status_records,
+    rcon = fake_rcon(status_meta, mapping = status_mapping),
+    forms = "status_form",
+    records = list(event_3 = "r1")
+  ))
+
+  repeat_meta <- dplyr::bind_rows(
+    meta_row("record_id", "screen_form", field_label = "Record ID", required = "y"),
+    meta_row("screen_started", "screen_form", required = "y"),
+    meta_row("repeat_started", "repeat_form", required = "y"),
+    meta_row("repeat_value", "repeat_form", required = "y")
+  )
+  repeat_mapping <- tibble::tibble(
+    arm_num = c(1, 1),
+    unique_event_name = c("baseline_event", "baseline_event"),
+    form = c("screen_form", "repeat_form")
+  )
+  repeat_instrument_event <- tibble::tibble(
+    event_name = "baseline_event",
+    form_name = "repeat_form",
+    custom_form_label = ""
+  )
+  repeat_records <- tibble::tibble(
+    record_id = c("r1", "r2", "r2"),
+    redcap_event_name = c("baseline_event", "baseline_event", "baseline_event"),
+    redcap_repeat_instrument = c("repeat_form", "repeat_form", "repeat_form"),
+    redcap_repeat_instance = c("1", "1", "2"),
+    repeat_started = c("yes", "yes", "yes"),
+    repeat_value = c("10", "20", "30")
+  )
+  expect_compact_matches_details(list(
+    data = repeat_records,
+    rcon = fake_rcon(
+      repeat_meta,
+      mapping = repeat_mapping,
+      repeat_instrument_event = repeat_instrument_event
+    ),
+    forms = "repeat_form",
+    records = list(baseline_event = c("r1", "r2")),
+    instances = 2L
+  ))
+
+  ignored_records <- tibble::tibble(
+    record_id = c("keep", "drop"),
+    branch_flag = c("0", "0"),
+    required_note = c("", ""),
+    optional_note = c("", ""),
+    checkbox_field___1 = c("1", "1"),
+    checkbox_field___2 = c("0", "0"),
+    checkbox_other = c("", ""),
+    conditional_note = c("", "")
+  )
+  expect_compact_matches_details(list(
+    data = ignored_records,
+    rcon = fake_rcon(baseline_form_meta()),
+    forms = "baseline_form",
+    required_fields = FALSE,
+    ignore_fields = c("optional_note", "checkbox_field___2"),
+    ignore_ids = "drop"
+  ))
+
+  zero_records <- baseline_records[0, , drop = FALSE]
+  expect_compact_matches_details(list(
+    data = zero_records,
+    rcon = fake_rcon(baseline_form_meta()),
+    forms = "baseline_form"
+  ))
 })
 
 test_that("non-field validation rows use typed NA field columns", {
@@ -372,6 +565,84 @@ test_that("compound event-qualified branching logic evaluates all references", {
     fm_checks(report, "field-complete")$record_id %in% c("closed_event", "closed_note") &
       fm_checks(report, "field-complete")$field_name == "event_conditional"
   ))
+})
+
+test_that("invalid branching on unassessed fields does not block form-started", {
+  meta <- dplyr::bind_rows(
+    baseline_form_meta(),
+    meta_row(
+      "optional_bad_branch",
+      "baseline_form",
+      branching = "[branch_flag] = '1' and ("
+    ),
+    meta_row(
+      "descriptive_bad_branch",
+      "baseline_form",
+      field_type = "descriptive",
+      branching = "[branch_flag] = '1' and (",
+      required = "y"
+    ),
+    meta_row(
+      "ignored_bad_branch",
+      "baseline_form",
+      branching = "[branch_flag] = '1' and (",
+      required = "y"
+    )
+  )
+  records <- tibble::tibble(
+    record_id = "r1",
+    branch_flag = "0",
+    required_note = "entered",
+    optional_note = "",
+    checkbox_field___1 = "1",
+    checkbox_field___2 = "0",
+    checkbox_other = "",
+    conditional_note = "",
+    optional_bad_branch = "",
+    descriptive_bad_branch = "",
+    ignored_bad_branch = ""
+  )
+
+  expect_error(
+    report <- find_missing(
+      data = records,
+      rcon = fake_rcon(meta),
+      forms = "baseline_form",
+      ignore_fields = "ignored_bad_branch"
+    ),
+    NA
+  )
+  expect_true(any(report$summary$validation_check == "form-started"))
+  expect_false(any(report$missing$field_name %in% c(
+    "optional_bad_branch",
+    "descriptive_bad_branch",
+    "ignored_bad_branch"
+  )))
+})
+
+test_that("invalid branching on assessed fields still fails clearly", {
+  meta <- baseline_form_meta()
+  meta$branching_logic[meta$field_name == "conditional_note"] <-
+    "[branch_flag] = '1' and ("
+  records <- tibble::tibble(
+    record_id = "r1",
+    branch_flag = "1",
+    required_note = "entered",
+    optional_note = "",
+    checkbox_field___1 = "1",
+    checkbox_field___2 = "0",
+    checkbox_other = "",
+    conditional_note = ""
+  )
+
+  expect_error(
+    find_missing(
+      data = records,
+      rcon = fake_rcon(meta),
+      forms = "baseline_form"
+    ),
+    "unexpected|Could not"
+  )
 })
 
 test_that("event-row-started strictly gates downstream checks", {

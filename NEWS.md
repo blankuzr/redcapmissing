@@ -14,6 +14,12 @@
 - Improved performance by caching REDCap project context, compiling branching
   logic once per field plan, caching event-qualified branch lookups, and
   replacing quadratic form/event rollups with grouped reductions.
+- Tightened the compact default report path so full row-level validation tables
+  are not retained unless `details = TRUE`, while preserving deterministic
+  failed-row identifiers, empty `report$missing` schemas, and blank context
+  strings for non-applicable REDCap system columns.
+- Deferred branch compilation away from form-started presence checks so invalid
+  branching logic on unassessed fields does not block the report.
 
 # redcapmissing 3.2.6
 

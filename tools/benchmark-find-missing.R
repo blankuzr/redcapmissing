@@ -226,19 +226,43 @@ make_tier <- function(tier) {
   )
 }
 
+measure_with_alloc_signal <- function(expr) {
+  alloc_path <- tempfile("redcapmissing-profmem-", fileext = ".out")
+  alloc_mb <- NA_real_
+  use_profmem <- isTRUE(capabilities("profmem"))
+  if (use_profmem) {
+    utils::Rprofmem(alloc_path)
+  }
+  value <- force(expr)
+  if (use_profmem) {
+    utils::Rprofmem(NULL)
+    alloc_lines <- readLines(alloc_path, warn = FALSE)
+    alloc_bytes <- suppressWarnings(as.numeric(sub(" .*", "", alloc_lines)))
+    alloc_mb <- sum(alloc_bytes, na.rm = TRUE) / 1024^2
+  }
+  unlink(alloc_path)
+
+  list(value = value, allocated_mb = alloc_mb)
+}
+
 measure_tier <- function(tier, iteration) {
   input <- make_tier(tier)
   gc(verbose = FALSE)
+  measurement <- NULL
   elapsed <- system.time({
-    report <- find_missing(
-      data = input$records,
-      rcon = input$rcon,
-      forms = input$forms,
-      instances = input$instances,
-      details = FALSE,
-      progress = FALSE
+    measurement <- measure_with_alloc_signal(
+      find_missing(
+        data = input$records,
+        rcon = input$rcon,
+        forms = input$forms,
+        instances = input$instances,
+        details = FALSE,
+        progress = FALSE
+      )
     )
+    report <- measurement$value
   })[["elapsed"]]
+  report <- measurement$value
 
   tibble::tibble(
     tier = tier,
@@ -246,7 +270,8 @@ measure_tier <- function(tier, iteration) {
     records = nrow(input$records),
     forms = length(input$forms),
     elapsed_seconds = unname(elapsed),
-    report_size_mb = as.numeric(utils::object.size(report)) / 1024^2,
+    returned_report_size_mb = as.numeric(utils::object.size(report)) / 1024^2,
+    allocated_mb = measurement$allocated_mb,
     summary_rows = nrow(report$summary),
     missing_rows = nrow(report$missing),
     validation_rows = report$diagnostics$validation_rows
@@ -269,7 +294,8 @@ summary <- results |>
     median_seconds = stats::median(.data$elapsed_seconds),
     min_seconds = min(.data$elapsed_seconds),
     max_seconds = max(.data$elapsed_seconds),
-    median_report_size_mb = stats::median(.data$report_size_mb),
+    median_returned_report_size_mb = stats::median(.data$returned_report_size_mb),
+    median_allocated_mb = stats::median(.data$allocated_mb, na.rm = TRUE),
     median_validation_rows = stats::median(.data$validation_rows),
     .groups = "drop"
   )
@@ -277,15 +303,25 @@ summary <- results |>
 baseline_path <- Sys.getenv("REDCAPMISSING_BENCH_BASELINE", "")
 if (nzchar(baseline_path) && file.exists(baseline_path)) {
   baseline <- utils::read.csv(baseline_path)
+  size_col <- if ("median_returned_report_size_mb" %in% names(baseline)) {
+    "median_returned_report_size_mb"
+  } else {
+    "median_report_size_mb"
+  }
   baseline <- baseline[
-    c("tier", "median_seconds", "median_report_size_mb")
+    c("tier", "median_seconds", size_col)
   ]
-  names(baseline) <- c("tier", "baseline_seconds", "baseline_report_size_mb")
+  names(baseline) <- c(
+    "tier",
+    "baseline_seconds",
+    "baseline_returned_report_size_mb"
+  )
   summary <- dplyr::left_join(summary, baseline, by = "tier") |>
     dplyr::mutate(
       time_ratio_vs_baseline = .data$median_seconds / .data$baseline_seconds,
-      size_ratio_vs_baseline = .data$median_report_size_mb /
-        .data$baseline_report_size_mb
+      returned_size_ratio_vs_baseline =
+        .data$median_returned_report_size_mb /
+          .data$baseline_returned_report_size_mb
     )
 }
 
