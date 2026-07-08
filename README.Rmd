@@ -329,39 +329,6 @@ instances roll up to their parent event for `event-complete`.
 See the [package vignette](vignettes/redcapmissing.Rmd#repeat-expectations) for
 a runnable synthetic repeat example.
 
-## Acknowledgement and citation
-
-### `redcapAPI`
-
-This package relies heavily on `redcapAPI` and would not be practical without
-it. If `redcapmissing` contributes to your work, please also cite
-`redcapAPI`.
-
-#### Foundational package citation
-
-> Nutter B, Garbett S, Obregon S, Obadia T, Lehr M, High B, Lane S,
-> Beasley W, Gray W, Kennedy N, Hsi-Nien T, Horner J, Stephens J, Beck C,
-> Johnson B, Chase P, Tobias P (2026). *redcapAPI: Accessing data from REDCap
-> projects using the API*. R package version 2.12.0.
-> <https://doi.org/10.5281/zenodo.10564837>
-
-#### Current package ownership and maintenance
-
-Current public stewardship appears under VUMC Biostatistics / `vubiostat`, with
-Shawn Garbett listed as maintainer in current package documentation and the
-upstream project README stating that ownership transfer to VUMC Biostatistics is
-complete.
-
-Useful current `redcapAPI` references:
-
-- VUMC Biostatistics redcapAPI project page and abstract by Savannah Obregon,
-  Shawn Garbett, and Benjamin Nutter:
-  <https://www.vumc.org/biostatistics/node/565>
-- Current GitHub repository for the package:
-  <https://github.com/vubiostat/redcapAPI>
-- Current package site:
-  <https://vubiostat.r-universe.dev/redcapAPI>
-
 ## Learn more
 
 - Run `vignette("redcapmissing", package = "redcapmissing")` after installing
