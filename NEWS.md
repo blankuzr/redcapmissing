@@ -1,3 +1,12 @@
+# redcapmissing 4.0.1
+
+## 2026-07-08
+
+- Updated `flex_event_forms()` to show `N (started/due)` counts with
+  percentages, report `Form Incomplete` instead of `Form Complete`, remove the
+  `Fields Missing` column, and retain form rows under events with zero started
+  rows.
+
 # redcapmissing 4.0.0
 
 ## 2026-07-08

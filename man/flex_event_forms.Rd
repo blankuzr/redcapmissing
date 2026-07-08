@@ -16,29 +16,27 @@ flex_event_forms(x, ...)
 }
 \value{
 A \code{flextable} object with event header rows and form rows nested
-under each started event. Repeat instrument and instance columns are
+under each event. Repeat instrument and instance columns are
 included only when the report contains repeat context. Repeat form rows
-show \code{instance-row-started} as \code{passed/assessed} in the N column;
+show \code{instance-row-started} as \verb{started/due (\%)} in the N column;
 non-repeat form rows leave the N cell blank. This function requires the
 optional \code{flextable} and \code{glue} packages.
 }
 \description{
 \code{flex_event_forms()} formats a REDCap missingness report as a reduced
-event/form \code{flextable}. It shows total record N in the N column label,
-event row-started passed/assessed counts, and form-level form-complete and
-field-complete missing-field summaries.
+event/form \code{flextable}. It shows event row-started started/due counts,
+form-level incomplete counts, and repeat-instance started/due counts when
+repeat context is present.
 }
 \details{
 The table is a reporting reduction of \code{\link[=tidy.redcapmissing]{tidy.redcapmissing()}} plus report
-metadata. The N column label, such as \code{"N = 116"}, counts unique eligible
-records represented in the report's validation rows. Event header rows show
-\code{event-row-started} as \code{passed/assessed}; non-longitudinal reports use a
-synthetic \verb{Single event} row with \verb{Total N/Total N}. If multiple
+metadata. The \code{N (started/due)} column shows \code{event-row-started} as
+\verb{started/due (\%)}; non-longitudinal reports use a synthetic \verb{Single event}
+row with \verb{Total N/Total N}. If multiple
 \code{event-row-started} summary rows are present for the same event, they must
-agree on \code{passed} and \code{assessed} counts. Form rows show \code{form-complete}
-passed counts as a percentage of the event or repeat-instance passed count,
-and \code{field-complete} failed field-cell counts as a percentage of field cells
-assessed for that form context.
+agree on \code{passed} and \code{assessed} counts. Form rows show incomplete
+\code{form-complete} counts as a percentage of the event or repeat-instance
+started count.
 
 \code{event-complete} rows are not shown. \code{form-started} acts only as an upstream
 gate for downstream assessment and is not shown as a metric row.

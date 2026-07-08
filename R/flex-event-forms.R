@@ -2,21 +2,19 @@
 #'
 #' @description
 #' `flex_event_forms()` formats a REDCap missingness report as a reduced
-#' event/form `flextable`. It shows total record N in the N column label,
-#' event row-started passed/assessed counts, and form-level form-complete and
-#' field-complete missing-field summaries.
+#' event/form `flextable`. It shows event row-started started/due counts,
+#' form-level incomplete counts, and repeat-instance started/due counts when
+#' repeat context is present.
 #'
 #' @details
 #' The table is a reporting reduction of [tidy.redcapmissing()] plus report
-#' metadata. The N column label, such as `"N = 116"`, counts unique eligible
-#' records represented in the report's validation rows. Event header rows show
-#' `event-row-started` as `passed/assessed`; non-longitudinal reports use a
-#' synthetic `Single event` row with `Total N/Total N`. If multiple
+#' metadata. The `N (started/due)` column shows `event-row-started` as
+#' `started/due (%)`; non-longitudinal reports use a synthetic `Single event`
+#' row with `Total N/Total N`. If multiple
 #' `event-row-started` summary rows are present for the same event, they must
-#' agree on `passed` and `assessed` counts. Form rows show `form-complete`
-#' passed counts as a percentage of the event or repeat-instance passed count,
-#' and `field-complete` failed field-cell counts as a percentage of field cells
-#' assessed for that form context.
+#' agree on `passed` and `assessed` counts. Form rows show incomplete
+#' `form-complete` counts as a percentage of the event or repeat-instance
+#' started count.
 #'
 #' `event-complete` rows are not shown. `form-started` acts only as an upstream
 #' gate for downstream assessment and is not shown as a metric row.
@@ -25,9 +23,9 @@
 #' @param ... Additional arguments passed to methods.
 #'
 #' @return A `flextable` object with event header rows and form rows nested
-#'   under each started event. Repeat instrument and instance columns are
+#'   under each event. Repeat instrument and instance columns are
 #'   included only when the report contains repeat context. Repeat form rows
-#'   show `instance-row-started` as `passed/assessed` in the N column;
+#'   show `instance-row-started` as `started/due (%)` in the N column;
 #'   non-repeat form rows leave the N cell blank. This function requires the
 #'   optional `flextable` and `glue` packages.
 #'
@@ -64,7 +62,7 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     x = x
   )
   display_data <- flex_parts$data[, flex_parts$display_columns, drop = FALSE]
-  names(display_data)[names(display_data) == "N"] <- paste0("N = ", flex_parts$total_n)
+  names(display_data)[names(display_data) == "N"] <- "N (started/due)"
 
   out <- flextable::flextable(display_data) |>
     flextable::align(align = "left", part = "all") |>
@@ -125,10 +123,6 @@ flex_event_forms.redcapmissing <- function(x, ...) {
       )
     )
 
-    if (event_stats$passed == 0 && !single_event) {
-      next
-    }
-
     for (row in seq_len(nrow(event_contexts))) {
       context <- event_contexts[row, , drop = FALSE]
       out <- rbind(
@@ -148,7 +142,7 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   if (has_repeat) {
     display_columns <- c(display_columns, "Repeat Instrument", "Repeat Instance")
   }
-  display_columns <- c(display_columns, "N", "Form Complete", "Fields Missing")
+  display_columns <- c(display_columns, "N", "Form Incomplete")
 
   list(
     data = out,
@@ -366,7 +360,8 @@ flex_event_forms.redcapmissing <- function(x, ...) {
 }
 
 .redcapmissing_flex_event_forms_format_stats <- function(stats) {
-  paste0(stats$passed, "/", stats$assessed)
+  pct <- .redcapmissing_flex_event_forms_pct(stats$passed, stats$assessed)
+  as.character(glue::glue("{stats$passed}/{stats$assessed} ({pct}%)"))
 }
 
 .redcapmissing_flex_event_forms_empty <- function(has_repeat) {
@@ -377,8 +372,7 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     repeat_instrument = character(),
     repeat_instance = character(),
     n = character(),
-    form_complete = character(),
-    fields_missing = character(),
+    form_incomplete = character(),
     has_repeat = has_repeat
   )
 }
@@ -406,8 +400,7 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     repeat_instrument = "",
     repeat_instance = "",
     n = .redcapmissing_flex_event_forms_format_stats(event_stats),
-    form_complete = "",
-    fields_missing = "",
+    form_incomplete = "",
     has_repeat = has_repeat
   )
 }
@@ -437,18 +430,7 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     validation_check = "form-complete",
     column = "passed"
   )
-  field_failed <- .redcapmissing_flex_event_forms_summary_value(
-    validation_set = validation_set,
-    context = context,
-    validation_check = "field-complete",
-    column = "failed"
-  )
-  field_assessed <- .redcapmissing_flex_event_forms_summary_value(
-    validation_set = validation_set,
-    context = context,
-    validation_check = "field-complete",
-    column = "assessed"
-  )
+  form_incomplete <- max(row_n - form_complete_passed, 0)
 
   .redcapmissing_flex_event_forms_row(
     row_type = "form",
@@ -463,14 +445,9 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     ),
     repeat_instance = context$redcap_repeat_instance,
     n = if (repeat_context) .redcapmissing_flex_event_forms_format_stats(row_stats) else "",
-    form_complete = .redcapmissing_flex_event_forms_format_count(
-      count = form_complete_passed,
+    form_incomplete = .redcapmissing_flex_event_forms_format_count(
+      count = form_incomplete,
       denominator = row_n
-    ),
-    fields_missing = .redcapmissing_flex_event_forms_format_count(
-      count = field_failed,
-      denominator = field_assessed,
-      denominator_label = "fields"
     ),
     has_repeat = has_repeat
   )
@@ -538,17 +515,10 @@ flex_event_forms.redcapmissing <- function(x, ...) {
 
 .redcapmissing_flex_event_forms_format_count <- function(
   count,
-  denominator,
-  denominator_label = NULL
+  denominator
 ) {
   pct <- .redcapmissing_flex_event_forms_pct(count, denominator)
-  if (is.null(denominator_label)) {
-    return(as.character(glue::glue("{count} ({pct}%)")))
-  }
-
-  as.character(glue::glue(
-    "{count} ({pct}% of {denominator} {denominator_label})"
-  ))
+  as.character(glue::glue("{count} ({pct}%)"))
 }
 
 .redcapmissing_flex_event_forms_pct <- function(count, denominator) {
@@ -566,8 +536,7 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   repeat_instrument,
   repeat_instance,
   n,
-  form_complete,
-  fields_missing,
+  form_incomplete,
   has_repeat
 ) {
   out <- tibble::tibble(
@@ -580,8 +549,7 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     out[["Repeat Instance"]] <- repeat_instance
   }
   out[["N"]] <- n
-  out[["Form Complete"]] <- form_complete
-  out[["Fields Missing"]] <- fields_missing
+  out[["Form Incomplete"]] <- form_incomplete
   out
 }
 
