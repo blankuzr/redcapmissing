@@ -370,10 +370,12 @@ html <- flex_html(ft)
 repeat labels. Its `events`, `forms`, and `validation_check` arguments use raw
 values from `tidy(report)` to filter rows before labels are applied. `tidy()`
 and `report$summary` keep the canonical hyphenated `validation_check` values.
-`flex_event_forms()` returns a reduced event/form table with event row-started
-started/due counts in the N column, form-incomplete counts nested under each
-event, and form rows even when no due records have an exported event row.
-Repeat form rows show repeat-instance started/due counts in the N column, while
-non-repeat form rows leave that cell blank. Projects whose REDCap record ID
-field has another name still produce populated event and form rows. The public
-`validation_level` values are `event:form`, `event:form:instance`, and `event`.
+`flex_event_forms()` returns a reduced event/form table with an `All` summary
+row, event row-started started/due counts in the N column, form-incomplete
+counts nested under each event, and form rows even when no due records have an
+exported event row. The `All` row reports incomplete/assessed form
+opportunities across the displayed form rows. Repeat form rows show
+repeat-instance started/due counts in the N column, while non-repeat form rows
+leave that cell blank. Projects whose REDCap record ID field has another name
+still produce populated event and form rows. The public `validation_level`
+values are `event:form`, `event:form:instance`, and `event`.

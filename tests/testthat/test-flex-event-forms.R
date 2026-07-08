@@ -327,8 +327,9 @@ test_that("flex_event_forms reduces longitudinal forms under event rows", {
   expect_equal(
     body,
     tibble::tibble(
-      Event = c("Baseline", "", "", "Follow-up", "", ""),
+      Event = c("All", "Baseline", "", "", "Follow-up", "", ""),
       Form = c(
+        "",
         "",
         "status_form label",
         "survey_form label",
@@ -336,8 +337,16 @@ test_that("flex_event_forms reduces longitudinal forms under event rows", {
         "status_form label",
         "survey_form label"
       ),
-      `N (started/due)` = c("2/2 (100%)", "", "", "2/2 (100%)", "", ""),
-      `Form Incomplete` = c("", "0 (0%)", "1 (50%)", "", "1 (50%)", "1 (50%)")
+      `N (started/due)` = c("", "2/2 (100%)", "", "", "2/2 (100%)", "", ""),
+      `Form Incomplete` = c(
+        "3/8 (37.5%)",
+        "",
+        "0 (0%)",
+        "1 (50%)",
+        "",
+        "1 (50%)",
+        "1 (50%)"
+      )
     )
   )
 })
@@ -444,10 +453,10 @@ test_that("flex_event_forms counts reports whose REDCap ID field is not record_i
   expect_equal(
     event_form_body,
     tibble::tibble(
-      Event = c("Baseline", "", "Follow-up", ""),
-      Form = c("", "status_form label", "", "status_form label"),
-      `N (started/due)` = c("2/2 (100%)", "", "2/2 (100%)", ""),
-      `Form Incomplete` = c("", "0 (0%)", "", "1 (50%)")
+      Event = c("All", "Baseline", "", "Follow-up", ""),
+      Form = c("", "", "status_form label", "", "status_form label"),
+      `N (started/due)` = c("", "2/2 (100%)", "", "2/2 (100%)", ""),
+      `Form Incomplete` = c("1/4 (25%)", "", "0 (0%)", "", "1 (50%)")
     )
   )
 })
@@ -460,6 +469,11 @@ test_that("flex_event_forms repeat denominators use normalized record_id", {
 
   expect_equal(report$spec$id_col, "study_id")
   expect_true("Repeat Instrument" %in% names(body))
+  expect_equal(body$Event[[1]], "All")
+  expect_equal(body$Form[[1]], "")
+  expect_equal(body$`Repeat Instrument`[[1]], "")
+  expect_equal(body$`Repeat Instance`[[1]], "")
+  expect_equal(body$`Form Incomplete`[[1]], "5/6 (83.3%)")
   expect_equal(body[body$Event == "Regular A", "N (started/due)", drop = TRUE], "2/2 (100%)")
   expect_equal(body[body$Event == "Repeat B", "N (started/due)", drop = TRUE], "2/2 (100%)")
 
@@ -477,7 +491,7 @@ test_that("flex_event_forms repeat denominators use normalized record_id", {
   expect_equal(repeat_instance_one[["N (started/due)"]], "2/2 (100%)")
   expect_equal(repeat_instance_one$`Form Incomplete`, "1 (50%)")
   expect_equal(repeat_instance_two[["N (started/due)"]], "0/2 (0%)")
-  expect_equal(repeat_instance_two$`Form Incomplete`, "0 (0%)")
+  expect_equal(repeat_instance_two$`Form Incomplete`, "2 (100%)")
 })
 
 test_that("flex_event_forms renders single-event reports with form rows", {
@@ -489,10 +503,10 @@ test_that("flex_event_forms renders single-event reports with form rows", {
   expect_equal(
     body,
     tibble::tibble(
-      Event = c("Single event", ""),
-      Form = c("", "baseline_form label"),
-      `N (started/due)` = c("1/1 (100%)", ""),
-      `Form Incomplete` = c("", "1 (100%)")
+      Event = c("All", "Single event", ""),
+      Form = c("", "", "baseline_form label"),
+      `N (started/due)` = c("", "1/1 (100%)", ""),
+      `Form Incomplete` = c("1/1 (100%)", "", "1 (100%)")
     )
   )
 })
@@ -520,10 +534,10 @@ test_that("flex_event_forms does not count unassessed forms as incomplete", {
   expect_equal(
     body,
     tibble::tibble(
-      Event = c("Single event", ""),
-      Form = c("", "conditional_form label"),
-      `N (started/due)` = c("1/1 (100%)", ""),
-      `Form Incomplete` = c("", "0 (0%)")
+      Event = c("All", "Single event", ""),
+      Form = c("", "", "conditional_form label"),
+      `N (started/due)` = c("", "1/1 (100%)", ""),
+      `Form Incomplete` = c("0/1 (0%)", "", "0 (0%)")
     )
   )
 })
@@ -553,10 +567,11 @@ test_that("flex_event_forms shows forms for missing events", {
   expect_equal(closeout_event$assessed, 2L)
   expect_equal(closeout_event$failed, 2L)
   expect_equal(nrow(closeout_forms), 0)
-  expect_equal(body$Event, c("Baseline", "", "Closeout", ""))
-  expect_equal(body[["N (started/due)"]], c("2/2 (100%)", "", "0/2 (0%)", ""))
-  expect_equal(body$Form[[4]], "status_form label")
-  expect_equal(body$`Form Incomplete`[[4]], "2 (100%)")
+  expect_equal(body$Event, c("All", "Baseline", "", "Closeout", ""))
+  expect_equal(body[["N (started/due)"]], c("", "2/2 (100%)", "", "0/2 (0%)", ""))
+  expect_equal(body$`Form Incomplete`[[1]], "2/4 (50%)")
+  expect_equal(body$Form[[5]], "status_form label")
+  expect_equal(body$`Form Incomplete`[[5]], "2 (100%)")
 })
 
 test_that("flex_event_forms includes repeat context and zero-denominator rows", {
@@ -567,6 +582,11 @@ test_that("flex_event_forms includes repeat context and zero-denominator rows", 
 
   expect_true("Repeat Instrument" %in% names(body))
   expect_true("Repeat Instance" %in% names(body))
+  expect_equal(body$Event[[1]], "All")
+  expect_equal(body$Form[[1]], "")
+  expect_equal(body$`Repeat Instrument`[[1]], "")
+  expect_equal(body$`Repeat Instance`[[1]], "")
+  expect_equal(body$`Form Incomplete`[[1]], "7/8 (87.5%)")
   expect_true(any(body$`Repeat Instrument` == "mixed_form label"))
   expect_true(any(body$`Repeat Instance` == "2"))
 
@@ -576,7 +596,7 @@ test_that("flex_event_forms includes repeat context and zero-denominator rows", 
       body$`Repeat Instance` == "2",
   ]
   expect_equal(repeat_instance_two[["N (started/due)"]], "0/2 (0%)")
-  expect_equal(repeat_instance_two$`Form Incomplete`, "0 (0%)")
+  expect_equal(repeat_instance_two$`Form Incomplete`, "2 (100%)")
 
   regular_c_form <- body[
     body$Event == "" &
@@ -613,6 +633,7 @@ test_that("flex_event_forms output renders through flex_html", {
   expect_type(html_out, "character")
   expect_true(grepl("N (started/due)", html_out, fixed = TRUE))
   expect_true(grepl("Form Incomplete", html_out, fixed = TRUE))
+  expect_true(grepl("All", html_out, fixed = TRUE))
   expect_false(grepl("Fields Missing", html_out, fixed = TRUE))
   expect_false(grepl("Form Complete", html_out, fixed = TRUE))
   expect_false(grepl("Total N", html_out, fixed = TRUE))
@@ -628,8 +649,10 @@ test_that("flex_event_forms rendered HTML includes custom-ID labels and counts",
   expect_type(html_out, "character")
   expect_true(grepl("Baseline", html_out, fixed = TRUE))
   expect_true(grepl("Follow-up", html_out, fixed = TRUE))
+  expect_true(grepl("All", html_out, fixed = TRUE))
   expect_true(grepl("status_form label", html_out, fixed = TRUE))
   expect_true(grepl("N (started/due)", html_out, fixed = TRUE))
+  expect_true(grepl("1/4 (25%)", html_out, fixed = TRUE))
   expect_true(grepl("2/2 (100%)", html_out, fixed = TRUE))
   expect_true(grepl("0 (0%)", html_out, fixed = TRUE))
   expect_true(grepl("1 (50%)", html_out, fixed = TRUE))

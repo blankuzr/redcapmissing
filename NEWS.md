@@ -10,6 +10,10 @@
 - Updated `flex_event_forms()` form-row `Form Incomplete` display counts so
   failed `event-row-started` contexts also contribute to the displayed numerator
   without changing the underlying validation summaries.
+- Added an `All` summary row to `flex_event_forms()` that reports aggregate
+  incomplete/assessed form opportunities, and aligned repeat form rows so
+  failed `instance-row-started` contexts contribute to the displayed
+  `Form Incomplete` numerator.
 - Regenerated the vignette HTML with UTF-8 output to remove encoded character
   artifacts.
 
