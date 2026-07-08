@@ -35,11 +35,16 @@ metadata. The \code{N (started/due)} column shows \code{event-row-started} as
 row with \verb{Total N/Total N}. If multiple
 \code{event-row-started} summary rows are present for the same event, they must
 agree on \code{passed} and \code{assessed} counts. The first body row summarizes all
-displayed form opportunities as incomplete/assessed (\%). In this reduced
-table, form rows show failed \code{event-row-started}, failed
-\code{instance-row-started}, failed \code{form-started}, plus failed \code{form-complete}
-counts as a percentage of the assessed count for the exact
-event/form/repeat context.
+displayed form opportunities as the sum of form-row incomplete numerators
+over the sum of form-row assessed denominators. In this reduced table, form
+rows show failed \code{event-row-started}, failed \code{instance-row-started}, failed
+\code{form-started}, plus failed \code{form-complete} counts for the exact
+event/form/repeat context. The form-row denominator is the exact row-started
+assessed N for that same context: \code{event-row-started} for non-repeat
+longitudinal rows and \code{instance-row-started} for repeat rows. Missing or
+invalid exact row-started denominators are treated as broken report objects.
+Non-longitudinal reports use \verb{Total N} as the display-only row-started
+denominator for the synthetic \verb{Single event} display row.
 
 \code{event-complete} rows are not shown. \code{form-started} is not shown as a
 separate metric row, but failed \code{form-started} contexts contribute to

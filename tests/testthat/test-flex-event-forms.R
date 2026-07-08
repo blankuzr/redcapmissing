@@ -440,6 +440,78 @@ test_that("flex_event_forms form denominators follow exact form context", {
   expect_equal(body$`Form Incomplete`[[survey_form_row]], "1 (50%)")
 })
 
+test_that("flex_event_forms requires exact event-row-started denominator rows", {
+  skip_flex_event_forms_packages()
+
+  report <- flex_event_forms_longitudinal_report()
+  status_followup <- report$summary$validation_check == "event-row-started" &
+    report$summary$redcap_event_name == "event_2_arm_1" &
+    report$summary$form == "status_form"
+  report$summary <- report$summary[!status_followup, , drop = FALSE]
+
+  expect_error(
+    flex_event_forms(report),
+    "could not find exact `event-row-started` summary.*event `event_2_arm_1`, form `status_form`"
+  )
+})
+
+test_that("flex_event_forms does not fall back from invalid event-row-started denominators", {
+  skip_flex_event_forms_packages()
+
+  report <- flex_event_forms_longitudinal_report()
+  status_followup <- report$summary$validation_check == "event-row-started" &
+    report$summary$redcap_event_name == "event_2_arm_1" &
+    report$summary$form == "status_form"
+  report$summary$assessed[status_followup] <- 0L
+  report$summary$passed[status_followup] <- 0L
+  report$summary$failed[status_followup] <- 0L
+  report$summary$pass_rate[status_followup] <- 0
+  report$summary$fail_rate[status_followup] <- 0
+
+  expect_error(
+    flex_event_forms(report),
+    "invalid `event-row-started` assessed N.*event `event_2_arm_1`, form `status_form`"
+  )
+})
+
+test_that("flex_event_forms requires exact instance-row-started denominator rows", {
+  skip_flex_event_forms_packages()
+
+  report <- flex_event_forms_repeat_report()
+  repeat_instance_one <- report$summary$validation_check == "instance-row-started" &
+    report$summary$redcap_event_name == "repeat_b_arm_1" &
+    report$summary$form == "mixed_form" &
+    report$summary$redcap_repeat_instrument == "mixed_form" &
+    report$summary$redcap_repeat_instance == "1"
+  report$summary <- report$summary[!repeat_instance_one, , drop = FALSE]
+
+  expect_error(
+    flex_event_forms(report),
+    "could not find exact `instance-row-started` summary.*repeat instance `1`"
+  )
+})
+
+test_that("flex_event_forms does not fall back from invalid instance-row-started denominators", {
+  skip_flex_event_forms_packages()
+
+  report <- flex_event_forms_repeat_report()
+  repeat_instance_one <- report$summary$validation_check == "instance-row-started" &
+    report$summary$redcap_event_name == "repeat_b_arm_1" &
+    report$summary$form == "mixed_form" &
+    report$summary$redcap_repeat_instrument == "mixed_form" &
+    report$summary$redcap_repeat_instance == "1"
+  report$summary$assessed[repeat_instance_one] <- 0L
+  report$summary$passed[repeat_instance_one] <- 0L
+  report$summary$failed[repeat_instance_one] <- 0L
+  report$summary$pass_rate[repeat_instance_one] <- 0
+  report$summary$fail_rate[repeat_instance_one] <- 0
+
+  expect_error(
+    flex_event_forms(report),
+    "invalid `instance-row-started` assessed N.*repeat instance `1`"
+  )
+})
+
 test_that("flex_event_forms errors on conflicting event-row-started summaries", {
   skip_flex_event_forms_packages()
 
@@ -537,6 +609,18 @@ test_that("flex_event_forms renders single-event reports with form rows", {
   )
 })
 
+test_that("flex_event_forms requires positive total N for single-event reports", {
+  skip_flex_event_forms_packages()
+
+  report <- flex_event_forms_nonlongitudinal_report()
+  report$spec$total_n <- 0L
+
+  expect_error(
+    flex_event_forms(report),
+    "positive `x\\$spec\\$total_n`"
+  )
+})
+
 test_that("flex_event_forms does not count unassessed forms as incomplete", {
   skip_flex_event_forms_packages()
 
@@ -600,7 +684,7 @@ test_that("flex_event_forms shows forms for missing events", {
   expect_equal(body$`Form Incomplete`[[5]], "2 (100%)")
 })
 
-test_that("flex_event_forms includes repeat context and zero-denominator rows", {
+test_that("flex_event_forms includes repeat context and missing repeat rows", {
   skip_flex_event_forms_packages()
 
   flex_out <- flex_event_forms(flex_event_forms_repeat_report())

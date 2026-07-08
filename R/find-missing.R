@@ -306,6 +306,11 @@ find_missing <- function(
     valid_events = .miss_get_project_event_names(project_cache = project_cache),
     ignore_ids = ignore_ids
   )
+  .miss_check_assessable_records(
+    records = record_data,
+    id_col = id_col,
+    eligible_records = eligible_records
+  )
 
   form_reports <- vector("list", length(forms))
   names(form_reports) <- forms
@@ -413,6 +418,10 @@ find_missing <- function(
     event_labels = event_labels,
     id_col = id_col,
     total_n = .miss_count_form_report_records(form_reports)
+  )
+  .miss_validate_flex_event_forms_denominators(
+    summary = summary,
+    spec = spec
   )
   diagnostics <- .miss_build_report_diagnostics(
     started_at = report_started_at,
@@ -1067,6 +1076,191 @@ find_missing <- function(
   ))
   record_ids <- record_ids[!.miss_is_blank_vec(record_ids)]
   length(record_ids)
+}
+
+.miss_check_assessable_records <- function(records, id_col, eligible_records) {
+  if (
+    .miss_has_assessable_record_rows(records = records, id_col = id_col) ||
+      .miss_has_explicit_eligible_records(eligible_records)
+  ) {
+    return(invisible(records))
+  }
+
+  stop(
+    "`find_missing()` has no records to assess after filtering. ",
+    "Provide at least one non-ignored record in `data`, or use `records` ",
+    "to declare expected REDCap record IDs for selected events.",
+    call. = FALSE
+  )
+}
+
+.miss_has_assessable_record_rows <- function(records, id_col) {
+  records <- tibble::as_tibble(records)
+  if (nrow(records) == 0 || !id_col %in% names(records)) {
+    return(FALSE)
+  }
+
+  any(!.miss_is_blank_vec(records[[id_col]]))
+}
+
+.miss_has_explicit_eligible_records <- function(eligible_records) {
+  eligible_records <- eligible_records %||% list()
+  if (length(eligible_records) == 0) {
+    return(FALSE)
+  }
+
+  record_ids <- unique(.miss_chr_vec(unlist(eligible_records, use.names = FALSE)))
+  any(!.miss_is_blank_vec(record_ids))
+}
+
+.miss_validate_flex_event_forms_denominators <- function(summary, spec) {
+  contexts <- .miss_flex_event_forms_summary_contexts(summary)
+  if (nrow(contexts) == 0) {
+    stop(
+      "`find_missing()` has no records to assess after filtering. ",
+      "Provide at least one non-ignored record in `data`, or use `records` ",
+      "to declare expected REDCap record IDs for selected events.",
+      call. = FALSE
+    )
+  }
+
+  all_events_blank <- all(.miss_is_blank_vec(contexts$redcap_event_name))
+  for (row_i in seq_len(nrow(contexts))) {
+    context <- contexts[row_i, , drop = FALSE]
+    repeat_context <- .miss_summary_context_has_repeat(context)
+    single_event_context <- all_events_blank &&
+      .miss_is_blank_scalar(context$redcap_event_name) &&
+      !isTRUE(repeat_context)
+    if (isTRUE(single_event_context)) {
+      .miss_validate_single_event_total_n(spec = spec)
+      next
+    }
+
+    validation_check <- if (isTRUE(repeat_context)) {
+      "instance-row-started"
+    } else {
+      "event-row-started"
+    }
+    summary_row <- .miss_exact_validation_summary_row(
+      summary = summary,
+      context = context,
+      validation_check = validation_check
+    )
+    if (nrow(summary_row) == 0) {
+      stop(
+        "`find_missing()` built a report context without an exact `",
+        validation_check,
+        "` summary for ",
+        .miss_validation_context_label(context),
+        ".",
+        call. = FALSE
+      )
+    }
+
+    assessed <- summary_row$assessed[[1]]
+    if (length(assessed) != 1 || is.na(assessed) || assessed <= 0) {
+      stop(
+        "`find_missing()` built a report context with invalid `",
+        validation_check,
+        "` assessed N for ",
+        .miss_validation_context_label(context),
+        ".",
+        call. = FALSE
+      )
+    }
+  }
+
+  invisible(summary)
+}
+
+.miss_flex_event_forms_summary_contexts <- function(summary) {
+  context_checks <- c(
+    "event-row-started",
+    "instance-row-started",
+    "form-started",
+    "form-complete",
+    "field-complete"
+  )
+  context_cols <- c(
+    "redcap_event_name",
+    "form",
+    "redcap_repeat_instrument",
+    "redcap_repeat_instance"
+  )
+  summary <- tibble::as_tibble(summary)
+  summary <- .miss_normalize_validation_context_columns(summary)
+  rows <- summary[
+    summary$validation_check %in% context_checks &
+      !.miss_is_blank_vec(summary$form),
+    context_cols,
+    drop = FALSE
+  ]
+  if (nrow(rows) == 0) {
+    return(tibble::tibble(
+      redcap_event_name = character(),
+      form = character(),
+      redcap_repeat_instrument = character(),
+      redcap_repeat_instance = character()
+    ))
+  }
+
+  rows <- unique(rows)
+  tibble::as_tibble(rows)
+}
+
+.miss_summary_context_has_repeat <- function(context) {
+  !.miss_is_blank_scalar(context$redcap_repeat_instrument) ||
+    !.miss_is_blank_scalar(context$redcap_repeat_instance)
+}
+
+.miss_validate_single_event_total_n <- function(spec) {
+  total_n <- spec$total_n %||% NA_integer_
+  if (length(total_n) == 1 && !is.na(total_n) && total_n > 0) {
+    return(invisible(total_n))
+  }
+
+  stop(
+    "`find_missing()` built a non-longitudinal report without a positive ",
+    "`spec$total_n` for `flex_event_forms()`.",
+    call. = FALSE
+  )
+}
+
+.miss_exact_validation_summary_row <- function(summary, context, validation_check) {
+  summary <- tibble::as_tibble(summary)
+  summary <- .miss_normalize_validation_context_columns(summary)
+  rows <- summary[
+    summary$validation_check == validation_check &
+      summary$redcap_event_name == context$redcap_event_name &
+      summary$form == context$form &
+      summary$redcap_repeat_instrument == context$redcap_repeat_instrument &
+      summary$redcap_repeat_instance == context$redcap_repeat_instance,
+    ,
+    drop = FALSE
+  ]
+
+  rows[seq_len(min(nrow(rows), 1L)), , drop = FALSE]
+}
+
+.miss_validation_context_label <- function(context) {
+  parts <- c(
+    paste0("event `", context$redcap_event_name[[1]], "`"),
+    paste0("form `", context$form[[1]], "`")
+  )
+  if (!.miss_is_blank_scalar(context$redcap_repeat_instrument)) {
+    parts <- c(
+      parts,
+      paste0("repeat instrument `", context$redcap_repeat_instrument[[1]], "`")
+    )
+  }
+  if (!.miss_is_blank_scalar(context$redcap_repeat_instance)) {
+    parts <- c(
+      parts,
+      paste0("repeat instance `", context$redcap_repeat_instance[[1]], "`")
+    )
+  }
+
+  paste(parts, collapse = ", ")
 }
 
 .miss_count_form_validation_rows <- function(form_reports) {

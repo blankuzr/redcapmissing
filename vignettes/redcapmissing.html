@@ -805,14 +805,20 @@ applied. <code>tidy()</code> and <code>report$summary</code> keep the
 canonical hyphenated <code>validation_check</code> values.
 <code>flex_event_forms()</code> returns a reduced event/form table with
 an <code>All</code> summary row, event row-started started/due counts in
-the N column, form-incomplete counts nested under each event, and form
-rows even when no due records have an exported event row. The
-<code>All</code> row reports incomplete/assessed form opportunities
-across the displayed form rows, using each form row’s own
-event/form/repeat context. Repeat form rows show repeat-instance
-started/due counts in the N column, while non-repeat form rows leave
-that cell blank. Projects whose REDCap record ID field has another name
-still produce populated event and form rows. The public
+the N column, and form-incomplete counts nested under each event. A form
+row’s <code>Form Incomplete</code> numerator is failed
+<code>event-row-started</code>, failed
+<code>instance-row-started</code>, failed <code>form-started</code>, and
+failed <code>form-complete</code> for that exact event/form/repeat
+context. Its denominator is the exact row-started assessed N for that
+context: <code>event-row-started</code> for non-repeat longitudinal
+rows, <code>instance-row-started</code> for repeat rows, and
+<code>Total N</code> for the display-only non-longitudinal
+<code>Single event</code> row. The <code>All</code> row sums the shown
+form-row numerators and denominators. Repeat form rows show
+repeat-instance started/due counts in the N column, while non-repeat
+form rows leave that cell blank. Projects whose REDCap record ID field
+has another name still produce populated event and form rows. The public
 <code>validation_level</code> values are <code>event:form</code>,
 <code>event:form:instance</code>, and <code>event</code>.</p>
 </div>
