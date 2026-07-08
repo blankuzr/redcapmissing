@@ -39,7 +39,7 @@ test_that("tidy returns the canonical validation summary contract", {
   report <- tidy_baseline_report()
 
   tidy_tbl <- tidy(report)
-  validation_set <- report$agent$validation_set
+  validation_set <- report$summary
 
   expect_s3_class(tidy_tbl, "tbl_df")
   expect_identical(names(tidy_tbl), tidy_expected_columns())
@@ -61,11 +61,11 @@ test_that("tidy returns the canonical validation summary contract", {
     tidy_tbl$validation_check_type,
     validation_set$validation_check_type
   )
-  expect_equal(tidy_tbl$assessed, validation_set$n)
-  expect_equal(tidy_tbl$passed, validation_set$n_passed)
-  expect_equal(tidy_tbl$failed, validation_set$n_failed)
-  expect_equal(tidy_tbl$pass_rate, validation_set$f_passed)
-  expect_equal(tidy_tbl$fail_rate, validation_set$f_failed)
+  expect_equal(tidy_tbl$assessed, validation_set$assessed)
+  expect_equal(tidy_tbl$passed, validation_set$passed)
+  expect_equal(tidy_tbl$failed, validation_set$failed)
+  expect_equal(tidy_tbl$pass_rate, validation_set$pass_rate)
+  expect_equal(tidy_tbl$fail_rate, validation_set$fail_rate)
 })
 
 test_that("tidy preserves zero-denominator event-row-started rows", {
@@ -97,6 +97,25 @@ test_that("tidy preserves zero-denominator event-row-started rows", {
   expect_equal(event_complete_summary$redcap_event_name, "")
   expect_equal(event_complete_summary$assessed, 1)
   expect_equal(event_complete_summary$failed, 1)
+})
+
+test_that("tidy uses blank event context for non-longitudinal form and field rows", {
+  report <- tidy_baseline_report()
+  tidy_tbl <- tidy(report)
+  context_rows <- tidy_tbl[
+    tidy_tbl$validation_check %in% c("form-complete", "field-complete"),
+    ,
+    drop = FALSE
+  ]
+
+  expect_false(any(is.na(context_rows$redcap_event_name)))
+  expect_equal(unique(context_rows$redcap_event_name), "")
+  expect_equal(
+    unique(report$summary$redcap_event_name[
+      report$summary$validation_check %in% c("form-complete", "field-complete")
+    ]),
+    ""
+  )
 })
 
 test_that("tidy returns focused summaries for combined multi-form reports", {
@@ -257,7 +276,7 @@ test_that("tidy rejects invalid inputs and malformed validation sets", {
   )
 
   broken_report <- structure(
-    list(agent = list(validation_set = tibble::tibble(step_id = "step"))),
+    list(summary = tibble::tibble(validation_step = "step")),
     class = "redcapmissing"
   )
 

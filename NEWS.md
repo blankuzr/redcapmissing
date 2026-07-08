@@ -1,3 +1,26 @@
+# redcapmissing 4.0.0
+
+## 2026-07-08
+
+- Rebuilt `find_missing()` around a native validation engine and removed
+  `pointblank` from the package contract and dependency surface.
+- Breaking change: default reports now contain `summary`, `missing`, `spec`,
+  `diagnostics`, and `details`; heavy row-level internals are available under
+  `report$details` only when `details = TRUE`.
+- Renamed failed-row identifiers from pointblank-specific names to
+  `validation_step` and `validation_row_id`.
+- Added `progress` output support using line-based `cli::cat_line()` form and
+  overall processed percentages.
+- Improved performance by caching REDCap project context, compiling branching
+  logic once per field plan, caching event-qualified branch lookups, and
+  replacing quadratic form/event rollups with grouped reductions.
+- Tightened the compact default report path so full row-level validation tables
+  are not retained unless `details = TRUE`, while preserving deterministic
+  failed-row identifiers, empty `report$missing` schemas, and blank context
+  strings for non-applicable REDCap system columns.
+- Deferred branch compilation away from form-started presence checks so invalid
+  branching logic on unassessed fields does not block the report.
+
 # redcapmissing 3.2.6
 
 ## 2026-07-08
@@ -205,7 +228,7 @@
 - Added form-specific `events` and `instances` list support, including partial
   named lists, scalar repeat-instance counts, exact repeat-instance vectors, and
   one warning when omitted repeating forms default to instance 1.
-- Updated validation rows, pointblank summaries, tidy output, and formatted
+- Updated validation rows, validation summaries, tidy output, and formatted
   reporting to keep form as a first-class output column in combined reports.
 
 # redcapmissing 0.8.0
@@ -300,7 +323,7 @@
 
 - Refactored the report return object to use the `"redcapmissing"` S3 class.
 - Added `summary.redcapmissing()` so `summary(report)` returns the unmodified
-  `pointblank` validation-set tibble.
+  validation-summary tibble.
 - Added `flex()` and `flex_html()` for flextable and HTML summary output.
 - Removed the previous `redcap_missing_summary()` helper.
 
@@ -321,14 +344,15 @@
 
 ## 2026-06-11
 
-- Restored the README acknowledgement structure for both `redcapAPI` and `pointblank`, including a dedicated `pointblank` references section in the source `README.Rmd`.
+- Restored the README acknowledgement structure for dependency references.
 
 # redcapmissing 0.1.9
 
 ## 2026-06-11
 
 - Completed `.Rbuildignore` and `.gitignore` with additional package and local-workspace exclusions.
-- Restored concise README source wording in `README.Rmd`, including direct acknowledgment of `pointblank`, so the generated `README.md` preserves the intended public package language.
+- Restored concise README source wording in `README.Rmd` so the generated
+  `README.md` preserves the intended public package language.
 
 # redcapmissing 0.1.8
 

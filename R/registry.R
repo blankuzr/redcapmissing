@@ -18,11 +18,11 @@
 #'   \item{`validation_check`}{The canonical validation-check code.}
 #'   \item{`validation_check_type`}{The check type: `"on-route"` or
 #'     `"detour"`.}
-#'   \item{`validation_label`}{The canonical pointblank label.}
+#'   \item{`validation_label`}{The canonical validation label.}
 #'   \item{`flex_label`}{The display label used by [flex()].}
 #'   \item{`description`}{A short user-facing description of the check.}
 #'   \item{`r_identifier`, `component_stem`, `step_suffix`}{Internal R-safe
-#'     stems and pointblank step metadata.}
+#'     stems and native validation-step metadata.}
 #'   \item{`gates_downstream`}{Whether a failed check removes that context from
 #'     downstream assessment.}
 #' }

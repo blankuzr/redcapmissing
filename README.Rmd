@@ -238,17 +238,17 @@ print(failed_rows, row.names = FALSE)
 
 ## Report outputs
 
-`find_missing()` returns a `"redcapmissing"` object centered on an interrogated
-`pointblank` agent. Common outputs are:
+`find_missing()` returns a `"redcapmissing"` object centered on a native
+validation summary. Common outputs are:
 
-- `report$missing`: failed rows extracted from `pointblank`
-- `report$validation_rows`: all rows supplied to `pointblank`
-- `report$event_row_started_failures`, `report$instance_row_started_failures`,
-  `report$form_started_failures`, `report$form_complete_failures`,
-  `report$field_complete_failures`, and `report$event_complete_failures`:
-  check-specific failure tables
-- `report$eligible_records`: normalized event-level record ID overrides used
-  by `records`
+- `report$summary`: compact validation summary used by `tidy(report)`
+- `report$missing`: failed validation rows with native `validation_step` and
+  `validation_row_id` identifiers
+- `report$spec`: normalized forms, events, labels, eligible records,
+  instances, ignored fields/IDs, ID column, and REDCap system fields
+- `report$diagnostics`: timing and row-count metadata for troubleshooting
+- `report$details`: `NULL` by default; when `details = TRUE`, contains
+  `validation_rows`, `checks`, and `failures`
 - `tidy(report)`: one summary row per validation check and REDCap context
 
 `tidy(report)` returns raw REDCap event/form context first, followed by
@@ -328,57 +328,6 @@ instances roll up to their parent event for `event-complete`.
 
 See the [package vignette](vignettes/redcapmissing.Rmd#repeat-expectations) for
 a runnable synthetic repeat example.
-
-## Acknowledgement and citation
-
-### `redcapAPI`
-
-This package relies heavily on `redcapAPI` and would not be practical without
-it. If `redcapmissing` contributes to your work, please also cite
-`redcapAPI`.
-
-#### Foundational package citation
-
-> Nutter B, Garbett S, Obregon S, Obadia T, Lehr M, High B, Lane S,
-> Beasley W, Gray W, Kennedy N, Hsi-Nien T, Horner J, Stephens J, Beck C,
-> Johnson B, Chase P, Tobias P (2026). *redcapAPI: Accessing data from REDCap
-> projects using the API*. R package version 2.12.0.
-> <https://doi.org/10.5281/zenodo.10564837>
-
-#### Current package ownership and maintenance
-
-Current public stewardship appears under VUMC Biostatistics / `vubiostat`, with
-Shawn Garbett listed as maintainer in current package documentation and the
-upstream project README stating that ownership transfer to VUMC Biostatistics is
-complete.
-
-Useful current `redcapAPI` references:
-
-- VUMC Biostatistics redcapAPI project page and abstract by Savannah Obregon,
-  Shawn Garbett, and Benjamin Nutter:
-  <https://www.vumc.org/biostatistics/node/565>
-- Current GitHub repository for the package:
-  <https://github.com/vubiostat/redcapAPI>
-- Current package site:
-  <https://vubiostat.r-universe.dev/redcapAPI>
-
-### `pointblank`
-
-This package relies on `pointblank` for validating missingness, standardizing
-return summaries, and exposing failed-row details.
-
-#### Current package resources
-
-Useful current `pointblank` references:
-
-- R package GitHub repository:
-  <https://github.com/rstudio/pointblank>
-- R package site:
-  <https://rstudio.github.io/pointblank/>
-- Python package GitHub repository:
-  <https://github.com/posit-dev/pointblank>
-- Python package site:
-  <https://posit-dev.github.io/pointblank/>
 
 ## Learn more
 

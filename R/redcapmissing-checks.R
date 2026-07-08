@@ -9,15 +9,19 @@
       call. = FALSE
     )
   }
-  if (is.null(x$agent) || is.null(x$agent$validation_set)) {
+  if (is.null(x$summary)) {
     stop(
       "`",
       arg,
-      "` must contain `agent$validation_set`.",
+      "` must contain `summary`.",
       call. = FALSE
     )
   }
   invisible(x)
+}
+
+.redcapmissing_report_spec <- function(x) {
+  x$spec %||% list()
 }
 
 .redcapmissing_check_packages <- function(packages, context) {

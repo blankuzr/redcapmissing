@@ -229,9 +229,10 @@ flex_event_forms.redcapmissing <- function(x, ...) {
 }
 
 .redcapmissing_flex_event_forms_project_events <- function(x, contexts) {
-  event_values <- unlist(x$events %||% list(), use.names = FALSE)
-  if (length(event_values) == 0 && is.list(x$project)) {
-    event_values <- unlist(lapply(x$project, function(project) {
+  spec <- .redcapmissing_report_spec(x)
+  event_values <- unlist(spec$events %||% list(), use.names = FALSE)
+  if (length(event_values) == 0 && is.list(spec$project)) {
+    event_values <- unlist(lapply(spec$project, function(project) {
       project$events %||% project$form_events %||% character()
     }), use.names = FALSE)
   }
@@ -249,7 +250,8 @@ flex_event_forms.redcapmissing <- function(x, ...) {
 }
 
 .redcapmissing_flex_event_forms_project_forms <- function(x, contexts) {
-  form_values <- unique(.miss_chr_vec(x$forms %||% character()))
+  spec <- .redcapmissing_report_spec(x)
+  form_values <- unique(.miss_chr_vec(spec$forms %||% character()))
   form_values <- form_values[!.miss_is_blank_vec(form_values)]
   context_forms <- unique(.miss_chr_vec(contexts$form))
   context_forms <- context_forms[!.miss_is_blank_vec(context_forms)]
@@ -266,14 +268,8 @@ flex_event_forms.redcapmissing <- function(x, ...) {
 }
 
 .redcapmissing_flex_event_forms_total_n <- function(x) {
-  validation_rows <- x$validation_rows %||% tibble::tibble()
-  if (!"record_id" %in% names(validation_rows)) {
-    return(0L)
-  }
-
-  record_ids <- unique(.miss_chr_vec(validation_rows$record_id))
-  record_ids <- record_ids[!.miss_is_blank_vec(record_ids)]
-  length(record_ids)
+  spec <- .redcapmissing_report_spec(x)
+  spec$total_n %||% 0L
 }
 
 .redcapmissing_flex_event_forms_event_stats <- function(
@@ -399,7 +395,7 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   } else {
     .redcapmissing_flex_label_values(
       values = event,
-      labels = x$event_labels %||% character()
+      labels = (.redcapmissing_report_spec(x)$event_labels %||% character())
     )
   }
 
@@ -459,11 +455,11 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     event = "",
     form = .redcapmissing_flex_label_values(
       values = context$form,
-      labels = x$form_labels %||% character()
+      labels = (.redcapmissing_report_spec(x)$form_labels %||% character())
     ),
     repeat_instrument = .redcapmissing_flex_label_values(
       values = context$redcap_repeat_instrument,
-      labels = x$form_labels %||% character()
+      labels = (.redcapmissing_report_spec(x)$form_labels %||% character())
     ),
     repeat_instance = context$redcap_repeat_instance,
     n = if (repeat_context) .redcapmissing_flex_event_forms_format_stats(row_stats) else "",

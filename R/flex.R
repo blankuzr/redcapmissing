@@ -235,13 +235,14 @@ flex.redcapmissing <- function(
 }
 
 .redcapmissing_flex_format_validation_set <- function(validation_set, x) {
+  spec <- .redcapmissing_report_spec(x)
   event <- .redcapmissing_flex_label_values(
     values = validation_set$redcap_event_name,
-    labels = x$event_labels %||% character()
+    labels = spec$event_labels %||% character()
   )
   form <- .redcapmissing_flex_label_values(
     values = validation_set$form,
-    labels = x$form_labels %||% character()
+    labels = spec$form_labels %||% character()
   )
   passed <- as.character(glue::glue(
     "{validation_set$passed} ({round(validation_set$pass_rate * 100, 1)}%)"
@@ -257,7 +258,7 @@ flex.redcapmissing <- function(
   if (.redcapmissing_flex_has_repeat_context(validation_set)) {
     out[["Repeat Instrument"]] <- .redcapmissing_flex_label_values(
       values = validation_set$redcap_repeat_instrument,
-      labels = x$form_labels %||% character()
+      labels = spec$form_labels %||% character()
     )
     out[["Repeat Instance"]] <- .miss_chr_vec(validation_set$redcap_repeat_instance)
   }

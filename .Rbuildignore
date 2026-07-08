@@ -20,3 +20,4 @@
 ^doc$
 ^Meta$
 ^\.codex/.*$
+^tools/benchmark-find-missing\.R$
