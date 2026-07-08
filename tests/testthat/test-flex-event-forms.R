@@ -68,6 +68,37 @@ flex_event_forms_nonlongitudinal_report <- function() {
   )
 }
 
+flex_event_forms_no_assessed_fields_report <- function() {
+  conditional_meta <- dplyr::bind_rows(
+    meta_row("record_id", "conditional_form", field_label = "Record ID"),
+    meta_row(
+      "branch_flag",
+      "conditional_form",
+      field_type = "yesno",
+      field_label = "Branch flag"
+    ),
+    meta_row(
+      "conditional_note",
+      "conditional_form",
+      field_label = "Conditional note",
+      branching = "[branch_flag] = '1'",
+      required = "y"
+    )
+  )
+  records <- tibble::tibble(
+    record_id = "r1",
+    branch_flag = "0",
+    conditional_note = ""
+  )
+
+  find_missing(
+    data = records,
+    rcon = fake_rcon(conditional_meta),
+    forms = "conditional_form",
+    details = TRUE
+  )
+}
+
 flex_event_forms_missing_event_report <- function() {
   status_meta <- dplyr::bind_rows(
     meta_row("record_id", "status_form", field_label = "Record ID", required = "y"),
@@ -408,6 +439,37 @@ test_that("flex_event_forms renders single-event reports with form rows", {
       Form = c("", "baseline_form label"),
       `N (started/due)` = c("1/1 (100%)", ""),
       `Form Incomplete` = c("", "1 (100%)")
+    )
+  )
+})
+
+test_that("flex_event_forms does not count unassessed forms as incomplete", {
+  skip_flex_event_forms_packages()
+
+  report <- flex_event_forms_no_assessed_fields_report()
+  summary_out <- tidy(report)
+  form_started <- summary_out[
+    summary_out$validation_check == "form-started",
+    ,
+    drop = FALSE
+  ]
+  form_complete <- summary_out[
+    summary_out$validation_check == "form-complete",
+    ,
+    drop = FALSE
+  ]
+  body <- tibble::as_tibble(flex_event_forms(report)$body$dataset)
+
+  expect_equal(nrow(form_complete), 0)
+  expect_equal(form_started$passed, 1L)
+  expect_equal(form_started$failed, 0L)
+  expect_equal(
+    body,
+    tibble::tibble(
+      Event = c("Single event", ""),
+      Form = c("", "conditional_form label"),
+      `N (started/due)` = c("1/1 (100%)", ""),
+      `Form Incomplete` = c("", "0 (0%)")
     )
   )
 })

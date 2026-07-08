@@ -12,12 +12,13 @@
 #' `started/due (%)`; non-longitudinal reports use a synthetic `Single event`
 #' row with `Total N/Total N`. If multiple
 #' `event-row-started` summary rows are present for the same event, they must
-#' agree on `passed` and `assessed` counts. Form rows show incomplete
-#' `form-complete` counts as a percentage of the event or repeat-instance
-#' started count.
+#' agree on `passed` and `assessed` counts. Form rows show failed
+#' `form-started` plus failed `form-complete` counts as a percentage of the
+#' event or repeat-instance started count.
 #'
-#' `event-complete` rows are not shown. `form-started` acts only as an upstream
-#' gate for downstream assessment and is not shown as a metric row.
+#' `event-complete` rows are not shown. `form-started` is not shown as a
+#' separate metric row, but failed `form-started` contexts contribute to
+#' `Form Incomplete`.
 #'
 #' @param x A `redcapmissing` object created by [find_missing()].
 #' @param ... Additional arguments passed to methods.
@@ -424,13 +425,10 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   }
   row_n <- row_stats$passed
 
-  form_complete_passed <- .redcapmissing_flex_event_forms_summary_value(
+  form_incomplete <- .redcapmissing_flex_event_forms_incomplete_count(
     validation_set = validation_set,
-    context = context,
-    validation_check = "form-complete",
-    column = "passed"
+    context = context
   )
-  form_incomplete <- max(row_n - form_complete_passed, 0)
 
   .redcapmissing_flex_event_forms_row(
     row_type = "form",
@@ -451,6 +449,26 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     ),
     has_repeat = has_repeat
   )
+}
+
+.redcapmissing_flex_event_forms_incomplete_count <- function(
+  validation_set,
+  context
+) {
+  form_started_failed <- .redcapmissing_flex_event_forms_summary_value(
+    validation_set = validation_set,
+    context = context,
+    validation_check = "form-started",
+    column = "failed"
+  )
+  form_complete_failed <- .redcapmissing_flex_event_forms_summary_value(
+    validation_set = validation_set,
+    context = context,
+    validation_check = "form-complete",
+    column = "failed"
+  )
+
+  form_started_failed + form_complete_failed
 }
 
 .redcapmissing_flex_event_forms_summary_stats <- function(

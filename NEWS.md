@@ -1,3 +1,13 @@
+# redcapmissing 4.0.2
+
+## 2026-07-08
+
+- Fixed `flex_event_forms()` so started form contexts with no assessed
+  `form-complete` summary row are not reported as incomplete. Unstarted forms
+  and failed `form-complete` contexts still contribute to `Form Incomplete`.
+- Regenerated the vignette HTML with UTF-8 output to remove encoded character
+  artifacts.
+
 # redcapmissing 4.0.1
 
 ## 2026-07-08
