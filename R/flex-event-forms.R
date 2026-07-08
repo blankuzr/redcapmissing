@@ -12,9 +12,10 @@
 #' `started/due (%)`; non-longitudinal reports use a synthetic `Single event`
 #' row with `Total N/Total N`. If multiple
 #' `event-row-started` summary rows are present for the same event, they must
-#' agree on `passed` and `assessed` counts. Form rows show failed
-#' `form-started` plus failed `form-complete` counts as a percentage of the
-#' assessed count for the event where the form is offered.
+#' agree on `passed` and `assessed` counts. In this reduced table, form rows
+#' show failed `event-row-started`, failed `form-started`, plus failed
+#' `form-complete` counts as a percentage of the assessed count for the event
+#' where the form is offered.
 #'
 #' `event-complete` rows are not shown. `form-started` is not shown as a
 #' separate metric row, but failed `form-started` contexts contribute to
@@ -455,6 +456,12 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   validation_set,
   context
 ) {
+  event_row_started_failed <- .redcapmissing_flex_event_forms_summary_value(
+    validation_set = validation_set,
+    context = context,
+    validation_check = "event-row-started",
+    column = "failed"
+  )
   form_started_failed <- .redcapmissing_flex_event_forms_summary_value(
     validation_set = validation_set,
     context = context,
@@ -468,7 +475,7 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     column = "failed"
   )
 
-  form_started_failed + form_complete_failed
+  event_row_started_failed + form_started_failed + form_complete_failed
 }
 
 .redcapmissing_flex_event_forms_summary_stats <- function(

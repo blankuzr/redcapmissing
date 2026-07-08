@@ -7,6 +7,9 @@
   and failed `form-complete` contexts still contribute to `Form Incomplete`.
 - Updated `Form Incomplete` percentages to use the event-level assessed N as
   the denominator instead of the event-started passed N.
+- Updated `flex_event_forms()` form-row `Form Incomplete` display counts so
+  failed `event-row-started` contexts also contribute to the displayed numerator
+  without changing the underlying validation summaries.
 - Regenerated the vignette HTML with UTF-8 output to remove encoded character
   artifacts.
 

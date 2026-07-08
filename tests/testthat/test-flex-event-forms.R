@@ -70,7 +70,7 @@ flex_event_forms_partly_started_event_report <- function() {
     record_id = c("r1", "r2", "r1"),
     redcap_event_name = c("baseline_event", "baseline_event", "followup_event"),
     status_started = c("yes", "yes", "yes"),
-    status_value = c("entered", "entered", "")
+    status_value = c("entered", "entered", "entered")
   )
 
   find_missing(
@@ -531,13 +531,32 @@ test_that("flex_event_forms does not count unassessed forms as incomplete", {
 test_that("flex_event_forms shows forms for missing events", {
   skip_flex_event_forms_packages()
 
-  flex_out <- flex_event_forms(flex_event_forms_missing_event_report())
+  report <- flex_event_forms_missing_event_report()
+  summary_out <- tidy(report)
+  closeout_event <- summary_out[
+    summary_out$validation_check == "event-row-started" &
+      summary_out$redcap_event_name == "closeout_event",
+    ,
+    drop = FALSE
+  ]
+  closeout_forms <- summary_out[
+    summary_out$validation_check %in% c("form-started", "form-complete") &
+      summary_out$redcap_event_name == "closeout_event",
+    ,
+    drop = FALSE
+  ]
+  flex_out <- flex_event_forms(report)
   body <- tibble::as_tibble(flex_out$body$dataset)
 
+  expect_equal(nrow(closeout_event), 1)
+  expect_equal(closeout_event$passed, 0L)
+  expect_equal(closeout_event$assessed, 2L)
+  expect_equal(closeout_event$failed, 2L)
+  expect_equal(nrow(closeout_forms), 0)
   expect_equal(body$Event, c("Baseline", "", "Closeout", ""))
   expect_equal(body[["N (started/due)"]], c("2/2 (100%)", "", "0/2 (0%)", ""))
   expect_equal(body$Form[[4]], "status_form label")
-  expect_equal(body$`Form Incomplete`[[4]], "0 (0%)")
+  expect_equal(body$`Form Incomplete`[[4]], "2 (100%)")
 })
 
 test_that("flex_event_forms includes repeat context and zero-denominator rows", {
@@ -567,7 +586,7 @@ test_that("flex_event_forms includes repeat context and zero-denominator rows", 
       dplyr::lag(body$Event, default = "") == "Regular C",
   ]
   expect_equal(nrow(regular_c_form), 1)
-  expect_equal(regular_c_form$`Form Incomplete`, "0 (0%)")
+  expect_equal(regular_c_form$`Form Incomplete`, "2 (100%)")
 })
 
 test_that("flex_event_forms applies event and form row styling", {

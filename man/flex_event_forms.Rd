@@ -34,9 +34,10 @@ metadata. The \code{N (started/due)} column shows \code{event-row-started} as
 \verb{started/due (\%)}; non-longitudinal reports use a synthetic \verb{Single event}
 row with \verb{Total N/Total N}. If multiple
 \code{event-row-started} summary rows are present for the same event, they must
-agree on \code{passed} and \code{assessed} counts. Form rows show failed
-\code{form-started} plus failed \code{form-complete} counts as a percentage of the
-assessed count for the event where the form is offered.
+agree on \code{passed} and \code{assessed} counts. In this reduced table, form rows
+show failed \code{event-row-started}, failed \code{form-started}, plus failed
+\code{form-complete} counts as a percentage of the assessed count for the event
+where the form is offered.
 
 \code{event-complete} rows are not shown. \code{form-started} is not shown as a
 separate metric row, but failed \code{form-started} contexts contribute to
