@@ -13,7 +13,7 @@
   pkgname = "redcapmissing",
   version = .redcapmissing_startup_get_version(pkgname)
 ) {
-  release_name <- "Forever-searching"
+  release_name <- "eye-spy"
   release_update <- "Improved scope reporting"
 
   message_lines <- .redcapmissing_startup_banner_lines(
@@ -44,19 +44,29 @@
   release_name,
   release_update
 ) {
-  package_style <- cli::make_ansi_style("#38bdf8")
-  release_style <- cli::make_ansi_style("#6ee7b7")
-  version_style <- cli::make_ansi_style("#f97316")
-  update_style <- cli::make_ansi_style("#c4b5fd")
+  .redcapmissing_startup_banner_line(
+    pkgname = pkgname,
+    version = version,
+    release_name = release_name
+  )
+}
 
-  c(
-    package_style(paste0("> ", pkgname)),
-    paste0(
-      "  ",
-      release_style(release_name),
-      "  ",
-      version_style(paste0("{v", version, "}"))
-    ),
-    update_style(paste0("  :: ", release_update))
+.redcapmissing_startup_banner_line <- function(
+  pkgname,
+  version,
+  release_name
+) {
+  prompt_style <- cli::make_ansi_style("#ff8a00")
+  package_style <- cli::make_ansi_style("#ff8a00")
+  version_style <- cli::make_ansi_style("#ff2d20")
+  release_style <- cli::make_ansi_style("#ffd166")
+
+  paste0(
+    prompt_style("> "),
+    package_style(pkgname),
+    " ",
+    version_style(paste0("{v", version, "}")),
+    " ~ ",
+    release_style(release_name)
   )
 }

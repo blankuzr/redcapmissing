@@ -1,3 +1,10 @@
+# redcapmissing 3.2.6
+
+## 2026-07-08
+
+- Updated the package startup banner to a single-line Ember Tag style:
+  `> redcapmissing {v#.#.#} ~ eye-spy`.
+
 # redcapmissing 3.2.5
 
 ## 2026-07-07
