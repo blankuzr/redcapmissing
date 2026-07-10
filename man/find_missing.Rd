@@ -47,21 +47,19 @@ supplied event values are ignored for that form. If a form is regular on
 some events and repeating on others, \code{events} also determines whether
 repeat-instance logic is activated. Defaults to \code{NULL}.}
 
-\item{records}{Named list of REDCap record ID vectors by raw
-\code{redcap_event_name}, or \code{NULL}. Use it to restrict selected events to a
-specific set of record IDs. Events not named in \code{records} are not
-restricted by this argument: every applicable non-ignored record in \code{data}
-is considered for those events. A record with no exported row for an event
-fails \code{event-row-started} and is not assessed by downstream form or field
-checks for that event. Empty or blank-only entries are ignored and behave
-like omitted events. Supplied IDs are normalized to character values and
-are not checked through a live REDCap record export. IDs not present in
-\code{data} are allowed and can create upstream row-started failures. When both
-\code{events} and \code{records} are supplied, \code{events} selects the form-event scope
-first and \code{records} narrows record eligibility inside those events. For
-repeating contexts, event-level eligibility applies before \code{instances}
-expands the expected repeat-instance IDs. Defaults to \code{NULL}, which means
-\code{records} does not restrict any event.}
+\item{records}{Named list of REDCap record eligibility by raw
+\code{redcap_event_name}, or \code{NULL}. A top-level event vector applies to every
+requested form and selected repeat instance at that event. A nested
+event/form vector applies to that form at the event and every selected
+repeat instance for that form. A nested event/form/instance list applies
+only to the named repeat instance. Omitted event, form, or instance entries
+use the default eligibility created by \code{data}, \code{forms}, \code{events}, and
+\code{instances}. Values must contain at least one non-blank record ID; \code{NULL},
+empty, \code{NA}, and blank values are not allowed inside \code{records}. Supplied
+IDs are normalized to character values and are not checked through a live
+REDCap record export. IDs not present in \code{data} are allowed and can create
+upstream row-started failures. Defaults to \code{NULL}, which means \code{records}
+does not restrict any event/form/instance context.}
 
 \item{required_fields}{Logical scalar. When \code{TRUE}, only fields marked as
 required in the REDCap metadata \code{required_field} column are assessed. When
@@ -112,8 +110,9 @@ including assessed, passed, failed, pass-rate, and fail-rate columns.}
 \code{validation_step} and \code{validation_row_id} identifiers plus REDCap record,
 event, repeat, form, and field context.}
 \item{\code{spec}}{Normalized report context, including requested forms,
-events, labels, eligible records, instances, ignored fields/IDs, REDCap
-ID column, system fields, project cache, and total eligible record count.}
+events, labels, record eligibility, unused record specifications,
+instances, ignored fields/IDs, REDCap ID column, system fields, project
+cache, and total eligible record count.}
 \item{\code{diagnostics}}{Timing and row-count metadata useful for benchmarking
 and troubleshooting.}
 \item{\code{details}}{\code{NULL} by default. When \code{details = TRUE}, a list with
@@ -149,24 +148,14 @@ validation rows with:
 \describe{
 \item{\code{validation_level}}{The emitted context label. Event/form checks use
 \code{"event:form"} for non-repeating contexts and
-\code{"event:form:instance"} for repeat-instance contexts; event rollups use
-\code{"event"}.}
+\code{"event:form:instance"} for repeat-instance contexts.}
 \item{\code{validation_check}}{One of \code{"event-row-started"},
-\code{"instance-row-started"}, \code{"form-started"}, \code{"form-complete"}, or
-\code{"field-complete"}, or \code{"event-complete"}.}
-\item{\code{validation_check_type}}{\code{"on-route"} or \code{"detour"}.}
+\code{"instance-row-started"}, \code{"form-started"}, or \code{"field-complete"}.}
 \item{\code{validation_passed}}{Whether that row passed its validation check.}
 }
 
-The checks are assessed in registry order. Failed \code{"on-route"} checks remove
-the record/event/repeat/form context from every downstream assessment,
-regardless of the downstream validation level or check type. \code{form-complete}
-is a \code{"detour"} check: it reports whether all form fields are complete,
-but a failed \code{form-complete} context still flows into \code{field-complete}.
-\code{event-complete} is an event-level \code{"detour"} rollup with the display
-meaning "all forms on event complete": it checks only downstream-gating
-on-route results for each record/event context and does not count
-\code{form-complete} because \code{form-complete} is also a detour.
+The checks are assessed in registry order. Failed checks remove the
+record/event/repeat/form context from every downstream assessment.
 
 By default, the returned report keeps only compact summaries, failed rows,
 project specification metadata, and diagnostics. Set \code{details = TRUE} when

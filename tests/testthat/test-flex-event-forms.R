@@ -609,6 +609,43 @@ test_that("flex_event_forms renders single-event reports with form rows", {
   )
 })
 
+test_that("flex_event_forms counts each failed record context once", {
+  skip_flex_event_forms_packages()
+
+  multi_field_meta <- dplyr::bind_rows(
+    meta_row("record_id", "multi_form", field_label = "Record ID", required = "y"),
+    meta_row("started", "multi_form", field_label = "Started", required = "y"),
+    meta_row("field_a", "multi_form", field_label = "Field A", required = "y"),
+    meta_row("field_b", "multi_form", field_label = "Field B", required = "y")
+  )
+  records <- tibble::tibble(
+    record_id = "r1",
+    started = "yes",
+    field_a = "",
+    field_b = ""
+  )
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(multi_field_meta),
+    forms = "multi_form"
+  )
+
+  expect_gt(
+    sum(
+      report$missing$record_id == "r1" &
+        report$missing$form == "multi_form" &
+        report$missing$validation_check == "field-complete"
+    ),
+    1
+  )
+
+  body <- tibble::as_tibble(flex_event_forms(report)$body$dataset)
+  form_row <- body[body$Form == "multi_form label", , drop = FALSE]
+
+  expect_equal(form_row$`Form Incomplete`, "1 (100%)")
+  expect_equal(body$`Form Incomplete`[[1]], "1/1 (100%)")
+})
+
 test_that("flex_event_forms requires positive total N for single-event reports", {
   skip_flex_event_forms_packages()
 
@@ -631,14 +668,8 @@ test_that("flex_event_forms does not count unassessed forms as incomplete", {
     ,
     drop = FALSE
   ]
-  form_complete <- summary_out[
-    summary_out$validation_check == "form-complete",
-    ,
-    drop = FALSE
-  ]
   body <- tibble::as_tibble(flex_event_forms(report)$body$dataset)
 
-  expect_equal(nrow(form_complete), 0)
   expect_equal(form_started$passed, 1L)
   expect_equal(form_started$failed, 0L)
   expect_equal(
@@ -664,7 +695,7 @@ test_that("flex_event_forms shows forms for missing events", {
     drop = FALSE
   ]
   closeout_forms <- summary_out[
-    summary_out$validation_check %in% c("form-started", "form-complete") &
+    summary_out$validation_check == "form-started" &
       summary_out$redcap_event_name == "closeout_event",
     ,
     drop = FALSE

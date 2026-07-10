@@ -1,10 +1,33 @@
+# redcapmissing 5.0.0
+
+## 2026-07-10
+
+- Breaking change: removed complete-rollup validation checks and the
+  validation-check type column from registry, summary, missing, tidy, flex,
+  README, vignette, and generated help surfaces.
+- Added context-level `find_missing(records = ...)` eligibility for event,
+  event/form, and event/form/repeat-instance record sets.
+- Replaced the previous event-record override slot with
+  `spec$record_eligibility`, a complete table of assessed
+  record/event/form/repeat-instance contexts and their eligibility source, even
+  when `records` is omitted.
+- Added `spec$unused_record_specs` and a single `Unused records spec.` warning
+  for valid `records` entries that are not used after form, event, and instance
+  resolution.
+- `records` values are now strict: `NULL`, empty, missing, and blank-only IDs
+  error anywhere in the nested records specification. `ignore_ids` overlapping
+  IDs listed in `records` also errors and lists the conflicting IDs.
+- Updated `flex_event_forms()` so `Form Incomplete` counts unique failed record
+  contexts from row-started, form-started, and field-complete failures; multiple
+  missing fields in one record/form/repeat context count once.
+
 # redcapmissing 4.0.2
 
 ## 2026-07-08
 
 - Fixed `flex_event_forms()` so started form contexts with no assessed
-  `form-complete` summary row are not reported as incomplete. Unstarted forms
-  and failed `form-complete` contexts still contribute to `Form Incomplete`.
+  field summary row are not reported as incomplete. Unstarted forms still
+  contribute to `Form Incomplete`.
 - Updated `Form Incomplete` percentages to use exact-context row-started
   assessed N as the denominator instead of the event-started passed N.
 - Updated `flex_event_forms()` form-row `Form Incomplete` display counts so
@@ -100,8 +123,8 @@
 ## 2026-07-07
 
 - Added `flex_event_forms()` for reduced event/form flextable reports with
-  total record N, event row-started N, form-complete counts, and
-  field-complete failure counts nested under each event.
+  total record N, event row-started N, and field-complete failure counts nested
+  under each event.
 
 # redcapmissing 3.2.1
 
@@ -129,11 +152,8 @@
 
 ## 2026-07-06
 
-- Updated validation-check wording in `registry()`, README, help, and vignettes:
-  `form-complete` is "all form fields complete", `field-complete` is
-  "field complete", and `event-complete` is "all forms on event complete".
-  `event-complete` behavior is unchanged and continues to summarize only
-  downstream-gating on-route checks.
+- Updated validation-check wording in `registry()`, README, help, and vignettes
+  so `field-complete` is described as "field complete".
 - Updated the README minimal workflow to show `tidy(report)` summary rows
   before `report$missing`, so readers can see every validation check that ran
   before reviewing failed rows.
@@ -143,7 +163,7 @@
 ## 2026-07-06
 
 - Redesigned the README validation-flow diagram with clearer plain-language
-  labels, simplified event-complete flow, and a more polished visual style.
+  labels and a more polished visual style.
 
 # redcapmissing 3.1.1
 
@@ -151,8 +171,7 @@
 
 - Fixed downstream validation summaries when all expected event or repeat rows
   fail their upstream row-started checks. `find_missing()` no longer falls back
-  to blank-event record contexts that can appear as passing form-started or
-  event-complete rows.
+  to blank-event record contexts that can appear as passing form-started rows.
 
 # redcapmissing 3.1.0
 
@@ -162,16 +181,15 @@
   eligibility. Non-empty `records` list entries override the record IDs assessed
   for their named REDCap event, while omitted or empty events continue to use
   the existing data-derived denominators.
-- Added `report$eligible_records` so reports expose the normalized event-to-ID
-  overrides used during validation.
+- Added report exposure for the normalized event-to-ID overrides used during
+  validation.
 
 # redcapmissing 3.0.1
 
 ## 2026-07-06
 
 - Simplified the README validation-flow diagram so the validation levels read
-  left to right and multiple event/form contexts visibly contribute to the
-  shared event-level detour summary.
+  left to right.
 
 # redcapmissing 3.0.0
 
@@ -199,17 +217,12 @@
 
 ## 2026-07-06
 
-- Added the event-level `event-complete` detour validation-check, which reports
-  whether all on-route checks passed for each requested record/event context.
 - Updated `registry()` to show one row per validation-check, with the
   contextual `event:form / event:form:instance` level displayed as one
   registry level, and a compact meaning-focused `cli` table instead of verbose
   grouped listings.
 - Replaced public `validation_level` values `row`, `form`, and `field` with
-  context levels: `event:form`, `event:form:instance`, and `event`.
-- Added `event_complete_checks` and `event_complete_failures` report
-  components and updated tidy, flex, README, vignette, and roxygen
-  documentation for the event-level validation canon.
+  context levels: `event:form` and `event:form:instance`.
 
 # redcapmissing 1.0.3
 
@@ -223,10 +236,8 @@
 
 ## 2026-07-06
 
-- Revised the README validation-flow diagram so `detour` checks are shown as
-  reporting offshoots instead of downstream-gating pipeline steps.
 - Made the README validation-flow diagram more compact and labeled main
-  `on-route` transitions as pass-only paths.
+  transitions as pass-only paths.
 
 # redcapmissing 1.0.1
 
@@ -240,18 +251,16 @@
 ## 2026-07-02
 
 - Made the validation canon package-facing by reorganizing report rows around
-  `validation_level`, `validation_check_type`, `validation_check`, and
-  `validation_passed`.
+  `validation_level`, `validation_check`, and `validation_passed`.
 - Added `registry()` as the public validation-check registry, with a classed
   tibble return value and a grouped `cli` print method.
 - Renamed validation checks to the canonical hyphenated values:
   `event-row-started`, `instance-row-started`, `form-started`,
-  `form-complete`, and `field-complete`.
+  and `field-complete`.
 - Removed old validation-scope names and report components such as
   `event_row_exists_*`, `repeat_instance_row_exists_*`, and
   `fields_complete_*`.
-- Enforced strict downstream gating for failed `on-route` checks while keeping
-  `form-complete` as a `detour` check that does not block field assessment.
+- Enforced strict downstream gating for failed checks.
 - Updated README, vignette, roxygen documentation, generated docs, and tests for
   the 1.0.0 validation canon.
 
