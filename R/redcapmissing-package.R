@@ -1,8 +1,7 @@
 #' redcapmissing: Branching-Aware Missingness Reports for REDCap Exports
 #'
 #' Build branching-aware missingness reports for REDCap record exports,
-#' organized by canonical validation levels, validation checks, and
-#' validation-check types.
+#' organized by contextual validation levels and validation checks.
 #'
 #' @details
 #' `redcapmissing` is built on top of the `redcapAPI` package. In routine use,

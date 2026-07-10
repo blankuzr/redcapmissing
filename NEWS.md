@@ -1,3 +1,26 @@
+# redcapmissing 5.0.0
+
+## 2026-07-10
+
+- Breaking change: removed complete-rollup validation checks and the
+  validation-check type column from registry, summary, missing, tidy, flex,
+  README, vignette, and generated help surfaces.
+- Added context-level `find_missing(records = ...)` eligibility for event,
+  event/form, and event/form/repeat-instance record sets.
+- Replaced the previous event-record override slot with
+  `spec$record_eligibility`, a complete table of assessed
+  record/event/form/repeat-instance contexts and their eligibility source, even
+  when `records` is omitted.
+- Added `spec$unused_record_specs` and a single `Unused records spec.` warning
+  for valid `records` entries that are not used after form, event, and instance
+  resolution.
+- `records` values are now strict: `NULL`, empty, missing, and blank-only IDs
+  error anywhere in the nested records specification. `ignore_ids` overlapping
+  IDs listed in `records` also errors and lists the conflicting IDs.
+- Updated `flex_event_forms()` so `Form Incomplete` counts unique failed record
+  contexts from row-started, form-started, and field-complete failures; multiple
+  missing fields in one record/form/repeat context count once.
+
 # redcapmissing 4.0.2
 
 ## 2026-07-08

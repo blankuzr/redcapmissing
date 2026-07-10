@@ -280,7 +280,6 @@
     redcap_repeat_instance = character(),
     form = character(),
     validation_level = character(),
-    validation_check_type = character(),
     validation_check = character(),
     validation_label = character(),
     validation_passed = logical(),
@@ -401,7 +400,7 @@
   form_records,
   project,
   form,
-  eligible_records = NULL
+  record_eligibility = NULL
 ) {
   records <- tibble::as_tibble(records)
   form_records <- tibble::as_tibble(form_records)
@@ -416,11 +415,11 @@
     return(.miss_empty_expected())
   }
 
-  expected <- .miss_expected_record_events(
-    records = records,
-    project = project,
+  expected <- .miss_expected_record_events_from_eligibility(
+    record_eligibility = record_eligibility,
+    form = form,
     events = form_events,
-    eligible_records = eligible_records
+    include_repeat = FALSE
   )
   if (nrow(expected) == 0) {
     return(.miss_empty_expected())
@@ -464,7 +463,7 @@
   project,
   form,
   instances,
-  eligible_records = NULL
+  record_eligibility = NULL
 ) {
   if (is.null(instances) || !isTRUE(project$form_repeats)) {
     return(.miss_empty_expected())
@@ -473,12 +472,11 @@
   records <- tibble::as_tibble(records)
   form_records <- tibble::as_tibble(form_records)
 
-  contexts <- .miss_expected_repeat_contexts(
-    records = records,
-    project = project,
+  contexts <- .miss_expected_record_events_from_eligibility(
+    record_eligibility = record_eligibility,
     form = form,
-    instances = instances,
-    eligible_records = eligible_records
+    events = project$events,
+    include_repeat = TRUE
   )
   if (nrow(contexts) == 0) {
     return(.miss_empty_expected())
@@ -508,97 +506,12 @@
   )
 }
 
-.miss_expected_repeat_contexts <- function(
-  records,
-  project,
-  form,
-  instances,
-  eligible_records = NULL
-) {
-  fields <- project$system_fields
-  repeat_instances <- .miss_chr_vec(instances)
-
-  if (fields$event_col %in% names(records)) {
-    repeat_event_contexts <- .miss_form_repeating_events(project)
-    if (
-      length(project$repeat_form_events) == 0 &&
-        length(repeat_event_contexts) == 0
-    ) {
-      return(.miss_empty_expected()[, c(
-        "record_id",
-        "redcap_event_name",
-        "redcap_repeat_instrument",
-        "redcap_repeat_instance"
-      )])
-    }
-
-    context_pieces <- list()
-    if (length(project$repeat_form_events) > 0) {
-      record_events <- .miss_expected_record_events(
-        records = records,
-        project = project,
-        events = project$repeat_form_events,
-        eligible_records = eligible_records
-      )
-      if (nrow(record_events) > 0) {
-        context_pieces <- c(context_pieces, list(
-          dplyr::mutate(record_events, redcap_repeat_instrument = form)
-        ))
-      }
-    }
-    if (length(repeat_event_contexts) > 0) {
-      record_events <- .miss_expected_record_events(
-        records = records,
-        project = project,
-        events = repeat_event_contexts,
-        eligible_records = eligible_records
-      )
-      if (nrow(record_events) > 0) {
-        context_pieces <- c(context_pieces, list(
-          dplyr::mutate(record_events, redcap_repeat_instrument = "")
-        ))
-      }
-    }
-    record_events <- dplyr::bind_rows(context_pieces)
-  } else {
-    record_ids <- unique(.miss_chr_vec(records[[project$id_col]]))
-    record_ids <- record_ids[!.miss_is_blank_vec(record_ids)]
-    record_events <- tibble::tibble(
-      record_id = record_ids,
-      redcap_event_name = "",
-      redcap_repeat_instrument = form
-    )
-  }
-
-  if (nrow(record_events) == 0) {
-    return(.miss_empty_expected()[, c(
-      "record_id",
-      "redcap_event_name",
-      "redcap_repeat_instrument",
-      "redcap_repeat_instance"
-    )])
-  }
-
-  out <- merge(
-    record_events,
-    tibble::tibble(redcap_repeat_instance = repeat_instances),
-    all = TRUE
-  )
-  out <- out[, c(
-    "record_id",
-    "redcap_event_name",
-    "redcap_repeat_instrument",
-    "redcap_repeat_instance"
-  )]
-
-  tibble::as_tibble(unique(out))
-}
-
 .miss_build_expected_contexts <- function(
   records,
   event_checks,
   repeat_checks,
-  project
+  project,
+  record_eligibility = NULL
 ) {
   context_cols <- c(
     "record_id",
@@ -629,6 +542,14 @@
     return(.miss_empty_expected()[, context_cols])
   }
 
+  if (!is.null(record_eligibility) && nrow(record_eligibility) > 0) {
+    return(tibble::as_tibble(unique(record_eligibility[
+      ,
+      context_cols,
+      drop = FALSE
+    ])))
+  }
+
   records <- tibble::as_tibble(records)
   if (nrow(records) == 0) {
     return(.miss_empty_expected()[, context_cols])
@@ -648,144 +569,6 @@
   )
 }
 
-.miss_build_form_complete_check_rows <- function(expected, form) {
-  expected <- .miss_add_validation_context(expected)
-  if (nrow(expected) == 0) {
-    return(.miss_empty_expected())
-  }
-
-  context_cols <- c(
-    "record_id",
-    "redcap_event_name",
-    "redcap_repeat_instrument",
-    "redcap_repeat_instance",
-    "validation_context"
-  )
-  contexts <- unique(expected[, context_cols, drop = FALSE])
-  context_keys <- .miss_report_context_key(contexts)
-  expected_keys <- .miss_report_context_key(expected)
-  group_id <- match(expected_keys, context_keys)
-  missing_count <- rowsum(
-    as.integer(!expected$validation_passed),
-    group_id,
-    reorder = FALSE
-  )[, 1]
-  any_missing <- missing_count > 0L
-
-  out <- .miss_build_issue_rows(
-    contexts = contexts,
-    form = form,
-    validation_check = "form-complete",
-    validation_passed = !any_missing
-  )
-  .miss_add_validation_context(out)
-}
-
-.miss_build_event_complete_check_rows <- function(validation_rows) {
-  validation_rows <- tibble::as_tibble(validation_rows)
-  status <- .miss_build_on_route_event_status(list(validation_rows))
-  .miss_build_event_complete_check_rows_from_status(status)
-}
-
-.miss_build_on_route_event_status <- function(check_rows) {
-  rows <- dplyr::bind_rows(check_rows)
-  if (nrow(rows) == 0) {
-    return(.miss_empty_event_status())
-  }
-
-  rows <- rows[
-    rows$validation_check %in% .redcapmissing_on_route_checks(),
-    ,
-    drop = FALSE
-  ]
-  if (nrow(rows) == 0) {
-    return(.miss_empty_event_status())
-  }
-
-  rows <- .miss_normalize_validation_context_columns(rows)
-  rows <- rows[
-    !.miss_is_blank_vec(rows$record_id),
-    ,
-    drop = FALSE
-  ]
-  if (nrow(rows) == 0) {
-    return(.miss_empty_event_status())
-  }
-
-  contexts <- rows[, c("record_id", "redcap_event_name"), drop = FALSE]
-  context_key <- .miss_context_key(
-    contexts$record_id,
-    contexts$redcap_event_name,
-    "",
-    ""
-  )
-  unique_key <- unique(context_key)
-  group_id <- match(context_key, unique_key)
-  contexts <- contexts[match(unique_key, context_key), , drop = FALSE]
-  failed <- rowsum(
-    as.integer(!(rows$validation_passed %in% TRUE)),
-    group_id,
-    reorder = FALSE
-  )[, 1] > 0L
-
-  tibble::tibble(
-    record_id = contexts$record_id,
-    redcap_event_name = contexts$redcap_event_name,
-    on_route_failed = failed
-  )
-}
-
-.miss_empty_event_status <- function() {
-  tibble::tibble(
-    record_id = character(),
-    redcap_event_name = character(),
-    on_route_failed = logical()
-  )
-}
-
-.miss_build_event_complete_check_rows_from_status <- function(status) {
-  status <- tibble::as_tibble(status)
-  if (nrow(status) == 0) {
-    return(.miss_empty_expected())
-  }
-
-  status <- .miss_normalize_validation_context_columns(status)
-  status <- status[
-    !.miss_is_blank_vec(status$record_id),
-    ,
-    drop = FALSE
-  ]
-  if (nrow(status) == 0) {
-    return(.miss_empty_expected())
-  }
-
-  contexts <- status[, c("record_id", "redcap_event_name"), drop = FALSE]
-  context_key <- .miss_context_key(
-    contexts$record_id,
-    contexts$redcap_event_name,
-    "",
-    ""
-  )
-  unique_key <- unique(context_key)
-  group_id <- match(context_key, unique_key)
-  contexts <- contexts[match(unique_key, context_key), , drop = FALSE]
-  failed <- rowsum(
-    as.integer(status$on_route_failed),
-    group_id,
-    reorder = FALSE
-  )[, 1] > 0L
-
-  contexts$redcap_repeat_instrument <- ""
-  contexts$redcap_repeat_instance <- ""
-  out <- .miss_build_issue_rows(
-    contexts = contexts,
-    form = "",
-    validation_check = "event-complete",
-    validation_passed = !failed
-  )
-  .miss_add_validation_context(out)
-}
-
 .miss_missing_event_form_events <- function(project) {
   if (length(project$form_events) == 0) {
     return(character())
@@ -797,43 +580,52 @@
   )
 }
 
-.miss_expected_record_events <- function(
-  records,
-  project,
+.miss_expected_record_events_from_eligibility <- function(
+  record_eligibility,
+  form,
   events,
-  eligible_records = NULL
+  include_repeat = FALSE
 ) {
-  eligible_records <- eligible_records %||% list()
-  events <- unique(.miss_chr_vec(events))
-  events <- events[!.miss_is_blank_vec(events)]
-  if (length(events) == 0) {
+  if (is.null(record_eligibility) || nrow(record_eligibility) == 0) {
+    if (isTRUE(include_repeat)) {
+      return(.miss_empty_expected()[, c(
+        "record_id",
+        "redcap_event_name",
+        "redcap_repeat_instrument",
+        "redcap_repeat_instance"
+      )])
+    }
     return(tibble::tibble(
       record_id = character(),
       redcap_event_name = character()
     ))
   }
 
-  override_events <- intersect(events, names(eligible_records))
-  default_events <- setdiff(events, override_events)
-  pieces <- list()
-
-  if (length(default_events) > 0) {
-    pieces <- c(pieces, list(.miss_expected_record_events_from_data(
-      records = records,
-      project = project,
-      events = default_events
-    )))
+  events <- .miss_chr_vec(events %||% character())
+  event_keep <- if (length(events) == 0) {
+    rep(TRUE, nrow(record_eligibility))
+  } else {
+    record_eligibility$redcap_event_name %in% events
   }
-  if (length(override_events) > 0) {
-    pieces <- c(pieces, lapply(override_events, function(event) {
-      .miss_cross_record_events(
-        record_ids = eligible_records[[event]],
-        events = event
-      )
-    }))
+  rows <- record_eligibility[
+    record_eligibility$form == form & event_keep,
+    ,
+    drop = FALSE
+  ]
+  if (isTRUE(include_repeat)) {
+    rows <- rows[!.miss_is_blank_vec(rows$redcap_repeat_instance), , drop = FALSE]
+    out <- rows[, c(
+      "record_id",
+      "redcap_event_name",
+      "redcap_repeat_instrument",
+      "redcap_repeat_instance"
+    ), drop = FALSE]
+    return(tibble::as_tibble(unique(out)))
   }
 
-  unique(dplyr::bind_rows(pieces))
+  rows <- rows[.miss_is_blank_vec(rows$redcap_repeat_instance), , drop = FALSE]
+  out <- rows[, c("record_id", "redcap_event_name"), drop = FALSE]
+  tibble::as_tibble(unique(out))
 }
 
 .miss_expected_record_events_from_data <- function(records, project, events) {

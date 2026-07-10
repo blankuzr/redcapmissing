@@ -13,12 +13,10 @@ validation check. The returned columns include:
 \item{\code{validation_order}}{The canonical assessment order.}
 \item{\code{downstream_order}}{The order used when applying downstream gating.}
 \item{\code{validation_level}}{The registry validation level:
-\code{"event:form / event:form:instance"} or \code{"event"}. Report outputs
-resolve the contextual event/form level to \code{"event:form"} or
+\code{"event:form / event:form:instance"}. Report outputs resolve the
+contextual event/form level to \code{"event:form"} or
 \code{"event:form:instance"} from the assessed REDCap context.}
 \item{\code{validation_check}}{The canonical validation-check code.}
-\item{\code{validation_check_type}}{The check type: \code{"on-route"} or
-\code{"detour"}.}
 \item{\code{validation_label}}{The canonical validation label.}
 \item{\code{flex_label}}{The display label used by \code{\link[=flex]{flex()}}.}
 \item{\code{description}}{A short user-facing description of the check.}
@@ -31,8 +29,8 @@ downstream assessment.}
 \description{
 \code{registry()} returns the public validation taxonomy used by
 \code{\link[=find_missing]{find_missing()}}. The registry is the package source of truth for validation
-levels, validation checks, check types, display labels, downstream order, and
-the internal R-safe stems used to build report components.
+levels, validation checks, display labels, downstream order, and the internal
+R-safe stems used to build report components.
 }
 \examples{
 registry()

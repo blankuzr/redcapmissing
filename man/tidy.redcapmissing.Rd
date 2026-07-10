@@ -25,16 +25,13 @@ validation context, or \code{""} when not applicable. Omitted when the
 report contains no repeat context.}
 \item{\code{validation_level}}{The emitted context label. Event/form checks use
 \code{"event:form"} for non-repeating contexts and
-\code{"event:form:instance"} for repeat-instance contexts; event rollups use
-\code{"event"}.}
+\code{"event:form:instance"} for repeat-instance contexts.}
 \item{\code{validation_check}}{The canonical validation-check code.}
 \item{\code{assessed}}{The number of rows assessed.}
 \item{\code{passed}}{The number of rows that passed.}
 \item{\code{failed}}{The number of rows that failed.}
 \item{\code{pass_rate}}{The numeric pass fraction.}
 \item{\code{fail_rate}}{The numeric failure fraction.}
-\item{\code{validation_check_type}}{The validation-check type: \code{"on-route"} or
-\code{"detour"}.}
 }
 }
 \description{

@@ -37,18 +37,18 @@ row with \verb{Total N/Total N}. If multiple
 agree on \code{passed} and \code{assessed} counts. The first body row summarizes all
 displayed form opportunities as the sum of form-row incomplete numerators
 over the sum of form-row assessed denominators. In this reduced table, form
-rows show failed \code{event-row-started}, failed \code{instance-row-started}, failed
-\code{form-started}, plus failed \code{form-complete} counts for the exact
-event/form/repeat context. The form-row denominator is the exact row-started
+rows show unique failed record contexts with \code{event-row-started},
+\code{instance-row-started}, \code{form-started}, or \code{field-complete} failures for the
+exact event/form/repeat context. Multiple missing fields in the same record
+context count once. The form-row denominator is the exact row-started
 assessed N for that same context: \code{event-row-started} for non-repeat
 longitudinal rows and \code{instance-row-started} for repeat rows. Missing or
 invalid exact row-started denominators are treated as broken report objects.
 Non-longitudinal reports use \verb{Total N} as the display-only row-started
 denominator for the synthetic \verb{Single event} display row.
 
-\code{event-complete} rows are not shown. \code{form-started} is not shown as a
-separate metric row, but failed \code{form-started} contexts contribute to
-\verb{Form Incomplete}.
+\code{form-started} is not shown as a separate metric row, but failed
+\code{form-started} contexts contribute to \verb{Form Incomplete}.
 }
 \examples{
 \dontrun{

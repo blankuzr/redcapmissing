@@ -128,10 +128,7 @@ test_that("flex returns the default formatted table", {
   ))
   expect_equal(flex_out$body$dataset$Assessed, tidy_tbl$assessed)
   expect_true(any(flex_out$body$dataset$Form == "baseline_form label"))
-  expect_true(any(
-    flex_out$body$dataset$Form == "" &
-      flex_out$body$dataset$`Validation Check` == "Event complete"
-  ))
+  expect_false(any(flex_out$body$dataset$`Validation Check` == "Event complete"))
   expect_true(any(
     flex_out$body$dataset$`Validation Check` == "Event row started" &
       flex_out$body$dataset$Passed == "0 (0%)" &
@@ -166,7 +163,7 @@ test_that("flex labels forms in multi-form summaries", {
   expect_s3_class(flex_out, "flextable")
   expect_setequal(
     flex_out$body$dataset$Form,
-    c("alpha_form label", "beta_form label", "")
+    c("alpha_form label", "beta_form label")
   )
 })
 
@@ -192,11 +189,11 @@ test_that("flex filters by raw events, forms, and validation checks before apply
 
   multi_check_flex <- flex(
     report,
-    validation_check = c("event-row-started", "event-complete")
+    validation_check = c("event-row-started", "form-started")
   )
   expect_setequal(
     multi_check_flex$body$dataset$`Validation Check`,
-    c("Event row started", "Event complete")
+    c("Event row started", "Form started")
   )
 
   intersect_flex <- flex(

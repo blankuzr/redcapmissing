@@ -21,16 +21,13 @@
 #'     report contains no repeat context.}
 #'   \item{`validation_level`}{The emitted context label. Event/form checks use
 #'     `"event:form"` for non-repeating contexts and
-#'     `"event:form:instance"` for repeat-instance contexts; event rollups use
-#'     `"event"`.}
+#'     `"event:form:instance"` for repeat-instance contexts.}
 #'   \item{`validation_check`}{The canonical validation-check code.}
 #'   \item{`assessed`}{The number of rows assessed.}
 #'   \item{`passed`}{The number of rows that passed.}
 #'   \item{`failed`}{The number of rows that failed.}
 #'   \item{`pass_rate`}{The numeric pass fraction.}
 #'   \item{`fail_rate`}{The numeric failure fraction.}
-#'   \item{`validation_check_type`}{The validation-check type: `"on-route"` or
-#'     `"detour"`.}
 #' }
 #'
 #' @seealso [find_missing()], [flex()], [flex_html()]
@@ -53,8 +50,7 @@ tidy.redcapmissing <- function(x, ...) {
     passed = validation_set$passed,
     failed = validation_set$failed,
     pass_rate = validation_set$pass_rate,
-    fail_rate = validation_set$fail_rate,
-    validation_check_type = validation_set$validation_check_type
+    fail_rate = validation_set$fail_rate
   )
 
   .redcapmissing_tidy_drop_repeat_columns(out)
@@ -74,7 +70,6 @@ generics::tidy
     "redcap_repeat_instance",
     "validation_level",
     "validation_check",
-    "validation_check_type",
     "assessed",
     "passed",
     "failed",

@@ -15,18 +15,18 @@
 #' agree on `passed` and `assessed` counts. The first body row summarizes all
 #' displayed form opportunities as the sum of form-row incomplete numerators
 #' over the sum of form-row assessed denominators. In this reduced table, form
-#' rows show failed `event-row-started`, failed `instance-row-started`, failed
-#' `form-started`, plus failed `form-complete` counts for the exact
-#' event/form/repeat context. The form-row denominator is the exact row-started
+#' rows show unique failed record contexts with `event-row-started`,
+#' `instance-row-started`, `form-started`, or `field-complete` failures for the
+#' exact event/form/repeat context. Multiple missing fields in the same record
+#' context count once. The form-row denominator is the exact row-started
 #' assessed N for that same context: `event-row-started` for non-repeat
 #' longitudinal rows and `instance-row-started` for repeat rows. Missing or
 #' invalid exact row-started denominators are treated as broken report objects.
 #' Non-longitudinal reports use `Total N` as the display-only row-started
 #' denominator for the synthetic `Single event` display row.
 #'
-#' `event-complete` rows are not shown. `form-started` is not shown as a
-#' separate metric row, but failed `form-started` contexts contribute to
-#' `Form Incomplete`.
+#' `form-started` is not shown as a separate metric row, but failed
+#' `form-started` contexts contribute to `Form Incomplete`.
 #'
 #' @param x A `redcapmissing` object created by [find_missing()].
 #' @param ... Additional arguments passed to methods.
@@ -185,7 +185,6 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     "event-row-started",
     "instance-row-started",
     "form-started",
-    "form-complete",
     "field-complete"
   )
   context_rows <- validation_set[
@@ -475,7 +474,8 @@ flex_event_forms.redcapmissing <- function(x, ...) {
 
   form_incomplete <- .redcapmissing_flex_event_forms_incomplete_count(
     validation_set = validation_set,
-    context = context
+    context = context,
+    x = x
   )
 
   .redcapmissing_flex_event_forms_row(
@@ -552,35 +552,46 @@ flex_event_forms.redcapmissing <- function(x, ...) {
 
 .redcapmissing_flex_event_forms_incomplete_count <- function(
   validation_set,
-  context
+  context,
+  x
 ) {
-  event_row_started_failed <- .redcapmissing_flex_event_forms_summary_value(
-    validation_set = validation_set,
-    context = context,
-    validation_check = "event-row-started",
-    column = "failed"
-  )
-  instance_row_started_failed <- .redcapmissing_flex_event_forms_summary_value(
-    validation_set = validation_set,
-    context = context,
-    validation_check = "instance-row-started",
-    column = "failed"
-  )
-  form_started_failed <- .redcapmissing_flex_event_forms_summary_value(
-    validation_set = validation_set,
-    context = context,
-    validation_check = "form-started",
-    column = "failed"
-  )
-  form_complete_failed <- .redcapmissing_flex_event_forms_summary_value(
-    validation_set = validation_set,
-    context = context,
-    validation_check = "form-complete",
-    column = "failed"
-  )
+  missing_rows <- x$missing
+  if (is.null(missing_rows) || nrow(missing_rows) == 0) {
+    return(0L)
+  }
 
-  event_row_started_failed + instance_row_started_failed +
-    form_started_failed + form_complete_failed
+  missing_rows <- .redcapmissing_flex_event_forms_normalize(missing_rows)
+  incomplete_checks <- c(
+    "event-row-started",
+    "instance-row-started",
+    "form-started",
+    "field-complete"
+  )
+  rows <- missing_rows[
+    missing_rows$validation_check %in% incomplete_checks &
+      missing_rows$redcap_event_name == context$redcap_event_name &
+      missing_rows$form == context$form &
+      missing_rows$redcap_repeat_instrument == context$redcap_repeat_instrument &
+      missing_rows$redcap_repeat_instance == context$redcap_repeat_instance,
+    ,
+    drop = FALSE
+  ]
+  if (nrow(rows) == 0) {
+    return(0L)
+  }
+
+  length(unique(.redcapmissing_flex_event_forms_record_key(rows)))
+}
+
+.redcapmissing_flex_event_forms_record_key <- function(rows) {
+  paste(
+    .miss_chr_vec(rows$record_id),
+    .miss_chr_vec(rows$redcap_event_name),
+    .miss_chr_vec(rows$form),
+    .miss_chr_vec(rows$redcap_repeat_instrument),
+    .miss_chr_vec(rows$redcap_repeat_instance),
+    sep = "\r"
+  )
 }
 
 .redcapmissing_flex_event_forms_summary_stats <- function(

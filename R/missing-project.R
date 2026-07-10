@@ -541,30 +541,16 @@
   ]
 }
 
-.miss_filter_eligible_event_records <- function(
+.miss_filter_record_eligibility_rows <- function(
   records,
   project,
-  eligible_records
+  record_eligibility
 ) {
-  eligible_records <- eligible_records %||% list()
-  if (length(eligible_records) == 0 || nrow(records) == 0) {
+  if (nrow(record_eligibility) == 0 || nrow(records) == 0) {
     return(records)
   }
 
-  fields <- project$system_fields
-  if (!fields$event_col %in% names(records)) {
-    return(records)
-  }
-
-  event <- .miss_chr_vec(records[[fields$event_col]])
-  record_id <- .miss_chr_vec(records[[project$id_col]])
-  keep <- rep(TRUE, nrow(records))
-  overridden_events <- intersect(unique(event), names(eligible_records))
-
-  for (event_name in overridden_events) {
-    event_rows <- event == event_name
-    keep[event_rows] <- record_id[event_rows] %in% eligible_records[[event_name]]
-  }
-
-  records[keep, , drop = FALSE]
+  record_keys <- .miss_record_context_key(records, project)
+  eligibility_keys <- .miss_report_context_key(record_eligibility)
+  records[record_keys %in% eligibility_keys, , drop = FALSE]
 }

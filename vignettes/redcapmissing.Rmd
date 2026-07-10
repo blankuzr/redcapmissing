@@ -30,29 +30,21 @@ The package validation model is available through `registry()`:
 registry()
 ```
 
-The checks are organized by validation level and validation-check type:
+The checks are organized by validation level:
 
 - `event:form / event:form:instance`: one contextual event/form
   validation-level. Report rows use `event:form` for non-repeating contexts and
   `event:form:instance` for repeat-instance contexts.
-- `event`: event-level rollups.
 
 `event-row-started`, `instance-row-started`, `form-started`, and
-`field-complete` are `on-route`: failures remove that context from downstream
-assessment. `form-complete` and `event-complete` are `detour`: failures are
-reported without blocking later checks. `event-complete` has the display
-meaning `all forms on event complete` and is computed from event-level
-downstream-gating `on-route` checks; it does not count `form-complete` rows
-because `form-complete` is also a `detour`.
+`field-complete` failures remove that context from downstream assessment.
 
-| validation_level | validation_check | validation_check_type | Meaning |
-|---|---|---|---|
-| event:form / event:form:instance | `event-row-started` | `on-route` | The expected REDCap event row exists in the export. |
-| event:form / event:form:instance | `instance-row-started` | `on-route` | The expected REDCap repeat instance row exists in the export. |
-| event:form / event:form:instance | `form-started` | `on-route` | The exported form context has at least one entered data-capturing field. |
-| event:form / event:form:instance | `form-complete` | `detour` | all form fields complete |
-| event:form / event:form:instance | `field-complete` | `on-route` | field complete |
-| event | `event-complete` | `detour` | all forms on event complete |
+| validation_level | validation_check | Meaning |
+|---|---|---|
+| event:form / event:form:instance | `event-row-started` | The expected REDCap event row exists in the export. |
+| event:form / event:form:instance | `instance-row-started` | The expected REDCap repeat instance row exists in the export. |
+| event:form / event:form:instance | `form-started` | The exported form context has at least one entered data-capturing field. |
+| event:form / event:form:instance | `field-complete` | field complete |
 
 ## Synthetic REDCap helpers
 
@@ -156,7 +148,6 @@ report <- find_missing(
 report$missing[, c(
   "record_id",
   "validation_level",
-  "validation_check_type",
   "validation_check",
   "field_name"
 )]
@@ -209,21 +200,20 @@ tidy(event_report)[
 ```
 
 `event_3_arm_1` fails `event-row-started`, so it is not assessed by
-`form-started`, `form-complete`, or `field-complete`. Because `event-complete`
-rolls up on-route failures, the same record/event failures are also visible in
-the event-level summary.
+`form-started` or `field-complete`.
 
 ## Event-specific record eligibility
 
 Use `records` when records become eligible for validation on different REDCap
-events at different times. The argument is a named list keyed by raw
-`redcap_event_name`. Each non-empty entry limits that event to the listed
-record IDs. Events not named in `records` are still checked when the requested
-form is offered on that event: every applicable non-ignored record in `data` is
-considered, and records with no exported row for that event fail
-`event-row-started` before downstream form or field checks. Empty entries behave
-like omitted events. To remove an event from assessment entirely, exclude it
-with `events` rather than omitting it from `records`.
+events, forms, or repeat instances at different times. The argument is a named
+list keyed by raw `redcap_event_name`. An event-level vector limits every final
+requested form and selected repeat instance at that event. A nested form vector
+limits one event/form context. A nested instance list limits one
+event/form/repeat-instance context. Omitted event, form, and instance entries
+use the default eligibility implied by `data`, `forms`, `events`, `instances`,
+and `ignore_ids`. Empty, missing, `NULL`, and blank-only record values are
+errors. To remove an event from assessment entirely, exclude it with `events`
+rather than using an empty `records` entry.
 
 ```{r}
 staged_metadata <- dplyr::bind_rows(
@@ -256,11 +246,13 @@ staged_report <- find_missing(
   records = list(
     event_a = c("record_a", "record_b"),
     event_b = c("record_a", "record_b"),
-    event_c = "record_b"
+    event_c = list(
+      surgery = "record_b"
+    )
   )
 )
 
-staged_report$spec$eligible_records
+staged_report$spec$record_eligibility
 
 staged_summary <- tidy(staged_report)
 staged_summary[
@@ -330,9 +322,7 @@ repeat_report$missing[
 ```
 
 The missing instance `2` for record `r1` fails `instance-row-started` and is
-removed from downstream form and field assessment. It also causes record `r1`
-to fail `event-complete` for `baseline_event` because repeat-instance on-route
-failures belong to the parent REDCap event.
+removed from downstream form and field assessment.
 
 ## Mixed regular and repeating contexts
 
@@ -341,7 +331,6 @@ on another. The package activates event/form checks per context:
 
 - regular event contexts use `event-row-started`
 - repeating contexts use `instance-row-started`
-- both context types roll up into `event-complete`
 
 If `events` excludes the repeating event, `instances` is ignored for that form.
 If a requested repeating context omits `instances`, the package assumes
@@ -373,14 +362,15 @@ and `report$summary` keep the canonical hyphenated `validation_check` values.
 `flex_event_forms()` returns a reduced event/form table with an `All` summary
 row, event row-started started/due counts in the N column, and form-incomplete
 counts nested under each event. A form row's `Form Incomplete` numerator is
-failed `event-row-started`, failed `instance-row-started`, failed
-`form-started`, and failed `form-complete` for that exact event/form/repeat
-context. Its denominator is the exact row-started assessed N for that context:
+the number of unique record contexts with failed `event-row-started`, failed
+`instance-row-started`, `form-started`, or `field-complete` rows for that exact
+event/form/repeat context. Multiple missing fields in one record context count
+once. Its denominator is the exact row-started assessed N for that context:
 `event-row-started` for non-repeat longitudinal rows, `instance-row-started`
 for repeat rows, and `Total N` for the display-only non-longitudinal
 `Single event` row. The `All` row sums the shown form-row numerators and
 denominators. Repeat form rows show repeat-instance started/due counts in the N
 column, while non-repeat form rows leave that cell blank. Projects whose REDCap
 record ID field has another name still produce populated event and form rows.
-The public `validation_level` values are `event:form`, `event:form:instance`,
-and `event`.
+The public `validation_level` values are `event:form` and
+`event:form:instance`.

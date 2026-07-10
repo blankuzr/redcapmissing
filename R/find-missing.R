@@ -29,24 +29,14 @@
 #' \describe{
 #'   \item{`validation_level`}{The emitted context label. Event/form checks use
 #'     `"event:form"` for non-repeating contexts and
-#'     `"event:form:instance"` for repeat-instance contexts; event rollups use
-#'     `"event"`.}
+#'     `"event:form:instance"` for repeat-instance contexts.}
 #'   \item{`validation_check`}{One of `"event-row-started"`,
-#'     `"instance-row-started"`, `"form-started"`, `"form-complete"`, or
-#'     `"field-complete"`, or `"event-complete"`.}
-#'   \item{`validation_check_type`}{`"on-route"` or `"detour"`.}
+#'     `"instance-row-started"`, `"form-started"`, or `"field-complete"`.}
 #'   \item{`validation_passed`}{Whether that row passed its validation check.}
 #' }
 #'
-#' The checks are assessed in registry order. Failed `"on-route"` checks remove
-#' the record/event/repeat/form context from every downstream assessment,
-#' regardless of the downstream validation level or check type. `form-complete`
-#' is a `"detour"` check: it reports whether all form fields are complete,
-#' but a failed `form-complete` context still flows into `field-complete`.
-#' `event-complete` is an event-level `"detour"` rollup with the display
-#' meaning "all forms on event complete": it checks only downstream-gating
-#' on-route results for each record/event context and does not count
-#' `form-complete` because `form-complete` is also a detour.
+#' The checks are assessed in registry order. Failed checks remove the
+#' record/event/repeat/form context from every downstream assessment.
 #'
 #' By default, the returned report keeps only compact summaries, failed rows,
 #' project specification metadata, and diagnostics. Set `details = TRUE` when
@@ -75,21 +65,19 @@
 #'   supplied event values are ignored for that form. If a form is regular on
 #'   some events and repeating on others, `events` also determines whether
 #'   repeat-instance logic is activated. Defaults to `NULL`.
-#' @param records Named list of REDCap record ID vectors by raw
-#'   `redcap_event_name`, or `NULL`. Use it to restrict selected events to a
-#'   specific set of record IDs. Events not named in `records` are not
-#'   restricted by this argument: every applicable non-ignored record in `data`
-#'   is considered for those events. A record with no exported row for an event
-#'   fails `event-row-started` and is not assessed by downstream form or field
-#'   checks for that event. Empty or blank-only entries are ignored and behave
-#'   like omitted events. Supplied IDs are normalized to character values and
-#'   are not checked through a live REDCap record export. IDs not present in
-#'   `data` are allowed and can create upstream row-started failures. When both
-#'   `events` and `records` are supplied, `events` selects the form-event scope
-#'   first and `records` narrows record eligibility inside those events. For
-#'   repeating contexts, event-level eligibility applies before `instances`
-#'   expands the expected repeat-instance IDs. Defaults to `NULL`, which means
-#'   `records` does not restrict any event.
+#' @param records Named list of REDCap record eligibility by raw
+#'   `redcap_event_name`, or `NULL`. A top-level event vector applies to every
+#'   requested form and selected repeat instance at that event. A nested
+#'   event/form vector applies to that form at the event and every selected
+#'   repeat instance for that form. A nested event/form/instance list applies
+#'   only to the named repeat instance. Omitted event, form, or instance entries
+#'   use the default eligibility created by `data`, `forms`, `events`, and
+#'   `instances`. Values must contain at least one non-blank record ID; `NULL`,
+#'   empty, `NA`, and blank values are not allowed inside `records`. Supplied
+#'   IDs are normalized to character values and are not checked through a live
+#'   REDCap record export. IDs not present in `data` are allowed and can create
+#'   upstream row-started failures. Defaults to `NULL`, which means `records`
+#'   does not restrict any event/form/instance context.
 #' @param required_fields Logical scalar. When `TRUE`, only fields marked as
 #'   required in the REDCap metadata `required_field` column are assessed. When
 #'   `FALSE`, all fields on the form are assessed after `exclude_types` and
@@ -132,8 +120,9 @@
 #'     `validation_step` and `validation_row_id` identifiers plus REDCap record,
 #'     event, repeat, form, and field context.}
 #'   \item{`spec`}{Normalized report context, including requested forms,
-#'     events, labels, eligible records, instances, ignored fields/IDs, REDCap
-#'     ID column, system fields, project cache, and total eligible record count.}
+#'     events, labels, record eligibility, unused record specifications,
+#'     instances, ignored fields/IDs, REDCap ID column, system fields, project
+#'     cache, and total eligible record count.}
 #'   \item{`diagnostics`}{Timing and row-count metadata useful for benchmarking
 #'     and troubleshooting.}
 #'   \item{`details`}{`NULL` by default. When `details = TRUE`, a list with
@@ -287,8 +276,15 @@ find_missing <- function(
   }
   project_cache <- .miss_get_project_cache(rcon = rcon)
 
-  # Remove caller-specified records before branch evaluation or validation.
   ignore_ids <- unique(.miss_chr_vec(ignore_ids %||% character()))
+  record_specs <- .miss_resolve_records_arg(
+    records = records,
+    valid_events = .miss_get_project_event_names(project_cache = project_cache),
+    forms = forms,
+    ignore_ids = ignore_ids
+  )
+
+  # Remove caller-specified records before branch evaluation or validation.
   if (length(ignore_ids) > 0) {
     record_data <- record_data[
       !.miss_chr_vec(record_data[[id_col]]) %in% ignore_ids,
@@ -301,15 +297,10 @@ find_missing <- function(
       drop = FALSE
     ]
   }
-  eligible_records <- .miss_resolve_event_records_arg(
-    records = records,
-    valid_events = .miss_get_project_event_names(project_cache = project_cache),
-    ignore_ids = ignore_ids
-  )
   .miss_check_assessable_records(
     records = record_data,
     id_col = id_col,
-    eligible_records = eligible_records
+    record_specs = record_specs
   )
 
   form_reports <- vector("list", length(forms))
@@ -330,7 +321,7 @@ find_missing <- function(
       project_cache = project_cache,
       form = form,
       events = event_settings$values[[form]],
-      eligible_records = eligible_records,
+      record_specs = record_specs,
       required_fields = required_fields,
       ignore_fields = ignore_fields,
       exclude_types = exclude_types,
@@ -366,23 +357,26 @@ find_missing <- function(
     forms
   )
   event_labels <- .miss_combine_event_labels(form_reports)
-  event_status <- .miss_bind_report_component(
+  used_record_spec_keys <- unique(unlist(.miss_named_report_component(
+    form_reports,
+    "used_record_spec_keys"
+  ), use.names = FALSE))
+  unused_record_specs <- .miss_unused_record_specs(
+    record_specs = record_specs,
+    used_record_spec_keys = used_record_spec_keys
+  )
+  if (nrow(unused_record_specs) > 0) {
+    warning("Unused records spec.", call. = FALSE)
+  }
+  record_eligibility <- .miss_bind_report_component(
     reports = form_reports,
-    component = "event_status"
+    component = "record_eligibility"
   )
-  event_complete_checks <- .miss_build_event_complete_check_rows_from_status(
-    event_status
-  )
-  summary <- .miss_build_validation_summary(
-    form_reports = form_reports,
-    event_complete_checks = event_complete_checks
-  )
+  summary <- .miss_build_validation_summary(form_reports = form_reports)
   form_validation_rows <- .miss_count_form_validation_rows(form_reports)
-  validation_row_count <- form_validation_rows + nrow(event_complete_checks)
+  validation_row_count <- form_validation_rows
   missing <- .miss_build_report_missing_rows(
-    form_reports = form_reports,
-    event_complete_checks = event_complete_checks,
-    form_validation_rows = form_validation_rows
+    form_reports = form_reports
   )
   ignored_fields <- unique(unlist(.miss_named_report_component(
     form_reports,
@@ -397,10 +391,6 @@ find_missing <- function(
       reports = form_reports,
       component = "validation_rows"
     )
-    validation_rows <- dplyr::bind_rows(
-      validation_rows,
-      event_complete_checks
-    )
     .miss_build_report_details(
       validation_rows = validation_rows
     )
@@ -410,7 +400,8 @@ find_missing <- function(
   spec <- .miss_build_report_spec(
     form_reports = form_reports,
     required_fields = required_fields,
-    eligible_records = eligible_records,
+    record_eligibility = record_eligibility,
+    unused_record_specs = unused_record_specs,
     ignored_fields = ignored_fields,
     ignored_ids = ignore_ids,
     forms = forms,
@@ -452,7 +443,7 @@ find_missing <- function(
   project_cache,
   form,
   events,
-  eligible_records,
+  record_specs,
   required_fields,
   ignore_fields,
   exclude_types,
@@ -466,6 +457,11 @@ find_missing <- function(
     meta = meta,
     form = form,
     project_cache = project_cache
+  )
+  .miss_check_record_specs_for_form(
+    record_specs = record_specs,
+    project = project,
+    form = form
   )
   project <- .miss_resolve_events(
     project = project,
@@ -535,15 +531,22 @@ find_missing <- function(
   }
 
   # Keep only rows where the requested form is offered in REDCap.
+  record_eligibility <- .miss_build_record_eligibility(
+    records = records,
+    project = project,
+    form = form,
+    instances = instances,
+    record_specs = record_specs
+  )
   records <- .miss_filter_form_rows(
     records = records,
     form = form,
     project = project
   )
-  records <- .miss_filter_eligible_event_records(
+  records <- .miss_filter_record_eligibility_rows(
     records = records,
     project = project,
-    eligible_records = eligible_records
+    record_eligibility = record_eligibility
   )
 
   event_checks <- .miss_build_event_check_rows(
@@ -551,7 +554,7 @@ find_missing <- function(
     form_records = records,
     project = project,
     form = form,
-    eligible_records = eligible_records
+    record_eligibility = record_eligibility
   )
   event_checks <- .miss_add_validation_context(event_checks)
   event_row_started_failures <- event_checks[
@@ -566,7 +569,7 @@ find_missing <- function(
     project = project,
     form = form,
     instances = instances,
-    eligible_records = eligible_records
+    record_eligibility = record_eligibility
   )
   repeat_checks <- .miss_add_validation_context(repeat_checks)
   instance_row_started_failures <- repeat_checks[
@@ -579,7 +582,8 @@ find_missing <- function(
     records = all_records,
     event_checks = event_checks,
     repeat_checks = repeat_checks,
-    project = project
+    project = project,
+    record_eligibility = record_eligibility
   )
 
   form_checks <- .miss_build_form_check_rows(
@@ -629,15 +633,6 @@ find_missing <- function(
     form = form
   )
   expected <- .miss_add_validation_context(expected)
-  form_complete_checks <- .miss_build_form_complete_check_rows(
-    expected = expected,
-    form = form
-  )
-  form_complete_failures <- form_complete_checks[
-    !form_complete_checks$validation_passed,
-    ,
-    drop = FALSE
-  ]
   field_complete_failures <- expected[
     !expected$validation_passed,
     ,
@@ -648,7 +643,6 @@ find_missing <- function(
     event_row_started_checks = event_checks,
     instance_row_started_checks = repeat_checks,
     form_started_checks = form_checks,
-    form_complete_checks = form_complete_checks,
     field_complete_checks = expected
   )
   row_counts <- vapply(check_rows, nrow, integer(1))
@@ -659,12 +653,15 @@ find_missing <- function(
     ),
     missing = .miss_build_form_missing_rows(check_rows),
     row_counts = row_counts,
-    event_status = .miss_build_on_route_event_status(check_rows),
     record_ids = .miss_validation_record_ids(check_rows),
     events = project$events %||% character(),
     event_labels = project$event_labels,
     instances = instances,
     instances_defaulted = resolved_instances$defaulted,
+    record_eligibility = record_eligibility,
+    used_record_spec_keys = unique(record_eligibility$record_spec_key[
+      !.miss_is_blank_vec(record_eligibility$record_spec_key)
+    ]),
     ignored_fields = ignore_roots,
     project = project,
     form = form,
@@ -684,8 +681,6 @@ find_missing <- function(
     instance_row_started_failures = instance_row_started_failures,
     form_started_checks = form_checks,
     form_started_failures = form_started_failures,
-    form_complete_checks = form_complete_checks,
-    form_complete_failures = form_complete_failures,
     field_complete_checks = expected,
     field_complete_failures = field_complete_failures,
       field_plan = field_plan
@@ -695,17 +690,8 @@ find_missing <- function(
   out
 }
 
-.miss_build_validation_summary <- function(form_reports, event_complete_checks) {
+.miss_build_validation_summary <- function(form_reports) {
   summary_rows <- lapply(form_reports, `[[`, "summary")
-
-  if (nrow(event_complete_checks) > 0) {
-    summary_rows[[length(summary_rows) + 1L]] <- .miss_summarise_validation_rows(
-      rows = event_complete_checks,
-      validation_check = "event-complete",
-      form = "",
-      keep_zero = FALSE
-    )
-  }
 
   out <- dplyr::bind_rows(summary_rows)
   if (nrow(out) == 0) {
@@ -719,11 +705,7 @@ find_missing <- function(
   registry <- .redcapmissing_registry_data()
   summary_rows <- list()
   row_i <- 0L
-  form_registry <- registry[
-    registry$validation_check != "event-complete",
-    ,
-    drop = FALSE
-  ]
+  form_registry <- registry
 
   for (row in seq_len(nrow(form_registry))) {
     check <- form_registry[row, , drop = FALSE]
@@ -824,8 +806,7 @@ find_missing <- function(
     passed = passed,
     failed = failed,
     pass_rate = pass_rate,
-    fail_rate = fail_rate,
-    validation_check_type = registry_row$validation_check_type
+    fail_rate = fail_rate
   )
 }
 
@@ -844,8 +825,7 @@ find_missing <- function(
     passed = integer(),
     failed = integer(),
     pass_rate = numeric(),
-    fail_rate = numeric(),
-    validation_check_type = character()
+    fail_rate = numeric()
   )
 }
 
@@ -868,8 +848,7 @@ find_missing <- function(
     passed = 0L,
     failed = 0L,
     pass_rate = 0,
-    fail_rate = 0,
-    validation_check_type = registry_row$validation_check_type
+    fail_rate = 0
   )
 }
 
@@ -896,22 +875,14 @@ find_missing <- function(
   out
 }
 
-.miss_build_report_missing_rows <- function(
-  form_reports,
-  event_complete_checks,
-  form_validation_rows
-) {
-  pieces <- vector("list", length(form_reports) + 1L)
+.miss_build_report_missing_rows <- function(form_reports) {
+  pieces <- vector("list", length(form_reports))
   offset <- 0L
   for (i in seq_along(form_reports)) {
     form_missing <- form_reports[[i]]$missing %||% .miss_empty_missing_rows()
     pieces[[i]] <- .miss_offset_missing_rows(form_missing, offset)
     offset <- offset + sum(form_reports[[i]]$row_counts)
   }
-  pieces[[length(pieces)]] <- .miss_build_component_missing_rows(
-    event_complete_checks,
-    validation_row_offset = form_validation_rows
-  )
 
   out <- dplyr::bind_rows(pieces)
   if (nrow(out) == 0) {
@@ -973,7 +944,6 @@ find_missing <- function(
     "validation_context",
     "form",
     "validation_level",
-    "validation_check_type",
     "validation_check",
     "validation_label",
     "validation_passed",
@@ -1001,7 +971,6 @@ find_missing <- function(
     validation_context = character(),
     form = character(),
     validation_level = character(),
-    validation_check_type = character(),
     validation_check = character(),
     validation_label = character(),
     validation_passed = logical(),
@@ -1043,7 +1012,8 @@ find_missing <- function(
 .miss_build_report_spec <- function(
   form_reports,
   required_fields,
-  eligible_records,
+  record_eligibility,
+  unused_record_specs,
   ignored_fields,
   ignored_ids,
   forms,
@@ -1058,7 +1028,8 @@ find_missing <- function(
     form_labels = form_labels,
     events = .miss_named_report_component(form_reports, "events"),
     event_labels = event_labels,
-    eligible_records = eligible_records,
+    record_eligibility = .miss_select_record_eligibility(record_eligibility),
+    unused_record_specs = .miss_select_unused_record_specs(unused_record_specs),
     instances = .miss_named_report_component(form_reports, "instances"),
     ignored_fields = ignored_fields,
     ignored_ids = ignored_ids,
@@ -1078,10 +1049,10 @@ find_missing <- function(
   length(record_ids)
 }
 
-.miss_check_assessable_records <- function(records, id_col, eligible_records) {
+.miss_check_assessable_records <- function(records, id_col, record_specs) {
   if (
     .miss_has_assessable_record_rows(records = records, id_col = id_col) ||
-      .miss_has_explicit_eligible_records(eligible_records)
+      nrow(record_specs) > 0
   ) {
     return(invisible(records))
   }
@@ -1089,7 +1060,7 @@ find_missing <- function(
   stop(
     "`find_missing()` has no records to assess after filtering. ",
     "Provide at least one non-ignored record in `data`, or use `records` ",
-    "to declare expected REDCap record IDs for selected events.",
+    "to declare expected REDCap record IDs for selected contexts.",
     call. = FALSE
   )
 }
@@ -1101,16 +1072,6 @@ find_missing <- function(
   }
 
   any(!.miss_is_blank_vec(records[[id_col]]))
-}
-
-.miss_has_explicit_eligible_records <- function(eligible_records) {
-  eligible_records <- eligible_records %||% list()
-  if (length(eligible_records) == 0) {
-    return(FALSE)
-  }
-
-  record_ids <- unique(.miss_chr_vec(unlist(eligible_records, use.names = FALSE)))
-  any(!.miss_is_blank_vec(record_ids))
 }
 
 .miss_validate_flex_event_forms_denominators <- function(summary, spec) {
@@ -1178,7 +1139,6 @@ find_missing <- function(
     "event-row-started",
     "instance-row-started",
     "form-started",
-    "form-complete",
     "field-complete"
   )
   context_cols <- c(
@@ -1415,38 +1375,27 @@ find_missing <- function(
   list(values = values, explicit = explicit)
 }
 
-.miss_resolve_event_records_arg <- function(records, valid_events, ignore_ids) {
+.miss_resolve_records_arg <- function(records, valid_events, forms, ignore_ids) {
   if (is.null(records)) {
-    return(list())
+    return(.miss_empty_record_specs())
   }
   if (!is.list(records) || is.data.frame(records)) {
     stop(
-      "`records` must be NULL or a named list of REDCap record ID vectors ",
-      "by `redcap_event_name`.",
+      "`records` must be NULL or a named list by raw REDCap event name.",
       call. = FALSE
     )
   }
 
   record_event_names <- names(records)
-  if (
-    is.null(record_event_names) ||
-      length(record_event_names) != length(records) ||
-      any(.miss_is_blank_vec(record_event_names))
-  ) {
-    stop(
-      "`records` lists must be named by raw REDCap `redcap_event_name`.",
-      call. = FALSE
-    )
-  }
-
-  duplicated_events <- unique(record_event_names[duplicated(record_event_names)])
-  if (length(duplicated_events) > 0) {
-    stop(
-      "`records` list names must not be duplicated. Duplicate event name(s): ",
-      paste(duplicated_events, collapse = ", "),
-      call. = FALSE
-    )
-  }
+  .miss_check_records_names(
+    names = record_event_names,
+    expected_length = length(records),
+    context = "`records`"
+  )
+  .miss_check_duplicate_records_names(
+    names = record_event_names,
+    label = "event name"
+  )
 
   valid_events <- unique(.miss_chr_vec(valid_events))
   valid_events <- valid_events[!.miss_is_blank_vec(valid_events)]
@@ -1467,33 +1416,650 @@ find_missing <- function(
     )
   }
 
-  ignore_ids <- unique(.miss_chr_vec(ignore_ids %||% character()))
-  out <- list()
+  pieces <- list()
   for (event in record_event_names) {
     value <- records[[event]]
-    if (is.null(value)) {
-      next
-    }
-    if (is.list(value) || is.data.frame(value)) {
+    pieces <- c(pieces, list(.miss_parse_records_event_value(
+      value = value,
+      event = event,
+      forms = forms
+    )))
+  }
+
+  out <- dplyr::bind_rows(pieces)
+  if (nrow(out) == 0) {
+    return(.miss_empty_record_specs())
+  }
+
+  ignored <- intersect(unique(out$record_id), unique(.miss_chr_vec(ignore_ids)))
+  ignored <- ignored[!.miss_is_blank_vec(ignored)]
+  if (length(ignored) > 0) {
+    stop(
+      "`ignore_ids` includes ID(s) also listed in `records`: ",
+      paste(ignored, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  out$spec_key <- .miss_record_spec_key(out)
+  out <- out[!duplicated(out), , drop = FALSE]
+  tibble::as_tibble(out)
+}
+
+.miss_parse_records_event_value <- function(value, event, forms) {
+  if (is.null(value)) {
+    stop(
+      "`records` entry `",
+      event,
+      "` must not be NULL.",
+      call. = FALSE
+    )
+  }
+
+  if (!is.list(value) || is.data.frame(value)) {
+    record_ids <- .miss_validate_records_ids(value, context = paste0(
+      "`records` entry `",
+      event,
+      "`"
+    ))
+    return(.miss_record_specs_rows(
+      event = event,
+      form = "",
+      repeat_instance = "",
+      record_ids = record_ids,
+      source = "records_event"
+    ))
+  }
+
+  form_names <- names(value)
+  .miss_check_records_names(
+    names = form_names,
+    expected_length = length(value),
+    context = paste0("`records` entry `", event, "`")
+  )
+  .miss_check_duplicate_records_names(
+    names = form_names,
+    label = "form name"
+  )
+  unknown_forms <- setdiff(form_names, forms)
+  if (length(unknown_forms) > 0) {
+    stop(
+      "`records` form names must match requested `forms`. Unknown form(s): ",
+      paste(unknown_forms, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  pieces <- list()
+  for (form in form_names) {
+    pieces <- c(pieces, list(.miss_parse_records_form_value(
+      value = value[[form]],
+      event = event,
+      form = form
+    )))
+  }
+  dplyr::bind_rows(pieces)
+}
+
+.miss_parse_records_form_value <- function(value, event, form) {
+  if (is.null(value)) {
+    stop(
+      "`records` entry `",
+      event,
+      "$",
+      form,
+      "` must not be NULL.",
+      call. = FALSE
+    )
+  }
+
+  if (!is.list(value) || is.data.frame(value)) {
+    record_ids <- .miss_validate_records_ids(value, context = paste0(
+      "`records` entry `",
+      event,
+      "$",
+      form,
+      "`"
+    ))
+    return(.miss_record_specs_rows(
+      event = event,
+      form = form,
+      repeat_instance = "",
+      record_ids = record_ids,
+      source = "records_form"
+    ))
+  }
+
+  instance_names <- names(value)
+  .miss_check_records_names(
+    names = instance_names,
+    expected_length = length(value),
+    context = paste0("`records` entry `", event, "$", form, "`")
+  )
+  .miss_check_duplicate_records_names(
+    names = instance_names,
+    label = "repeat instance"
+  )
+  repeat_instances <- .miss_validate_records_instance_names(instance_names)
+
+  pieces <- list()
+  for (i in seq_along(instance_names)) {
+    record_ids <- .miss_validate_records_ids(value[[i]], context = paste0(
+      "`records` entry `",
+      event,
+      "$",
+      form,
+      "$",
+      instance_names[[i]],
+      "`"
+    ))
+    pieces <- c(pieces, list(.miss_record_specs_rows(
+      event = event,
+      form = form,
+      repeat_instance = repeat_instances[[i]],
+      record_ids = record_ids,
+      source = "records_instance"
+    )))
+  }
+  dplyr::bind_rows(pieces)
+}
+
+.miss_check_records_names <- function(names, expected_length, context) {
+  if (
+    is.null(names) ||
+      length(names) != expected_length ||
+      any(.miss_is_blank_vec(names))
+  ) {
+    stop(
+      context,
+      " must be a fully named list.",
+      call. = FALSE
+    )
+  }
+  invisible(names)
+}
+
+.miss_check_duplicate_records_names <- function(names, label) {
+  duplicated_names <- unique(names[duplicated(names)])
+  if (length(duplicated_names) > 0) {
+    stop(
+      "`records` names must not be duplicated. Duplicate ",
+      label,
+      "(s): ",
+      paste(duplicated_names, collapse = ", "),
+      call. = FALSE
+    )
+  }
+  invisible(names)
+}
+
+.miss_validate_records_ids <- function(value, context) {
+  if (is.null(value) || is.list(value) || is.data.frame(value)) {
+    stop(context, " must be a vector of REDCap record IDs.", call. = FALSE)
+  }
+  record_ids <- .miss_chr_vec(value)
+  if (
+    length(record_ids) == 0 ||
+      any(is.na(record_ids) | trimws(record_ids) == "")
+  ) {
+    stop(
+      context,
+      " must contain only non-blank record IDs.",
+      call. = FALSE
+    )
+  }
+  unique(record_ids)
+}
+
+.miss_validate_records_instance_names <- function(instance_names) {
+  numeric_values <- suppressWarnings(as.numeric(instance_names))
+  normalized_values <- as.character(as.integer(numeric_values))
+  invalid <- is.na(numeric_values) |
+    !is.finite(numeric_values) |
+    numeric_values < 1 |
+    numeric_values != floor(numeric_values) |
+    normalized_values != instance_names
+  if (any(invalid)) {
+    stop(
+      "`records` repeat-instance names must be positive whole numbers.",
+      call. = FALSE
+    )
+  }
+  normalized_values
+}
+
+.miss_record_specs_rows <- function(
+  event,
+  form,
+  repeat_instance,
+  record_ids,
+  source
+) {
+  tibble::tibble(
+    spec_key = NA_character_,
+    redcap_event_name = rep(event, length(record_ids)),
+    form = rep(form, length(record_ids)),
+    redcap_repeat_instance = rep(repeat_instance, length(record_ids)),
+    record_id = record_ids,
+    eligibility_source = rep(source, length(record_ids))
+  )
+}
+
+.miss_empty_record_specs <- function() {
+  tibble::tibble(
+    spec_key = character(),
+    redcap_event_name = character(),
+    form = character(),
+    redcap_repeat_instance = character(),
+    record_id = character(),
+    eligibility_source = character()
+  )
+}
+
+.miss_record_spec_key <- function(record_specs) {
+  paste(
+    .miss_key_part(record_specs$redcap_event_name),
+    .miss_key_part(record_specs$form),
+    .miss_key_part(record_specs$redcap_repeat_instance),
+    .miss_key_part(record_specs$eligibility_source),
+    sep = "\r"
+  )
+}
+
+.miss_check_record_specs_for_form <- function(record_specs, project, form) {
+  if (nrow(record_specs) == 0) {
+    return(invisible(record_specs))
+  }
+
+  form_specs <- record_specs[
+    record_specs$form == form,
+    ,
+    drop = FALSE
+  ]
+  if (nrow(form_specs) == 0) {
+    return(invisible(record_specs))
+  }
+
+  offered_events <- union(project$form_events, project$repeat_form_events)
+  invalid_events <- setdiff(unique(form_specs$redcap_event_name), offered_events)
+  if (length(invalid_events) > 0) {
+    stop(
+      "`records` includes event/form combination(s) not offered by REDCap: ",
+      paste(paste(invalid_events, form, sep = "/"), collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  instance_specs <- form_specs[
+    !.miss_is_blank_vec(form_specs$redcap_repeat_instance),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(instance_specs) > 0) {
+    repeat_events <- union(
+      project$repeat_form_events,
+      .miss_form_repeating_events(project)
+    )
+    nonrepeat_instance_events <- setdiff(
+      unique(instance_specs$redcap_event_name),
+      repeat_events
+    )
+    if (length(nonrepeat_instance_events) > 0) {
       stop(
-        "`records` list entry `",
-        event,
-        "` must be a vector of REDCap record IDs.",
+        "`records` includes repeat instances for non-repeating context(s): ",
+        paste(paste(nonrepeat_instance_events, form, sep = "/"), collapse = ", "),
         call. = FALSE
       )
     }
-
-    record_ids <- unique(.miss_chr_vec(value))
-    record_ids <- record_ids[!.miss_is_blank_vec(record_ids)]
-    record_ids <- setdiff(record_ids, ignore_ids)
-    if (length(record_ids) == 0) {
-      next
-    }
-
-    out[[event]] <- record_ids
   }
 
+  invisible(record_specs)
+}
+
+.miss_build_record_eligibility <- function(
+  records,
+  project,
+  form,
+  instances,
+  record_specs
+) {
+  contexts <- .miss_build_record_eligibility_contexts(
+    records = records,
+    project = project,
+    form = form,
+    instances = instances
+  )
+  if (nrow(contexts) == 0) {
+    return(.miss_empty_record_eligibility())
+  }
+
+  pieces <- lapply(seq_len(nrow(contexts)), function(i) {
+    context <- contexts[i, , drop = FALSE]
+    selected <- .miss_record_specs_for_context(
+      record_specs = record_specs,
+      context = context
+    )
+    if (nrow(selected) > 0) {
+      return(.miss_context_record_eligibility(
+        context = context,
+        record_ids = selected$record_id,
+        source = selected$eligibility_source[[1]],
+        record_spec_key = selected$spec_key[[1]]
+      ))
+    }
+
+    .miss_context_record_eligibility(
+      context = context,
+      record_ids = context$default_record_ids[[1]],
+      source = "data",
+      record_spec_key = ""
+    )
+  })
+
+  out <- dplyr::bind_rows(pieces)
+  if (nrow(out) == 0) {
+    return(.miss_empty_record_eligibility())
+  }
+
+  out <- unique(out)
+  tibble::as_tibble(out[order(
+    out$redcap_event_name,
+    out$form,
+    out$redcap_repeat_instrument,
+    suppressWarnings(as.numeric(out$redcap_repeat_instance)),
+    out$redcap_repeat_instance,
+    out$record_id
+  ), , drop = FALSE])
+}
+
+.miss_build_record_eligibility_contexts <- function(
+  records,
+  project,
+  form,
+  instances
+) {
+  pieces <- list()
+
+  nonrepeat_events <- .miss_missing_event_form_events(project)
+  if (length(nonrepeat_events) > 0) {
+    event_records <- .miss_expected_record_events_from_data(
+      records = records,
+      project = project,
+      events = nonrepeat_events
+    )
+    pieces <- c(pieces, list(.miss_record_contexts_from_record_events(
+      record_events = event_records,
+      events = nonrepeat_events,
+      form = form,
+      repeat_instrument = "",
+      repeat_instance = ""
+    )))
+  }
+
+  if (!is.null(instances) && isTRUE(project$form_repeats)) {
+    repeat_contexts <- .miss_repeat_record_eligibility_contexts(
+      records = records,
+      project = project,
+      form = form,
+      instances = instances
+    )
+    pieces <- c(pieces, list(repeat_contexts))
+  }
+
+  fields <- project$system_fields
+  if (
+    length(nonrepeat_events) == 0 &&
+      !isTRUE(project$form_repeats) &&
+      !fields$event_col %in% names(records)
+  ) {
+    record_ids <- unique(.miss_chr_vec(records[[project$id_col]]))
+    record_ids <- record_ids[!.miss_is_blank_vec(record_ids)]
+    pieces <- c(pieces, list(tibble::tibble(
+      redcap_event_name = "",
+      form = form,
+      redcap_repeat_instrument = "",
+      redcap_repeat_instance = "",
+      default_record_ids = list(record_ids)
+    )))
+  }
+
+  out <- dplyr::bind_rows(pieces)
+  if (nrow(out) == 0) {
+    return(.miss_empty_record_eligibility_contexts())
+  }
   out
+}
+
+.miss_repeat_record_eligibility_contexts <- function(
+  records,
+  project,
+  form,
+  instances
+) {
+  fields <- project$system_fields
+  instance_values <- .miss_chr_vec(instances)
+  pieces <- list()
+
+  if (fields$event_col %in% names(records)) {
+    if (length(project$repeat_form_events) > 0) {
+      record_events <- .miss_expected_record_events_from_data(
+        records = records,
+        project = project,
+        events = project$repeat_form_events
+      )
+      pieces <- c(pieces, list(.miss_record_contexts_from_record_events(
+        record_events = record_events,
+        events = project$repeat_form_events,
+        form = form,
+        repeat_instrument = form,
+        repeat_instance = instance_values
+      )))
+    }
+
+    repeating_events <- .miss_form_repeating_events(project)
+    if (length(repeating_events) > 0) {
+      record_events <- .miss_expected_record_events_from_data(
+        records = records,
+        project = project,
+        events = repeating_events
+      )
+      pieces <- c(pieces, list(.miss_record_contexts_from_record_events(
+        record_events = record_events,
+        events = repeating_events,
+        form = form,
+        repeat_instrument = "",
+        repeat_instance = instance_values
+      )))
+    }
+  } else {
+    record_ids <- unique(.miss_chr_vec(records[[project$id_col]]))
+    record_ids <- record_ids[!.miss_is_blank_vec(record_ids)]
+    pieces <- c(pieces, list(tibble::tibble(
+      redcap_event_name = "",
+      form = form,
+      redcap_repeat_instrument = form,
+      redcap_repeat_instance = instance_values,
+      default_record_ids = rep(list(record_ids), length(instance_values))
+    )))
+  }
+
+  out <- dplyr::bind_rows(pieces)
+  if (nrow(out) == 0) {
+    return(.miss_empty_record_eligibility_contexts())
+  }
+  out
+}
+
+.miss_record_contexts_from_record_events <- function(
+  record_events,
+  events,
+  form,
+  repeat_instrument,
+  repeat_instance
+) {
+  context_events <- unique(.miss_chr_vec(events))
+  context_events <- context_events[!.miss_is_blank_vec(context_events)]
+  if (length(context_events) == 0) {
+    return(.miss_empty_record_eligibility_contexts())
+  }
+  if (length(repeat_instance) == 1 && .miss_is_blank_scalar(repeat_instance)) {
+    return(tibble::tibble(
+      redcap_event_name = context_events,
+      form = form,
+      redcap_repeat_instrument = repeat_instrument,
+      redcap_repeat_instance = "",
+      default_record_ids = lapply(context_events, function(event) {
+        unique(record_events$record_id[record_events$redcap_event_name == event])
+      })
+    ))
+  }
+
+  dplyr::bind_rows(lapply(context_events, function(event) {
+    record_ids <- unique(record_events$record_id[
+      record_events$redcap_event_name == event
+    ])
+    tibble::tibble(
+      redcap_event_name = event,
+      form = form,
+      redcap_repeat_instrument = repeat_instrument,
+      redcap_repeat_instance = repeat_instance,
+      default_record_ids = rep(list(record_ids), length(repeat_instance))
+    )
+  }))
+}
+
+.miss_record_specs_for_context <- function(record_specs, context) {
+  if (nrow(record_specs) == 0) {
+    return(record_specs)
+  }
+
+  event <- context$redcap_event_name[[1]]
+  form <- context$form[[1]]
+  repeat_instance <- context$redcap_repeat_instance[[1]]
+
+  exact_instance <- record_specs[
+    record_specs$redcap_event_name == event &
+      record_specs$form == form &
+      record_specs$redcap_repeat_instance == repeat_instance &
+      record_specs$eligibility_source == "records_instance",
+    ,
+    drop = FALSE
+  ]
+  if (nrow(exact_instance) > 0) {
+    return(exact_instance)
+  }
+
+  exact_form <- record_specs[
+    record_specs$redcap_event_name == event &
+      record_specs$form == form &
+      .miss_is_blank_vec(record_specs$redcap_repeat_instance) &
+      record_specs$eligibility_source == "records_form",
+    ,
+    drop = FALSE
+  ]
+  if (nrow(exact_form) > 0) {
+    return(exact_form)
+  }
+
+  event_specs <- record_specs[
+    record_specs$redcap_event_name == event &
+      .miss_is_blank_vec(record_specs$form) &
+      .miss_is_blank_vec(record_specs$redcap_repeat_instance) &
+      record_specs$eligibility_source == "records_event",
+    ,
+    drop = FALSE
+  ]
+  event_specs
+}
+
+.miss_context_record_eligibility <- function(
+  context,
+  record_ids,
+  source,
+  record_spec_key
+) {
+  record_ids <- unique(.miss_chr_vec(record_ids))
+  record_ids <- record_ids[!.miss_is_blank_vec(record_ids)]
+  if (length(record_ids) == 0) {
+    return(.miss_empty_record_eligibility())
+  }
+
+  tibble::tibble(
+    record_id = record_ids,
+    redcap_event_name = rep(context$redcap_event_name[[1]], length(record_ids)),
+    form = rep(context$form[[1]], length(record_ids)),
+    redcap_repeat_instrument = rep(
+      context$redcap_repeat_instrument[[1]],
+      length(record_ids)
+    ),
+    redcap_repeat_instance = rep(
+      context$redcap_repeat_instance[[1]],
+      length(record_ids)
+    ),
+    eligibility_source = rep(source, length(record_ids)),
+    record_spec_key = rep(record_spec_key, length(record_ids))
+  )
+}
+
+.miss_empty_record_eligibility_contexts <- function() {
+  tibble::tibble(
+    redcap_event_name = character(),
+    form = character(),
+    redcap_repeat_instrument = character(),
+    redcap_repeat_instance = character(),
+    default_record_ids = list()
+  )
+}
+
+.miss_empty_record_eligibility <- function() {
+  tibble::tibble(
+    record_id = character(),
+    redcap_event_name = character(),
+    form = character(),
+    redcap_repeat_instrument = character(),
+    redcap_repeat_instance = character(),
+    eligibility_source = character(),
+    record_spec_key = character()
+  )
+}
+
+.miss_unused_record_specs <- function(record_specs, used_record_spec_keys) {
+  if (nrow(record_specs) == 0) {
+    return(.miss_empty_record_specs())
+  }
+  used_record_spec_keys <- unique(.miss_chr_vec(used_record_spec_keys))
+  unused <- record_specs[
+    !record_specs$spec_key %in% used_record_spec_keys,
+    ,
+    drop = FALSE
+  ]
+  if (nrow(unused) == 0) {
+    return(.miss_empty_record_specs())
+  }
+  tibble::as_tibble(unused)
+}
+
+.miss_select_record_eligibility <- function(record_eligibility) {
+  columns <- c(
+    "record_id",
+    "redcap_event_name",
+    "form",
+    "redcap_repeat_instrument",
+    "redcap_repeat_instance",
+    "eligibility_source"
+  )
+  record_eligibility[, columns, drop = FALSE]
+}
+
+.miss_select_unused_record_specs <- function(unused_record_specs) {
+  columns <- c(
+    "redcap_event_name",
+    "form",
+    "redcap_repeat_instance",
+    "record_id",
+    "eligibility_source"
+  )
+  unused_record_specs[, columns, drop = FALSE]
 }
 
 .miss_check_named_setting_list <- function(x, forms, arg) {

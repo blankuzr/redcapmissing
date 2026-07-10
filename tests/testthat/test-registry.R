@@ -3,43 +3,35 @@ test_that("registry returns the canonical validation taxonomy", {
 
   expect_s3_class(reg, "redcapmissing_registry")
   expect_s3_class(reg, "tbl_df")
-  expect_equal(nrow(reg), 6)
+  expect_equal(nrow(reg), 4)
   expect_identical(
     reg$validation_check,
     c(
       "event-row-started",
       "instance-row-started",
       "form-started",
-      "form-complete",
-      "field-complete",
-      "event-complete"
+      "field-complete"
     )
   )
   expect_identical(
     unique(reg$validation_level),
-    c("event:form / event:form:instance", "event")
+    "event:form / event:form:instance"
   )
   level_counts <- table(reg$validation_level)
   expect_equal(
-    as.integer(level_counts[c("event:form / event:form:instance", "event")]),
-    c(5L, 1L)
+    as.integer(level_counts["event:form / event:form:instance"]),
+    4L
   )
   expect_equal(sum(reg$validation_check == "form-started"), 1)
-  expect_equal(sum(reg$validation_check == "form-complete"), 1)
   expect_equal(sum(reg$validation_check == "field-complete"), 1)
-  expect_identical(
-    reg$validation_check_type,
-    c("on-route", "on-route", "on-route", "detour", "on-route", "detour")
-  )
+  expect_false("validation_check_type" %in% names(reg))
   expect_identical(
     reg$component_stem,
     c(
       "event_row_started",
       "instance_row_started",
       "form_started",
-      "form_complete",
-      "field_complete",
-      "event_complete"
+      "field_complete"
     )
   )
   expect_true(all(c(
@@ -52,13 +44,10 @@ test_that("registry returns the canonical validation taxonomy", {
     "step_suffix",
     "gates_downstream"
   ) %in% names(reg)))
-  expect_true(all(reg$gates_downstream[reg$validation_check_type == "on-route"]))
-  expect_false(any(reg$gates_downstream[reg$validation_check_type == "detour"]))
+  expect_true(all(reg$gates_downstream))
 
   descriptions <- stats::setNames(reg$description, reg$validation_check)
-  expect_identical(descriptions[["form-complete"]], "all form fields complete")
   expect_identical(descriptions[["field-complete"]], "field complete")
-  expect_identical(descriptions[["event-complete"]], "all forms on event complete")
 })
 
 test_that("registry prints an organized cli summary", {
@@ -68,19 +57,16 @@ test_that("registry prints an organized cli summary", {
   ))
 
   expect_true(grepl("validation registry", printed, fixed = TRUE))
-  expect_true(grepl("6 checks; 2 levels", printed, fixed = TRUE))
+  expect_true(grepl("4 checks; 1 levels", printed, fixed = TRUE))
   expect_true(grepl("level", printed, fixed = TRUE))
   expect_true(grepl("check", printed, fixed = TRUE))
   expect_true(grepl("meaning", printed, fixed = TRUE))
   expect_true(grepl("event:form / event:form:instance", printed, fixed = TRUE))
-  expect_true(grepl("event", printed, fixed = TRUE))
   expect_true(grepl("event-row-started", printed, fixed = TRUE))
-  expect_true(grepl("form-complete", printed, fixed = TRUE))
-  expect_true(grepl("event-complete", printed, fixed = TRUE))
   expect_true(grepl("event row exists", printed, fixed = TRUE))
-  expect_true(grepl("all form fields complete", printed, fixed = TRUE))
   expect_true(grepl("field complete", printed, fixed = TRUE))
-  expect_true(grepl("all forms on event complete", printed, fixed = TRUE))
+  expect_false(grepl("form-complete", printed, fixed = TRUE))
+  expect_false(grepl("event-complete", printed, fixed = TRUE))
   expect_false(grepl("Expected event row exists.", printed, fixed = TRUE))
   expect_false(grepl("All expected fields complete.", printed, fixed = TRUE))
   expect_false(grepl("| fields complete", printed, fixed = TRUE))
