@@ -7,8 +7,7 @@
 \title{redcapmissing: Branching-Aware Missingness Reports for REDCap Exports}
 \description{
 Build branching-aware missingness reports for REDCap record exports,
-organized by canonical validation levels, validation checks, and
-validation-check types.
+organized by contextual validation levels and validation checks.
 }
 \details{
 \code{redcapmissing} is built on top of the \code{redcapAPI} package. In routine use,
