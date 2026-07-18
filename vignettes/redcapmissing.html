@@ -530,6 +530,12 @@ report$missing[, c(
 <code>conditional_note</code>, so the missing value is a
 <code>field-complete</code> failure. Record <code>r2</code> is
 branch-closed, so the field is not in the assessment pool.</p>
+<p>The final <code>url</code> column in <code>report$missing</code> is a
+raw REDCap Data Entry URL for each failed record/form context when
+<code>rcon</code> includes the required instance, version, and project
+metadata, plus an event ID for longitudinal projects. It is
+<code>NA</code> for connection-like objects that do not provide that
+metadata, including the synthetic helper used here.</p>
 </div>
 <div id="event-row-gating" class="section level2">
 <h2>Event-row gating</h2>

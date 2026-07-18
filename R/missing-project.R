@@ -360,7 +360,8 @@
   if (ncol(events) == 0) {
     return(tibble::tibble(
       unique_event_name = character(),
-      event_name = character()
+      event_name = character(),
+      event_id = character()
     ))
   }
 
@@ -374,10 +375,14 @@
   if (!"event_name" %in% names(events)) {
     events$event_name <- NA_character_
   }
+  if (!"event_id" %in% names(events)) {
+    events$event_id <- NA_character_
+  }
 
   tibble::tibble(
     unique_event_name = .miss_chr_vec(events$unique_event_name),
-    event_name = .miss_chr_vec(events$event_name)
+    event_name = .miss_chr_vec(events$event_name),
+    event_id = .miss_chr_vec(events$event_id)
   )
 }
 

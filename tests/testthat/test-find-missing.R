@@ -26,15 +26,14 @@ missing_expected_columns <- function() {
     "form",
     "validation_level",
     "validation_check",
-    "validation_label",
     "validation_passed",
     "field_name",
     "field_label",
     "field_type",
     "branching_logic",
     "branch_satisfied",
-    "value_summary",
-    "export_fields"
+    "export_fields",
+    "url"
   )
 }
 
@@ -179,12 +178,16 @@ test_that("report object uses validation-check canon and removes old names", {
   ) %in% names(compact_report)))
   expect_true(all(c(
     "validation_step",
-    "validation_row_id"
+    "validation_row_id",
+    "url"
   ) %in% names(compact_report$missing)))
   expect_false(any(c(
     "pointblank_step",
-    "pointblank_extract"
+    "pointblank_extract",
+    "validation_label",
+    "value_summary"
   ) %in% names(compact_report$missing)))
+  expect_identical(tail(names(compact_report$missing), 1), "url")
 
   report <- find_missing_with_details(
     data = records,
@@ -205,6 +208,7 @@ test_that("report object uses validation-check canon and removes old names", {
     "validation_level",
     "validation_check",
     "validation_label",
+    "value_summary",
     "validation_passed"
   ) %in% names(fm_validation_rows(report))))
   expect_false(any(c(
@@ -247,6 +251,140 @@ test_that("all-pass reports keep the documented missing-row schema", {
 
   expect_equal(nrow(report$missing), 0)
   expect_identical(names(report$missing), missing_expected_columns())
+  expect_identical(typeof(report$missing$url), "character")
+})
+
+test_that("missing URLs mirror redcapAPI form links", {
+  classic_records <- tibble::tibble(
+    record_id = c("r1", "r2"),
+    branch_flag = c("0", "0"),
+    required_note = c("entered", ""),
+    optional_note = c("", ""),
+    checkbox_field___1 = c("1", "1"),
+    checkbox_field___2 = c("0", "0"),
+    checkbox_other = c("", ""),
+    conditional_note = c("", "")
+  )
+  classic_report <- find_missing(
+    data = classic_records,
+    rcon = fake_rcon(
+      baseline_form_meta(),
+      project_information = tibble::tibble(
+        project_id = 71,
+        is_longitudinal = 0
+      ),
+      url = "https://redcap.example.edu/api/",
+      version = "14.2.0"
+    ),
+    forms = "baseline_form"
+  )
+  classic_failure <- classic_report$missing[
+    classic_report$missing$record_id == "r2" &
+      classic_report$missing$field_name == "required_note",
+    ,
+    drop = FALSE
+  ]
+
+  expect_identical(
+    classic_failure$url,
+    "https://redcap.example.edu/redcap_v14.2.0/DataEntry/index.php?pid=71&page=baseline_form&id=r2"
+  )
+
+  longitudinal_meta <- dplyr::bind_rows(
+    meta_row("record_id", "followup_form", required = "y"),
+    meta_row("followup_started", "followup_form", required = "y"),
+    meta_row("followup_value", "followup_form", required = "y")
+  )
+  longitudinal_records <- tibble::tibble(
+    record_id = "r3",
+    redcap_event_name = "followup_arm_1",
+    followup_started = "yes",
+    followup_value = ""
+  )
+  longitudinal_report <- find_missing(
+    data = longitudinal_records,
+    rcon = fake_rcon(
+      longitudinal_meta,
+      events = tibble::tibble(
+        unique_event_name = "followup_arm_1",
+        event_name = "Follow-up",
+        event_id = 805
+      ),
+      mapping = tibble::tibble(
+        arm_num = 1,
+        unique_event_name = "followup_arm_1",
+        form = "followup_form"
+      ),
+      project_information = tibble::tibble(
+        project_id = 72,
+        is_longitudinal = 1
+      ),
+      url = "https://redcap.example.edu/api",
+      version = "14.2.0"
+    ),
+    forms = "followup_form"
+  )
+  longitudinal_failure <- longitudinal_report$missing[
+    longitudinal_report$missing$field_name == "followup_value",
+    ,
+    drop = FALSE
+  ]
+
+  expect_identical(
+    longitudinal_failure$url,
+    "https://redcap.example.edu/redcap_v14.2.0/DataEntry/index.php?pid=72&page=followup_form&id=r3&event_id=805"
+  )
+})
+
+test_that("missing URL metadata leaves links unavailable", {
+  metadata <- dplyr::bind_rows(
+    meta_row("record_id", "followup_form", required = "y"),
+    meta_row("followup_started", "followup_form", required = "y"),
+    meta_row("followup_value", "followup_form", required = "y")
+  )
+  records <- tibble::tibble(
+    record_id = "r3",
+    redcap_event_name = "followup_arm_1",
+    followup_started = "yes",
+    followup_value = ""
+  )
+  mapping <- tibble::tibble(
+    arm_num = 1,
+    unique_event_name = "followup_arm_1",
+    form = "followup_form"
+  )
+  project_information <- tibble::tibble(
+    project_id = 72,
+    is_longitudinal = 1
+  )
+  events <- tibble::tibble(
+    unique_event_name = "followup_arm_1",
+    event_name = "Follow-up",
+    event_id = 805
+  )
+  missing_metadata <- list(
+    url = list(url = NULL, version = "14.2.0", project_information = project_information, events = events),
+    version = list(url = "https://redcap.example.edu/api/", version = NULL, project_information = project_information, events = events),
+    project = list(url = "https://redcap.example.edu/api/", version = "14.2.0", project_information = tibble::tibble(is_longitudinal = 1), events = events),
+    event = list(url = "https://redcap.example.edu/api/", version = "14.2.0", project_information = project_information, events = dplyr::select(events, -event_id))
+  )
+
+  reports <- lapply(missing_metadata, function(link_metadata) {
+    find_missing(
+      data = records,
+      rcon = do.call(
+        fake_rcon,
+        c(list(metadata = metadata, mapping = mapping), link_metadata)
+      ),
+      forms = "followup_form"
+    )
+  })
+
+  expect_true(all(vapply(
+    reports,
+    function(report) all(is.na(report$missing$url)),
+    logical(1)
+  )))
 })
 
 test_that("record eligibility is returned when records are omitted", {
@@ -442,8 +580,8 @@ test_that("non-field validation rows use typed NA field columns", {
   expect_true(all(is.na(non_field_failures$field_label)))
   expect_true(all(is.na(non_field_failures$field_type)))
   expect_true(all(is.na(non_field_failures$branching_logic)))
-  expect_true(all(is.na(non_field_failures$value_summary)))
   expect_true(all(is.na(non_field_failures$export_fields)))
+  expect_false("value_summary" %in% names(non_field_failures))
   expect_false(any(
     report$missing$record_id == "blank" &
       report$missing$validation_check == "field-complete"
@@ -778,8 +916,19 @@ test_that("instance-row-started gates downstream repeat checks", {
     data = records,
     rcon = fake_rcon(
       repeat_meta,
+      events = tibble::tibble(
+        unique_event_name = "baseline_event",
+        event_name = "Baseline",
+        event_id = 16
+      ),
       mapping = mapping,
-      repeat_instrument_event = repeat_instrument_event
+      repeat_instrument_event = repeat_instrument_event,
+      project_information = tibble::tibble(
+        project_id = 73,
+        is_longitudinal = 1
+      ),
+      url = "https://redcap.example.edu/api/",
+      version = "14.2.0"
     ),
     forms = "repeat_form",
     instances = 2L
@@ -796,6 +945,17 @@ test_that("instance-row-started gates downstream repeat checks", {
       report$missing$redcap_repeat_instance == "2" &
       report$missing$validation_check == "instance-row-started"
   ))
+  repeat_failure <- report$missing[
+    report$missing$record_id == "r1" &
+      report$missing$redcap_repeat_instance == "2" &
+      report$missing$validation_check == "instance-row-started",
+    ,
+    drop = FALSE
+  ]
+  expect_identical(
+    repeat_failure$url,
+    "https://redcap.example.edu/redcap_v14.2.0/DataEntry/index.php?pid=73&page=repeat_form&id=r1&event_id=16"
+  )
   expect_false(any(
     fm_checks(report, "form-started")$record_id == "r1" &
       fm_checks(report, "form-started")$redcap_repeat_instance == "2"

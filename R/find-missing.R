@@ -120,7 +120,10 @@
 #'     including assessed, passed, failed, pass-rate, and fail-rate columns.}
 #'   \item{`missing`}{Failed validation rows keyed by generic native
 #'     `validation_step` and `validation_row_id` identifiers plus REDCap record,
-#'     event, repeat, form, and field context.}
+#'     event, repeat, form, and field context. The final `url` column is a raw
+#'     REDCap Data Entry URL for the record/form context when the connection
+#'     provides the required instance, version, and project metadata, plus an
+#'     event ID for longitudinal projects; otherwise it is `NA`.}
 #'   \item{`spec`}{Normalized report context, including requested forms,
 #'     events, labels, record eligibility, unused record specifications,
 #'     instances, ignored fields/IDs, REDCap ID column, system fields, project
@@ -393,8 +396,12 @@ find_missing <- function(
   summary <- .miss_build_validation_summary(form_reports = form_reports)
   form_validation_rows <- .miss_count_form_validation_rows(form_reports)
   validation_row_count <- form_validation_rows
-  missing <- .miss_build_report_missing_rows(
-    form_reports = form_reports
+  missing <- .miss_add_missing_urls(
+    missing = .miss_build_report_missing_rows(
+      form_reports = form_reports
+    ),
+    rcon = rcon,
+    project_cache = project_cache
   )
   ignored_fields <- unique(unlist(.miss_named_report_component(
     form_reports,
@@ -1030,19 +1037,17 @@ find_missing <- function(
     "form",
     "validation_level",
     "validation_check",
-    "validation_label",
     "validation_passed",
     "field_name",
     "field_label",
     "field_type",
     "branching_logic",
     "branch_satisfied",
-    "value_summary",
     "export_fields"
   )
 
   rows |>
-    dplyr::select(dplyr::all_of(select_cols), dplyr::everything())
+    dplyr::select(dplyr::all_of(select_cols))
 }
 
 .miss_empty_missing_rows <- function() {
@@ -1057,16 +1062,129 @@ find_missing <- function(
     form = character(),
     validation_level = character(),
     validation_check = character(),
-    validation_label = character(),
     validation_passed = logical(),
     field_name = character(),
     field_label = character(),
     field_type = character(),
     branching_logic = character(),
     branch_satisfied = logical(),
-    value_summary = character(),
-    export_fields = character()
+    export_fields = character(),
+    url = character()
   )
+}
+
+.miss_add_missing_urls <- function(missing, rcon, project_cache) {
+  if (nrow(missing) == 0) {
+    return(missing)
+  }
+
+  missing$url <- .miss_build_missing_urls(
+    missing = missing,
+    rcon = rcon,
+    project_cache = project_cache
+  )
+  missing
+}
+
+.miss_build_missing_urls <- function(missing, rcon, project_cache) {
+  urls <- rep(NA_character_, nrow(missing))
+  instance_url <- .miss_chr(rcon$url %||% NA_character_)
+  redcap_version <- .miss_get_rcon_version(rcon)
+  project_id <- .miss_get_project_information_value(
+    project_information = project_cache$project_information,
+    column = "project_id"
+  )
+  is_longitudinal <- .miss_project_is_longitudinal(
+    .miss_get_project_information_value(
+      project_information = project_cache$project_information,
+      column = "is_longitudinal"
+    )
+  )
+
+  if (
+    .miss_is_blank_scalar(instance_url) ||
+      .miss_is_blank_scalar(redcap_version) ||
+      .miss_is_blank_scalar(project_id) ||
+      is.na(is_longitudinal)
+  ) {
+    return(urls)
+  }
+
+  event_ids <- rep(NA_character_, nrow(missing))
+  if (isTRUE(is_longitudinal)) {
+    event_index <- match(
+      .miss_chr_vec(missing$redcap_event_name),
+      project_cache$events$unique_event_name
+    )
+    event_ids <- project_cache$events$event_id[event_index]
+  }
+
+  complete <-
+    !.miss_is_blank_vec(missing$form) &
+    !.miss_is_blank_vec(missing$record_id)
+  if (isTRUE(is_longitudinal)) {
+    complete <- complete & !.miss_is_blank_vec(event_ids)
+  }
+  if (!any(complete)) {
+    return(urls)
+  }
+
+  base_url <- sub("/api(/|)$", "", instance_url)
+  urls[complete] <- sprintf(
+    "%s/redcap_v%s/DataEntry/index.php?pid=%s&page=%s&id=%s",
+    base_url,
+    redcap_version,
+    project_id,
+    missing$form[complete],
+    missing$record_id[complete]
+  )
+  if (isTRUE(is_longitudinal)) {
+    urls[complete] <- paste0(
+      urls[complete],
+      "&event_id=",
+      event_ids[complete]
+    )
+  }
+
+  urls
+}
+
+.miss_get_rcon_version <- function(rcon) {
+  version_method <- rcon$version
+  if (!is.function(version_method)) {
+    return(NA_character_)
+  }
+
+  version <- tryCatch(version_method(), error = function(e) NULL)
+  if (length(version) != 1) {
+    return(NA_character_)
+  }
+
+  .miss_chr(version[[1]])
+}
+
+.miss_get_project_information_value <- function(project_information, column) {
+  if (
+    is.null(project_information) ||
+      nrow(project_information) == 0 ||
+      !column %in% names(project_information)
+  ) {
+    return(NA_character_)
+  }
+
+  .miss_chr(project_information[[column]][[1]])
+}
+
+.miss_project_is_longitudinal <- function(value) {
+  value <- tolower(.miss_chr(value))
+  if (value %in% c("1", "true")) {
+    return(TRUE)
+  }
+  if (value %in% c("0", "false")) {
+    return(FALSE)
+  }
+
+  NA
 }
 
 .miss_build_report_details <- function(validation_rows) {
