@@ -26,7 +26,9 @@ fake_rcon <- function(
   events = NULL,
   mapping = NULL,
   repeat_instrument_event = NULL,
-  project_information = NULL
+  project_information = NULL,
+  url = NULL,
+  version = NULL
 ) {
   if (is.null(instruments)) {
     forms <- unique(as.character(metadata$form_name))
@@ -37,13 +39,15 @@ fake_rcon <- function(
   }
 
   list(
+    url = url,
     metadata = function() metadata,
     instruments = function() instruments,
     events = function() events,
     mapping = function() mapping,
     mappings = function() mapping,
     repeatInstrumentEvent = function() repeat_instrument_event,
-    projectInformation = function() project_information
+    projectInformation = function() project_information,
+    version = function() version
   )
 }
 

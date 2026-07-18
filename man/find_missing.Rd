@@ -110,7 +110,10 @@ A list with class \code{"redcapmissing"} containing:
 including assessed, passed, failed, pass-rate, and fail-rate columns.}
 \item{\code{missing}}{Failed validation rows keyed by generic native
 \code{validation_step} and \code{validation_row_id} identifiers plus REDCap record,
-event, repeat, form, and field context.}
+event, repeat, form, and field context. The final \code{url} column is a raw
+REDCap Data Entry URL for the record/form context when the connection
+provides the required instance, version, and project metadata, plus an
+event ID for longitudinal projects; otherwise it is \code{NA}.}
 \item{\code{spec}}{Normalized report context, including requested forms,
 events, labels, record eligibility, unused record specifications,
 instances, ignored fields/IDs, REDCap ID column, system fields, project

@@ -175,7 +175,10 @@ validation summary. Common outputs are:
 
 - `report$summary`: compact validation summary used by `tidy(report)`
 - `report$missing`: failed validation rows with native `validation_step`
-  and `validation_row_id` identifiers
+  and `validation_row_id` identifiers; its final `url` column is a raw
+  REDCap Data Entry URL when the connection includes the required
+  instance, version, and project metadata, plus an event ID for
+  longitudinal projects; otherwise `NA`
 - `report$spec`: normalized forms, events, labels, record eligibility,
   instances, ignored fields/IDs, ID column, and REDCap system fields
 - `report$diagnostics`: timing and row-count metadata for

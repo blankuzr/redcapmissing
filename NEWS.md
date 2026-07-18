@@ -1,3 +1,12 @@
+# redcapmissing 5.0.2
+
+## 2026-07-18
+
+- Updated `report$missing` to replace redundant `validation_label` and
+  `value_summary` columns with a final `url` column that links failed
+  record/form contexts to REDCap Data Entry when connection metadata is
+  available.
+
 # redcapmissing 5.0.1
 
 ## 2026-07-18
