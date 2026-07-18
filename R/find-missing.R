@@ -107,10 +107,12 @@
 #' @param details Logical scalar. When `FALSE`, the report omits full
 #'   validation-row tables and check-specific row tables. When `TRUE`, these
 #'   row-level tables are stored under `report$details`. Defaults to `FALSE`.
-#' @param progress Logical scalar. When `TRUE`, line-based progress messages
-#'   are emitted with `cli::cat_line()` as each requested form starts and
-#'   finishes, followed by a final overall completion line. Defaults to
-#'   `interactive()`.
+#' @param progress Logical scalar. When `TRUE`, displays a CLI progress status
+#'   with completed, active, and pending forms, the active form's processing
+#'   percentage, and overall `find_missing()` progress. In dynamic terminals,
+#'   updates replace the current line; colors and Unicode symbols are used when
+#'   supported. Percentages describe processing progress, not data
+#'   completeness. Defaults to `interactive()`.
 #'
 #' @return A list with class `"redcapmissing"` containing:
 #' \describe{
@@ -259,6 +261,18 @@ find_missing <- function(
     forms = forms
   )
 
+  progress_state <- .miss_cli_progress_start(
+    forms = forms,
+    progress = progress
+  )
+  on.exit(
+    try(
+      .miss_cli_progress_finish(progress_state, result = "failed"),
+      silent = TRUE
+    ),
+    add = TRUE
+  )
+
   # Normalize inputs and derive project context from the redcapAPI connection.
   record_data <- tibble::as_tibble(data)
   all_records <- record_data
@@ -307,11 +321,15 @@ find_missing <- function(
   names(form_reports) <- forms
   for (form_i in seq_along(forms)) {
     form <- forms[[form_i]]
-    .miss_cli_form_progress(
-      form = form,
-      form_percent = 0,
-      overall_percent = .miss_percent((form_i - 1) / length(forms)),
-      progress = progress
+    .miss_cli_progress_update(
+      state = progress_state,
+      form_index = form_i,
+      form_fraction = .miss_cli_form_fraction("start"),
+      force = TRUE
+    )
+    progress_callback <- .miss_cli_progress_reporter(
+      state = progress_state,
+      form_index = form_i
     )
     form_reports[[form]] <- .miss_build_form_report(
       records = record_data,
@@ -327,15 +345,15 @@ find_missing <- function(
       exclude_types = exclude_types,
       instances = instance_settings$values[[form]],
       instances_explicit = instance_settings$explicit[[form]],
-      details = details
-    )
-    .miss_cli_form_progress(
-      form = form,
-      form_percent = 100,
-      overall_percent = .miss_percent(form_i / length(forms)),
-      progress = progress
+      details = details,
+      progress_callback = progress_callback
     )
   }
+  .miss_cli_progress_finalize(
+    state = progress_state,
+    overall_fraction = 0.96,
+    force = TRUE
+  )
 
   defaulted_instance_forms <- forms[vapply(
     form_reports,
@@ -383,8 +401,11 @@ find_missing <- function(
     "ignored_fields"
   ), use.names = FALSE))
   ignored_fields <- ignored_fields %||% character()
-  report_finished_at <- Sys.time()
-  .miss_cli_overall_progress(progress = progress)
+  .miss_cli_progress_finalize(
+    state = progress_state,
+    overall_fraction = 0.98,
+    force = TRUE
+  )
 
   details_out <- if (isTRUE(details)) {
     validation_rows <- .miss_bind_report_component(
@@ -414,6 +435,12 @@ find_missing <- function(
     summary = summary,
     spec = spec
   )
+  .miss_cli_progress_finalize(
+    state = progress_state,
+    overall_fraction = 0.99,
+    force = TRUE
+  )
+  report_finished_at <- Sys.time()
   diagnostics <- .miss_build_report_diagnostics(
     started_at = report_started_at,
     finished_at = report_finished_at,
@@ -430,6 +457,7 @@ find_missing <- function(
     details = details_out
   )
   class(out) <- "redcapmissing"
+  .miss_cli_progress_finish(progress_state, result = "done")
   out
 }
 
@@ -449,7 +477,8 @@ find_missing <- function(
   exclude_types,
   instances,
   instances_explicit,
-  details
+  details,
+  progress_callback = NULL
 ) {
 
   project <- .miss_get_project(
@@ -475,6 +504,11 @@ find_missing <- function(
     explicit = instances_explicit
   )
   instances <- resolved_instances$values
+  .miss_cli_report_form_progress(
+    progress_callback,
+    stage = "context",
+    force = TRUE
+  )
 
   # Whole-form startedness uses every metadata field on the form, regardless of
   # required/excluded/ignored status. The REDCap record ID is excluded because
@@ -529,6 +563,11 @@ find_missing <- function(
       call. = FALSE
     )
   }
+  .miss_cli_report_form_progress(
+    progress_callback,
+    stage = "metadata",
+    force = TRUE
+  )
 
   # Keep only rows where the requested form is offered in REDCap.
   record_eligibility <- .miss_build_record_eligibility(
@@ -547,6 +586,11 @@ find_missing <- function(
     records = records,
     project = project,
     record_eligibility = record_eligibility
+  )
+  .miss_cli_report_form_progress(
+    progress_callback,
+    stage = "eligibility",
+    force = TRUE
   )
 
   event_checks <- .miss_build_event_check_rows(
@@ -585,6 +629,11 @@ find_missing <- function(
     project = project,
     record_eligibility = record_eligibility
   )
+  .miss_cli_report_form_progress(
+    progress_callback,
+    stage = "row_checks",
+    force = TRUE
+  )
 
   form_checks <- .miss_build_form_check_rows(
     records = records,
@@ -606,6 +655,11 @@ find_missing <- function(
     form_started_failures = form_started_failures,
     project = project
   )
+  .miss_cli_report_form_progress(
+    progress_callback,
+    stage = "form_checks",
+    force = TRUE
+  )
 
   # Build the field plan and value-choice map needed for branching evaluation.
   choice_fields <- unique(c(
@@ -621,6 +675,25 @@ find_missing <- function(
     form_meta = form_meta,
     field_names = field_names
   )
+  .miss_cli_report_form_progress(
+    progress_callback,
+    stage = "field_checks",
+    field_fraction = 0,
+    force = TRUE
+  )
+
+  field_progress_callback <- if (is.null(progress_callback)) {
+    NULL
+  } else {
+    function(field_fraction, force = FALSE) {
+      .miss_cli_report_form_progress(
+        progress_callback,
+        stage = "field_checks",
+        field_fraction = field_fraction,
+        force = force
+      )
+    }
+  }
 
   # Create one expected-field row per record/form/field where the branch is open.
   expected <- .miss_build_expected(
@@ -630,7 +703,8 @@ find_missing <- function(
     meta = meta,
     choice_map = choice_map,
     project = project,
-    form = form
+    form = form,
+    progress_callback = field_progress_callback
   )
   expected <- .miss_add_validation_context(expected)
   field_complete_failures <- expected[
@@ -638,6 +712,11 @@ find_missing <- function(
     ,
     drop = FALSE
   ]
+  .miss_cli_report_form_progress(
+    progress_callback,
+    stage = "field_complete",
+    force = TRUE
+  )
 
   check_rows <- list(
     event_row_started_checks = event_checks,
@@ -686,6 +765,12 @@ find_missing <- function(
       field_plan = field_plan
     ))
   }
+
+  .miss_cli_report_form_progress(
+    progress_callback,
+    stage = "complete",
+    force = TRUE
+  )
 
   out
 }
@@ -2150,41 +2235,654 @@ find_missing <- function(
   labels
 }
 
-.miss_cli_form_progress <- function(
-  form,
-  form_percent,
-  overall_percent,
-  progress
+.miss_cli_progress_start <- function(forms, progress) {
+  state <- new.env(parent = emptyenv())
+  state$enabled <- isTRUE(progress)
+  state$dynamic <- state$enabled && isTRUE(cli::is_dynamic_tty())
+  state$forms <- .miss_chr_vec(forms)
+  state$form_index <- 1L
+  state$form_fraction <- 0
+  state$overall_fraction <- 0
+  state$phase <- "form"
+  state$finished <- FALSE
+  state$id <- NULL
+  state$last_line <- NULL
+  state$envir <- parent.frame()
+
+  if (!state$enabled || !state$dynamic) {
+    return(state)
+  }
+
+  initial_line <- .miss_cli_progress_line(
+    forms = state$forms,
+    form_index = state$form_index,
+    form_fraction = state$form_fraction,
+    overall_fraction = state$overall_fraction,
+    phase = "form"
+  )
+  state$id <- tryCatch(
+    cli::cli_progress_bar(
+      name = "find_missing",
+      type = "custom",
+      total = 100,
+      format = "{cli::pb_extra$line}",
+      format_done = "{cli::pb_extra$line}",
+      format_failed = "{cli::pb_extra$line}",
+      clear = FALSE,
+      current = FALSE,
+      auto_terminate = FALSE,
+      extra = list(line = initial_line),
+      .auto_close = FALSE,
+      .envir = state$envir
+    ),
+    error = function(error) {
+      state$dynamic <- FALSE
+      NULL
+    }
+  )
+  .miss_cli_progress_render(state, initial_line, force = TRUE)
+  state
+}
+
+.miss_cli_progress_reporter <- function(state, form_index) {
+  if (!is.environment(state) || !isTRUE(state$enabled)) {
+    return(NULL)
+  }
+
+  force(form_index)
+  function(form_fraction, force = FALSE) {
+    .miss_cli_progress_update(
+      state = state,
+      form_index = form_index,
+      form_fraction = form_fraction,
+      force = force
+    )
+  }
+}
+
+.miss_cli_progress_update <- function(
+  state,
+  form_index,
+  form_fraction,
+  force = FALSE
 ) {
-  if (!isTRUE(progress)) {
+  if (!is.environment(state) || !isTRUE(state$enabled) || isTRUE(state$finished)) {
     return(invisible(NULL))
   }
 
-  cli::cat_line(
-    paste0(
-      "find_missing: form ",
-      form,
-      " ",
-      form_percent,
-      "% processed; overall ",
-      overall_percent,
-      "% processed"
+  form_count <- length(state$forms)
+  form_index <- max(1L, min(as.integer(form_index), form_count))
+  form_fraction <- .miss_cli_clamp_fraction(form_fraction)
+  if (identical(form_index, state$form_index)) {
+    form_fraction <- max(state$form_fraction, form_fraction)
+  }
+
+  state$form_index <- form_index
+  state$form_fraction <- form_fraction
+  state$phase <- "form"
+  state$overall_fraction <- max(
+    state$overall_fraction,
+    .miss_cli_overall_fraction(
+      form_index = form_index,
+      form_fraction = form_fraction,
+      form_count = form_count
     )
+  )
+  line <- .miss_cli_progress_line(
+    forms = state$forms,
+    form_index = state$form_index,
+    form_fraction = state$form_fraction,
+    overall_fraction = state$overall_fraction,
+    phase = "form"
+  )
+  .miss_cli_progress_render(state, line, force = force)
+}
+
+.miss_cli_progress_finalize <- function(
+  state,
+  overall_fraction,
+  force = TRUE
+) {
+  if (!is.environment(state) || !isTRUE(state$enabled) || isTRUE(state$finished)) {
+    return(invisible(NULL))
+  }
+
+  state$form_index <- length(state$forms)
+  state$form_fraction <- 1
+  state$phase <- "finalizing"
+  state$overall_fraction <- max(
+    state$overall_fraction,
+    .miss_cli_clamp_fraction(overall_fraction)
+  )
+  line <- .miss_cli_progress_line(
+    forms = state$forms,
+    form_index = state$form_index,
+    form_fraction = state$form_fraction,
+    overall_fraction = state$overall_fraction,
+    phase = "finalizing"
+  )
+  .miss_cli_progress_render(state, line, force = force)
+}
+
+.miss_cli_progress_finish <- function(
+  state,
+  result = c("done", "failed")
+) {
+  result <- match.arg(result)
+  if (!is.environment(state) || !isTRUE(state$enabled) || isTRUE(state$finished)) {
+    return(invisible(NULL))
+  }
+
+  state$finished <- TRUE
+  if (identical(result, "done")) {
+    state$form_index <- length(state$forms)
+    state$form_fraction <- 1
+    state$overall_fraction <- 1
+  }
+  line_phase <- if (
+    identical(result, "failed") && identical(state$phase, "finalizing")
+  ) {
+    "finalizing_failed"
+  } else {
+    result
+  }
+  state$phase <- line_phase
+  line <- .miss_cli_progress_line(
+    forms = state$forms,
+    form_index = state$form_index,
+    form_fraction = state$form_fraction,
+    overall_fraction = state$overall_fraction,
+    phase = line_phase
+  )
+
+  if (isTRUE(state$dynamic) && !is.null(state$id)) {
+    invisible(try(
+      cli::cli_progress_update(
+        id = state$id,
+        set = .miss_percent(state$overall_fraction),
+        extra = list(line = line),
+        force = FALSE,
+        .envir = state$envir
+      ),
+      silent = TRUE
+    ))
+    invisible(try(
+      cli::cli_progress_done(
+        id = state$id,
+        result = result,
+        .envir = state$envir
+      ),
+      silent = TRUE
+    ))
+  } else {
+    invisible(try(cli::cat_line(line), silent = TRUE))
+  }
+  state$last_line <- line
+  invisible(NULL)
+}
+
+.miss_cli_progress_render <- function(state, line, force = FALSE) {
+  if (
+    !isTRUE(state$dynamic) ||
+      is.null(state$id) ||
+      identical(line, state$last_line)
+  ) {
+    state$last_line <- line
+    return(invisible(NULL))
+  }
+
+  invisible(try(
+    cli::cli_progress_update(
+      id = state$id,
+      set = .miss_percent(state$overall_fraction),
+      extra = list(line = line),
+      force = isTRUE(force),
+      .envir = state$envir
+    ),
+    silent = TRUE
+  ))
+  state$last_line <- line
+  invisible(NULL)
+}
+
+.miss_cli_progress_line <- function(
+  forms,
+  form_index,
+  form_fraction,
+  overall_fraction,
+  phase = c(
+    "form",
+    "finalizing",
+    "done",
+    "failed",
+    "finalizing_failed"
+  ),
+  width = cli::console_width()
+) {
+  phase <- match.arg(phase)
+  forms <- .miss_chr_vec(forms)
+  form_count <- length(forms)
+  form_index <- max(1L, min(as.integer(form_index), form_count))
+  form_fraction <- .miss_cli_clamp_fraction(form_fraction)
+  overall_fraction <- .miss_cli_clamp_fraction(overall_fraction)
+  width <- .miss_cli_progress_width(width)
+  symbols <- .miss_cli_progress_symbols()
+  completed_style <- .miss_cli_progress_style("completed")
+  active_style <- .miss_cli_progress_style("active")
+  overall_style <- .miss_cli_progress_style("overall")
+  pending_style <- .miss_cli_progress_style("pending")
+  failed_style <- .miss_cli_progress_style("failed")
+  overall_text <- overall_style(cli::style_bold(paste0(
+    "OVERALL ",
+    .miss_percent(overall_fraction),
+    "%"
+  )))
+  overall_short <- overall_style(cli::style_bold(paste0(
+    "O",
+    .miss_percent(overall_fraction),
+    "%"
+  )))
+  compact_separator <- pending_style(paste0(
+    " ",
+    symbols$separator,
+    " "
+  ))
+
+  if (identical(phase, "done")) {
+    full_line <- paste0(
+      completed_style(symbols$tick),
+      " ",
+      completed_style(cli::style_bold("find_missing complete")),
+      pending_style(paste0(" ", symbols$dot, " ")),
+      form_count,
+      "/",
+      form_count,
+      " forms",
+      pending_style(paste0(" ", symbols$dot, " ")),
+      overall_text
+    )
+    short_line <- paste0(
+      completed_style(symbols$tick),
+      " ",
+      completed_style(cli::style_bold("complete")),
+      pending_style(paste0(" ", symbols$separator, " ")),
+      overall_text
+    )
+    narrow_line <- paste0(
+      completed_style(symbols$tick),
+      " ",
+      completed_style(cli::style_bold("done")),
+      compact_separator,
+      overall_short
+    )
+    return(.miss_cli_progress_fit(
+      list(full_line, short_line, narrow_line, overall_short),
+      width = width
+    ))
+  }
+
+  status <- if (identical(phase, "failed")) {
+    "failed"
+  } else if (identical(phase, "finalizing_failed")) {
+    "finalizing_failed"
+  } else if (identical(phase, "finalizing")) {
+    "finalizing"
+  } else {
+    "active"
+  }
+  completed_count <- if (status %in% c("finalizing", "finalizing_failed")) {
+    form_count
+  } else if (identical(status, "failed")) {
+    form_index - 1L
+  } else if (form_fraction >= 1) {
+    form_index
+  } else {
+    form_index - 1L
+  }
+  active_status <- if (identical(status, "failed")) {
+    "failed"
+  } else if (identical(status, "finalizing_failed")) {
+    "failed"
+  } else if (identical(status, "active") && form_fraction < 1) {
+    "active"
+  } else {
+    "none"
+  }
+  pending_count <- max(
+    0L,
+    form_count - completed_count - as.integer(active_status != "none")
+  )
+  use_compact_constellation <- form_count > 8L || width < 72L
+  constellation <- .miss_cli_progress_constellation(
+    completed_count = completed_count,
+    active_status = active_status,
+    pending_count = pending_count,
+    compact = use_compact_constellation
+  )
+  prefix <- if (width >= 54L) cli::style_bold("find_missing") else ""
+  prefix_spacing <- if (nzchar(cli::ansi_strip(prefix))) "  " else ""
+  separator <- pending_style(paste0("  ", symbols$separator, "  "))
+
+  if (identical(status, "finalizing_failed")) {
+    full_line <- paste0(
+      prefix,
+      prefix_spacing,
+      constellation,
+      "  ",
+      failed_style(cli::style_bold("report assembly failed")),
+      separator,
+      overall_text
+    )
+    short_line <- paste0(
+      .miss_cli_progress_constellation(
+        completed_count = completed_count,
+        active_status = "failed",
+        pending_count = 0L,
+        compact = TRUE
+      ),
+      "  ",
+      failed_style(cli::style_bold("report failed")),
+      separator,
+      overall_text
+    )
+    narrow_line <- paste0(
+      failed_style(symbols$failed),
+      " ",
+      failed_style(cli::style_bold("report")),
+      compact_separator,
+      overall_short
+    )
+    return(.miss_cli_progress_fit(
+      list(full_line, short_line, narrow_line, overall_short),
+      width = width
+    ))
+  }
+
+  if (identical(status, "finalizing")) {
+    label <- active_style(cli::style_bold(paste0(
+      "forms 100% ",
+      symbols$dot,
+      " finalizing"
+    )))
+    full_line <- paste0(
+      prefix,
+      prefix_spacing,
+      constellation,
+      "  ",
+      label,
+      separator,
+      overall_text
+    )
+    short_line <- paste0(
+      .miss_cli_progress_constellation(
+        completed_count = completed_count,
+        active_status = "none",
+        pending_count = 0L,
+        compact = TRUE
+      ),
+      "  ",
+      active_style(cli::style_bold("forms 100%")),
+      separator,
+      overall_text
+    )
+    narrow_line <- paste0(
+      completed_style(symbols$tick),
+      " ",
+      active_style(cli::style_bold("F100%")),
+      compact_separator,
+      overall_short
+    )
+    return(.miss_cli_progress_fit(
+      list(full_line, short_line, narrow_line, overall_short),
+      width = width
+    ))
+  }
+
+  form_name <- forms[[form_index]]
+  form_suffix <- if (identical(status, "failed")) {
+    paste0(" failed at ", .miss_percent(form_fraction), "%")
+  } else {
+    paste0(" ", .miss_percent(form_fraction), "%")
+  }
+  form_style <- if (identical(status, "failed")) failed_style else active_style
+  marker <- switch(
+    active_status,
+    "active" = active_style(symbols$active),
+    "failed" = failed_style(symbols$failed),
+    completed_style(symbols$tick)
+  )
+
+  build_line <- function(prefix, constellation, form_suffix) {
+    prefix_spacing <- if (nzchar(cli::ansi_strip(prefix))) "  " else ""
+    fixed_width <- sum(c(
+      cli::ansi_nchar(prefix, type = "width"),
+      nchar(prefix_spacing, type = "width"),
+      cli::ansi_nchar(constellation, type = "width"),
+      2L,
+      nchar(form_suffix, type = "width"),
+      cli::ansi_nchar(separator, type = "width"),
+      cli::ansi_nchar(overall_text, type = "width")
+    ))
+    form_width <- max(1L, min(24L, width - fixed_width))
+    form_label <- cli::ansi_strtrim(form_name, form_width)
+    paste0(
+      prefix,
+      prefix_spacing,
+      constellation,
+      "  ",
+      form_style(cli::style_bold(paste0(form_label, form_suffix))),
+      separator,
+      overall_text
+    )
+  }
+
+  line <- build_line(prefix, constellation, form_suffix)
+  if (cli::ansi_nchar(line, type = "width") > width) {
+    constellation <- .miss_cli_progress_constellation(
+      completed_count = completed_count,
+      active_status = active_status,
+      pending_count = pending_count,
+      compact = TRUE
+    )
+    line <- build_line("", constellation, form_suffix)
+  }
+  if (cli::ansi_nchar(line, type = "width") > width) {
+    line <- build_line("", marker, form_suffix)
+  }
+  narrow_line <- paste0(
+    marker,
+    " ",
+    form_style(cli::style_bold(paste0(
+      "F",
+      .miss_percent(form_fraction),
+      "%"
+    ))),
+    compact_separator,
+    overall_short
+  )
+  .miss_cli_progress_fit(
+    list(line, narrow_line, overall_short),
+    width = width
+  )
+}
+
+.miss_cli_progress_constellation <- function(
+  completed_count,
+  active_status = c("active", "failed", "none"),
+  pending_count,
+  compact = FALSE
+) {
+  active_status <- match.arg(active_status)
+  completed_count <- max(0L, as.integer(completed_count))
+  pending_count <- max(0L, as.integer(pending_count))
+  symbols <- .miss_cli_progress_symbols()
+  completed_style <- .miss_cli_progress_style("completed")
+  active_style <- .miss_cli_progress_style("active")
+  pending_style <- .miss_cli_progress_style("pending")
+  failed_style <- .miss_cli_progress_style("failed")
+
+  if (isTRUE(compact)) {
+    pieces <- character()
+    if (completed_count > 0L) {
+      completed <- if (completed_count == 1L) {
+        symbols$tick
+      } else {
+        paste0(symbols$tick, symbols$multiply, completed_count)
+      }
+      pieces <- c(pieces, completed_style(completed))
+    }
+    if (identical(active_status, "active")) {
+      pieces <- c(pieces, active_style(symbols$active))
+    } else if (identical(active_status, "failed")) {
+      pieces <- c(pieces, failed_style(symbols$failed))
+    }
+    if (pending_count > 0L) {
+      pending <- if (pending_count == 1L) {
+        symbols$pending
+      } else {
+        paste0(symbols$pending, symbols$multiply, pending_count)
+      }
+      pieces <- c(pieces, pending_style(pending))
+    }
+    return(paste(pieces, collapse = " "))
+  }
+
+  pieces <- c(
+    rep(completed_style(symbols$tick), completed_count),
+    if (identical(active_status, "active")) active_style(symbols$active),
+    if (identical(active_status, "failed")) failed_style(symbols$failed),
+    rep(pending_style(symbols$pending), pending_count)
+  )
+  paste(pieces, collapse = " ")
+}
+
+.miss_cli_progress_symbols <- function(unicode = cli::is_utf8_output()) {
+  if (isTRUE(unicode)) {
+    return(list(
+      tick = "\u2713",
+      active = "\u25c9",
+      pending = "\u25cb",
+      failed = "\u2717",
+      separator = "\u2502",
+      multiply = "\u00d7",
+      dot = "\u00b7"
+    ))
+  }
+
+  list(
+    tick = "v",
+    active = "*",
+    pending = ".",
+    failed = "x",
+    separator = "|",
+    multiply = "x",
+    dot = "-"
+  )
+}
+
+.miss_cli_progress_palette <- function() {
+  c(
+    completed = "#22C55E",
+    active = "#22D3EE",
+    overall = "#3B82F6",
+    pending = "#64748B",
+    failed = "#EF4444"
+  )
+}
+
+.miss_cli_progress_style <- function(element) {
+  palette <- .miss_cli_progress_palette()
+  cli::make_ansi_style(palette[[element]])
+}
+
+.miss_cli_progress_width <- function(width) {
+  if (length(width) == 0) {
+    return(80L)
+  }
+  width <- suppressWarnings(as.integer(width[[1]]))
+  if (is.na(width) || width < 1L) {
+    return(80L)
+  }
+  width
+}
+
+.miss_cli_progress_fit <- function(lines, width) {
+  for (line in lines) {
+    if (cli::ansi_nchar(line, type = "width") <= width) {
+      return(line)
+    }
+  }
+
+  cli::ansi_strtrim(lines[[length(lines)]], width)
+}
+
+.miss_cli_report_form_progress <- function(
+  progress_callback,
+  stage,
+  field_fraction = NULL,
+  force = FALSE
+) {
+  if (is.null(progress_callback)) {
+    return(invisible(NULL))
+  }
+
+  progress_callback(
+    .miss_cli_form_fraction(
+      stage = stage,
+      field_fraction = field_fraction
+    ),
+    force = force
   )
   invisible(NULL)
 }
 
-.miss_cli_overall_progress <- function(progress) {
-  if (!isTRUE(progress)) {
-    return(invisible(NULL))
+.miss_cli_form_fraction <- function(stage, field_fraction = NULL) {
+  switch(
+    stage,
+    "start" = 0,
+    "context" = 0.10,
+    "metadata" = 0.20,
+    "eligibility" = 0.35,
+    "row_checks" = 0.45,
+    "form_checks" = 0.50,
+    "field_checks" = 0.50 + 0.45 * .miss_cli_clamp_fraction(
+      field_fraction %||% 0
+    ),
+    "field_complete" = 0.95,
+    "complete" = 1,
+    stop("Unknown progress stage `", stage, "`.", call. = FALSE)
+  )
+}
+
+.miss_cli_overall_fraction <- function(
+  form_index,
+  form_fraction,
+  form_count,
+  forms_share = 0.95
+) {
+  if (form_count < 1) {
+    return(0)
   }
 
-  cli::cat_line("find_missing: overall 100% processed")
-  invisible(NULL)
+  form_index <- max(1L, min(as.integer(form_index), as.integer(form_count)))
+  form_fraction <- .miss_cli_clamp_fraction(form_fraction)
+  forms_share <- .miss_cli_clamp_fraction(forms_share)
+  forms_share * ((form_index - 1 + form_fraction) / form_count)
+}
+
+.miss_cli_clamp_fraction <- function(x) {
+  if (length(x) == 0) {
+    return(0)
+  }
+  x <- suppressWarnings(as.numeric(x[[1]]))
+  if (is.na(x)) {
+    return(0)
+  }
+  max(0, min(x, 1))
 }
 
 .miss_percent <- function(x) {
-  as.integer(round(x * 100))
+  as.integer(round(.miss_cli_clamp_fraction(x) * 100))
 }
 
 .miss_step_id <- function(form, validation_check) {

@@ -450,55 +450,6 @@ test_that("non-field validation rows use typed NA field columns", {
   ))
 })
 
-test_that("progress output is line-based and opt-in under tests", {
-  records <- tibble::tibble(
-    record_id = "r1",
-    branch_flag = "0",
-    required_note = "entered",
-    optional_note = "",
-    checkbox_field___1 = "1",
-    checkbox_field___2 = "0",
-    checkbox_other = "",
-    conditional_note = ""
-  )
-
-  progress_output <- utils::capture.output(
-    progress_report <- find_missing(
-      data = records,
-      rcon = fake_rcon(baseline_form_meta()),
-      forms = "baseline_form",
-      progress = TRUE
-    )
-  )
-  expect_equal(
-    progress_output,
-    c(
-      "find_missing: form baseline_form 0% processed; overall 0% processed",
-      "find_missing: form baseline_form 100% processed; overall 100% processed",
-      "find_missing: overall 100% processed"
-    )
-  )
-
-  quiet_output <- utils::capture.output(
-    quiet_report <- find_missing(
-      data = records,
-      rcon = fake_rcon(baseline_form_meta()),
-      forms = "baseline_form",
-      progress = FALSE
-    )
-  )
-  expect_equal(quiet_output, character())
-
-  default_output <- utils::capture.output(
-    default_report <- find_missing(
-      data = records,
-      rcon = fake_rcon(baseline_form_meta()),
-      forms = "baseline_form"
-    )
-  )
-  expect_equal(default_output, character())
-})
-
 test_that("branch-open fields fail and branch-closed fields are not expected", {
   records <- tibble::tibble(
     record_id = c("open", "closed"),

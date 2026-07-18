@@ -1,3 +1,12 @@
+# redcapmissing 5.0.1
+
+## 2026-07-18
+
+- Redesigned `find_missing(progress = TRUE)` as a single in-place,
+  color-and-symbol CLI status line using the Native Cool palette. It shows
+  completed, active, and pending forms alongside current-form and overall
+  processing percentages instead of printing every update on a new line.
+
 # redcapmissing 5.0.0
 
 ## 2026-07-10
