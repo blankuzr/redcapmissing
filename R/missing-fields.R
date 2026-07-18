@@ -193,7 +193,8 @@
   meta,
   choice_map,
   project,
-  form
+  form,
+  progress_callback = NULL
 ) {
   records <- tibble::as_tibble(records)
   if (nrow(records) == 0 || nrow(field_plan) == 0) {
@@ -230,39 +231,43 @@
     )
 
     keep <- which(branch_satisfied)
-    if (length(keep) == 0) {
-      return(NULL)
+    piece <- NULL
+    if (length(keep) > 0) {
+      child_fields <- field_plan$child_fields[[field_i]]
+      present <- .miss_field_present(
+        records = records,
+        field = field_plan$field_name[[field_i]],
+        field_type = field_plan$field_type[[field_i]],
+        child_fields = child_fields,
+        choice_map = choice_map
+      )
+
+      n_keep <- length(keep)
+      piece <- dplyr::bind_cols(
+        row_base[keep, , drop = FALSE],
+        tibble::tibble(form = rep(form, n_keep)),
+        .redcapmissing_validation_metadata(
+          "field-complete",
+          n_keep,
+          repeat_instance = row_base$redcap_repeat_instance[keep]
+        ),
+        tibble::tibble(
+          validation_passed = present$field_complete[keep],
+          field_name = rep(field_plan$field_name[[field_i]], n_keep),
+          field_label = rep(field_plan$field_label[[field_i]], n_keep),
+          field_type = rep(field_plan$field_type[[field_i]], n_keep),
+          branching_logic = rep(logic, n_keep),
+          branch_satisfied = rep(TRUE, n_keep),
+          value_summary = present$value_summary[keep],
+          export_fields = rep(paste(child_fields, collapse = ", "), n_keep)
+        )
+      )
     }
 
-    child_fields <- field_plan$child_fields[[field_i]]
-    present <- .miss_field_present(
-      records = records,
-      field = field_plan$field_name[[field_i]],
-      field_type = field_plan$field_type[[field_i]],
-      child_fields = child_fields,
-      choice_map = choice_map
-    )
-
-    n_keep <- length(keep)
-    dplyr::bind_cols(
-      row_base[keep, , drop = FALSE],
-      tibble::tibble(form = rep(form, n_keep)),
-      .redcapmissing_validation_metadata(
-        "field-complete",
-        n_keep,
-        repeat_instance = row_base$redcap_repeat_instance[keep]
-      ),
-      tibble::tibble(
-        validation_passed = present$field_complete[keep],
-        field_name = rep(field_plan$field_name[[field_i]], n_keep),
-        field_label = rep(field_plan$field_label[[field_i]], n_keep),
-        field_type = rep(field_plan$field_type[[field_i]], n_keep),
-        branching_logic = rep(logic, n_keep),
-        branch_satisfied = rep(TRUE, n_keep),
-        value_summary = present$value_summary[keep],
-        export_fields = rep(paste(child_fields, collapse = ", "), n_keep)
-      )
-    )
+    if (!is.null(progress_callback)) {
+      progress_callback(field_i / nrow(field_plan), force = FALSE)
+    }
+    piece
   })
 
   out <- dplyr::bind_rows(pieces)

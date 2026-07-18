@@ -96,10 +96,12 @@ error.}
 validation-row tables and check-specific row tables. When \code{TRUE}, these
 row-level tables are stored under \code{report$details}. Defaults to \code{FALSE}.}
 
-\item{progress}{Logical scalar. When \code{TRUE}, line-based progress messages
-are emitted with \code{cli::cat_line()} as each requested form starts and
-finishes, followed by a final overall completion line. Defaults to
-\code{interactive()}.}
+\item{progress}{Logical scalar. When \code{TRUE}, displays a CLI progress status
+with completed, active, and pending forms, the active form's processing
+percentage, and overall \code{find_missing()} progress. In dynamic terminals,
+updates replace the current line; colors and Unicode symbols are used when
+supported. Percentages describe processing progress, not data
+completeness. Defaults to \code{interactive()}.}
 }
 \value{
 A list with class \code{"redcapmissing"} containing:
