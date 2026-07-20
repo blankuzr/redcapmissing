@@ -207,23 +207,37 @@ form, repeat context, validation-check, and pass/fail columns. Use raw values
 from `tidy(report)` in `flex(events = ...)`, `flex(forms = ...)`, and
 `flex(validation_check = ...)` to subset rows before display labels are
 applied. `flex_event_forms(report)` returns a reduced event/form table with an
-`All` summary row, event row-started started/due counts in the N column, and
-form-incomplete counts nested under each event. A form row's `Form Incomplete`
-numerator is the number of unique record contexts with failed
-`event-row-started`, `instance-row-started`, `form-started`, or
-`field-complete` rows for that exact event/form/repeat context. Multiple
-missing fields in one record context count once. Its denominator is the exact
-row-started assessed N for that context:
+`All` summary row, event and repeat-instance started/due counts, and three
+form-opportunity metrics. Each form row uses the exact row-started assessed N
+for its context:
 `event-row-started` for non-repeat longitudinal rows, `instance-row-started`
 for repeat rows, and `Total N` for the display-only non-longitudinal
-`Single event` row. The `All` row sums the shown form-row numerators and
-denominators. Repeat form rows show repeat-instance started/due counts in the N
-column, while non-repeat form rows leave that cell blank. Projects whose REDCap
-record ID field has another name still report the correct N values:
+`Single event` row.
+
+- `Form Incomplete` counts each record context once when any applicable
+  `event-row-started`, `instance-row-started`, `form-started`, or
+  `field-complete` check fails. Multiple missing fields in one context still
+  count once.
+- `Form Not Started` counts each record context once when an applicable
+  `event-row-started`, `instance-row-started`, or `form-started` check fails.
+- `Form >10% Missing` treats a failed start check as 100% missing. Otherwise,
+  it uses failed divided by assessed `field-complete` checks. A started form
+  with no applicable field checks has a 0% effective missing fraction. Below
+  `1`, the comparison is strict and unrounded, so exactly 10% does not count at
+  the default. At `missing_threshold = 1`, the heading becomes
+  `Form = 100% Missing` and contexts with 100% effective missingness count.
+
+`Form Incomplete` is displayed as N (%) on form rows and N/D (%) on the `All`
+row. `Form Not Started` and the dynamic threshold column display N/D (%) on
+both. The `All` row sums shown form opportunities rather than deduplicating
+records across forms. Repeat form rows show started/due counts in the N column,
+while non-repeat form rows leave that cell blank. Reports created before
+`redcapmissing` 5.2.0 must be regenerated with `find_missing()`:
 
 ```{r, eval = FALSE}
 flex(report, validation_check = "field-complete")
 flex_event_forms(report)
+flex_event_forms(report, missing_threshold = 0.125)
 ```
 
 ## Events, records, and repeats

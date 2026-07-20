@@ -1,3 +1,17 @@
+# redcapmissing 5.2.0
+
+## 2026-07-20
+
+- Added `Form Not Started` and a configurable dynamic
+  `Form >10% Missing` column to `flex_event_forms()`. Both report exact
+  record/event/form/repeat opportunities as N/D (%), and the threshold can be
+  changed with `missing_threshold`. At a threshold of 1, the column is labeled
+  `Form = 100% Missing` and counts contexts with 100% effective missingness.
+  Threshold results use each record's final branching-aware field assessment.
+- `flex_event_forms()` now validates the report context required by these
+  metrics. Reports created before `redcapmissing` 5.2.0 must be regenerated
+  with `find_missing()` before using the expanded table.
+
 # redcapmissing 5.1.0
 
 ## 2026-07-20

@@ -394,6 +394,10 @@ find_missing <- function(
     reports = form_reports,
     component = "record_eligibility"
   )
+  flex_event_forms_field_counts <- .miss_bind_report_component(
+    reports = form_reports,
+    component = "flex_event_forms_field_counts"
+  )
   summary <- .miss_build_validation_summary(form_reports = form_reports)
   form_validation_rows <- .miss_count_form_validation_rows(form_reports)
   validation_row_count <- form_validation_rows
@@ -430,6 +434,7 @@ find_missing <- function(
     form_reports = form_reports,
     required_fields = required_fields,
     record_eligibility = record_eligibility,
+    flex_event_forms_field_counts = flex_event_forms_field_counts,
     unused_record_specs = unused_record_specs,
     ignored_fields = ignored_fields,
     ignored_ids = ignore_ids,
@@ -720,6 +725,11 @@ find_missing <- function(
     ,
     drop = FALSE
   ]
+  flex_event_forms_field_counts <-
+    .miss_build_flex_event_forms_field_counts(
+      record_eligibility = record_eligibility,
+      field_complete_checks = expected
+    )
   .miss_cli_report_form_progress(
     progress_callback,
     stage = "field_complete",
@@ -746,6 +756,7 @@ find_missing <- function(
     instances = instances,
     instances_defaulted = resolved_instances$defaulted,
     record_eligibility = record_eligibility,
+    flex_event_forms_field_counts = flex_event_forms_field_counts,
     used_record_spec_keys = unique(record_eligibility$record_spec_key[
       !.miss_is_blank_vec(record_eligibility$record_spec_key)
     ]),
@@ -1217,6 +1228,7 @@ find_missing <- function(
   form_reports,
   required_fields,
   record_eligibility,
+  flex_event_forms_field_counts,
   unused_record_specs,
   ignored_fields,
   ignored_ids,
@@ -1233,6 +1245,7 @@ find_missing <- function(
     events = .miss_named_report_component(form_reports, "events"),
     event_labels = event_labels,
     record_eligibility = .miss_select_record_eligibility(record_eligibility),
+    .flex_event_forms_field_counts = flex_event_forms_field_counts,
     unused_record_specs = .miss_select_unused_record_specs(unused_record_specs),
     instances = .miss_named_report_component(form_reports, "instances"),
     ignored_fields = ignored_fields,
@@ -1242,6 +1255,61 @@ find_missing <- function(
     system_fields = form_reports[[1]]$system_fields,
     total_n = total_n
   )
+}
+
+.miss_build_flex_event_forms_field_counts <- function(
+  record_eligibility,
+  field_complete_checks
+) {
+  context_columns <- c(
+    "record_id",
+    "redcap_event_name",
+    "form",
+    "redcap_repeat_instrument",
+    "redcap_repeat_instance"
+  )
+  out <- unique(record_eligibility[, context_columns, drop = FALSE])
+  out <- tibble::as_tibble(out)
+  if (nrow(out) == 0) {
+    out$field_assessed <- integer()
+    out$field_failed <- integer()
+    return(out)
+  }
+
+  field_complete_checks <- tibble::as_tibble(field_complete_checks)
+  if (nrow(field_complete_checks) == 0) {
+    out$field_assessed <- rep.int(0L, nrow(out))
+    out$field_failed <- rep.int(0L, nrow(out))
+    return(out)
+  }
+
+  context_key <- do.call(
+    paste,
+    c(
+      lapply(
+        field_complete_checks[, context_columns, drop = FALSE],
+        .miss_key_part
+      ),
+      list(sep = "\r")
+    )
+  )
+  unique_key <- unique(context_key)
+  group_id <- match(context_key, unique_key)
+  first_row <- match(unique_key, context_key)
+  counts <- field_complete_checks[first_row, context_columns, drop = FALSE]
+  counts$field_assessed <- tabulate(group_id, nbins = length(unique_key))
+  counts$field_failed <- as.integer(rowsum(
+    as.integer(!(field_complete_checks$validation_passed %in% TRUE)),
+    group_id,
+    reorder = FALSE
+  )[, 1])
+  counts <- tibble::as_tibble(counts)
+  out <- dplyr::left_join(out, counts, by = context_columns)
+  out$field_assessed[is.na(out$field_assessed)] <- 0L
+  out$field_failed[is.na(out$field_failed)] <- 0L
+  out$field_assessed <- as.integer(out$field_assessed)
+  out$field_failed <- as.integer(out$field_failed)
+  out
 }
 
 .miss_count_form_report_records <- function(form_reports) {

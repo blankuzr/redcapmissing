@@ -2,9 +2,9 @@
 #'
 #' @description
 #' `flex_event_forms()` formats a REDCap missingness report as a reduced
-#' event/form `flextable`. It shows event row-started started/due counts,
-#' form-level incomplete counts, and repeat-instance started/due counts when
-#' repeat context is present.
+#' event/form `flextable`. It shows event and repeat-instance started/due
+#' counts plus form-level incomplete, not-started, and configurable missingness
+#' threshold metrics.
 #'
 #' @details
 #' The table is a reporting reduction of [tidy.redcapmissing()] plus report
@@ -13,9 +13,10 @@
 #' row with `Total N/Total N`. If multiple
 #' `event-row-started` summary rows are present for the same event, they must
 #' agree on `passed` and `assessed` counts. The first body row summarizes all
-#' displayed form opportunities as the sum of form-row incomplete numerators
-#' over the sum of form-row assessed denominators. In this reduced table, form
-#' rows show unique failed record contexts with `event-row-started`,
+#' displayed form opportunities by summing the shown form-row numerators and
+#' denominators without deduplicating records across forms. In this reduced
+#' table, `Form Incomplete` shows unique failed record contexts with
+#' `event-row-started`,
 #' `instance-row-started`, `form-started`, or `field-complete` failures for the
 #' exact event/form/repeat context. Multiple missing fields in the same record
 #' context count once. The form-row denominator is the exact row-started
@@ -25,18 +26,39 @@
 #' Non-longitudinal reports use `Total N` as the display-only row-started
 #' denominator for the synthetic `Single event` display row.
 #'
-#' `form-started` is not shown as a separate metric row, but failed
-#' `form-started` contexts contribute to `Form Incomplete`.
+#' `Form Not Started` uses that same denominator and counts a record context
+#' once when an applicable `event-row-started`, `instance-row-started`, or
+#' `form-started` check fails. The dynamically named threshold column treats a
+#' start-check failure as an effective missing fraction of `1`. For a started
+#' form it uses failed over assessed `field-complete` checks after record
+#' eligibility, field filters, branching logic, and checkbox-root handling. A
+#' started form with no applicable field checks has an effective fraction of
+#' `0`. For cutoffs below
+#' `1`, the comparison is strict and unrounded, so exactly 10% does not count
+#' at the default cutoff. At a cutoff of `1`, the column changes to
+#' `Form = 100% Missing` and counts contexts whose effective fraction is `1`.
+#' `Form Not Started` and the threshold column display `N/D (%)` on form and
+#' `All` rows; event-header cells are blank.
+#'
+#' Reports created before `redcapmissing` 5.2.0 must be regenerated with
+#' [find_missing()], including reports that retain detailed validation rows.
 #'
 #' @param x A `redcapmissing` object created by [find_missing()].
-#' @param ... Additional arguments passed to methods.
+#' @param missing_threshold A finite numeric scalar from `0` through `1`;
+#'   defaults to `0.10`. Below `1`, contexts whose unrounded effective missing
+#'   fraction is strictly greater than the cutoff contribute to the threshold
+#'   column. At `1`, contexts whose effective fraction equals `1` contribute to
+#'   `Form = 100% Missing`.
+#' @param ... Additional arguments passed to methods; currently unused by the
+#'   `redcapmissing` method.
 #'
 #' @return A `flextable` object with event header rows and form rows nested
 #'   under each event. Repeat instrument and instance columns are
 #'   included only when the report contains repeat context. Repeat form rows
 #'   show `instance-row-started` as `started/due (%)` in the N column;
-#'   non-repeat form rows leave the N cell blank. This function requires the
-#'   optional `flextable` and `glue` packages.
+#'   non-repeat form rows leave the N cell blank. Form and `All` rows display
+#'   `Form Not Started` and the dynamic missing-threshold metric as `N/D (%)`.
+#'   This function requires the optional `flextable` and `glue` packages.
 #'
 #' @examples
 #' \dontrun{
@@ -48,30 +70,38 @@
 #' )
 #'
 #' event_form_table <- flex_event_forms(report)
+#' event_form_table_125 <- flex_event_forms(report, missing_threshold = 0.125)
 #' flex_html(event_form_table)
 #' }
 #'
 #' @seealso [find_missing()], [tidy.redcapmissing()], [flex()], [flex_html()]
 #'
 #' @export
-flex_event_forms <- function(x, ...) {
+flex_event_forms <- function(x, missing_threshold = 0.10, ...) {
   UseMethod("flex_event_forms")
 }
 
 #' @rdname flex_event_forms
-#' @param ... Unused.
 #' @export
-flex_event_forms.redcapmissing <- function(x, ...) {
+flex_event_forms.redcapmissing <- function(
+  x,
+  missing_threshold = 0.10,
+  ...
+) {
   .redcapmissing_check_report(x)
+  .redcapmissing_flex_event_forms_check_missing_threshold(missing_threshold)
   .redcapmissing_check_packages(c("flextable", "glue"), "flex_event_forms()")
 
   validation_set <- generics::tidy(x)
   flex_parts <- .redcapmissing_flex_event_forms_build(
     validation_set = validation_set,
-    x = x
+    x = x,
+    missing_threshold = missing_threshold
   )
   display_data <- flex_parts$data[, flex_parts$display_columns, drop = FALSE]
   names(display_data)[names(display_data) == "N"] <- "N (started/due)"
+  names(display_data)[names(display_data) == "Form Missing Threshold"] <-
+    flex_parts$missing_threshold_heading
 
   out <- flextable::flextable(display_data) |>
     flextable::align(align = "left", part = "all") |>
@@ -99,11 +129,25 @@ flex_event_forms.redcapmissing <- function(x, ...) {
 
 # Internal helpers ---------------------------------------------------------
 
-.redcapmissing_flex_event_forms_build <- function(validation_set, x) {
+.redcapmissing_flex_event_forms_build <- function(
+  validation_set,
+  x,
+  missing_threshold = 0.10
+) {
+  .redcapmissing_flex_event_forms_check_missing_threshold(missing_threshold)
   validation_set <- .redcapmissing_flex_event_forms_normalize(validation_set)
   total_n <- .redcapmissing_flex_event_forms_total_n(x)
   contexts <- .redcapmissing_flex_event_forms_contexts(validation_set, x)
   has_repeat <- .redcapmissing_flex_event_forms_has_repeat(contexts)
+  field_counts <- .redcapmissing_flex_event_forms_prepare_field_counts(
+    x = x,
+    contexts = contexts
+  )
+  classifications <- .redcapmissing_flex_event_forms_classify_contexts(
+    field_counts = field_counts,
+    x = x,
+    missing_threshold = missing_threshold
+  )
 
   out <- .redcapmissing_flex_event_forms_empty(has_repeat)
   event_order <- .redcapmissing_flex_event_forms_event_order(contexts, x)
@@ -141,6 +185,7 @@ flex_event_forms.redcapmissing <- function(x, ...) {
           event_stats = event_stats,
           validation_set = validation_set,
           x = x,
+          classifications = classifications,
           has_repeat = has_repeat,
           single_event = single_event
         )
@@ -153,13 +198,21 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   if (has_repeat) {
     display_columns <- c(display_columns, "Repeat Instrument", "Repeat Instance")
   }
-  display_columns <- c(display_columns, "N", "Form Incomplete")
+  display_columns <- c(
+    display_columns,
+    "N",
+    "Form Incomplete",
+    "Form Not Started",
+    "Form Missing Threshold"
+  )
 
   list(
     data = out,
     row_type = out$row_type,
     display_columns = display_columns,
-    total_n = total_n
+    total_n = total_n,
+    missing_threshold_heading =
+      .redcapmissing_flex_event_forms_threshold_heading(missing_threshold)
   )
 }
 
@@ -178,6 +231,332 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   }
 
   validation_set
+}
+
+.redcapmissing_flex_event_forms_check_missing_threshold <- function(x) {
+  valid <- is.numeric(x) &&
+    !is.logical(x) &&
+    length(x) == 1L &&
+    !is.na(x) &&
+    is.finite(x) &&
+    x >= 0 &&
+    x <= 1
+  if (!isTRUE(valid)) {
+    stop(
+      "`missing_threshold` must be one finite numeric value from 0 through 1.",
+      call. = FALSE
+    )
+  }
+
+  invisible(x)
+}
+
+.redcapmissing_flex_event_forms_threshold_heading <- function(x) {
+  if (x == 1) {
+    return("Form = 100% Missing")
+  }
+
+  percent <- format(
+    x * 100,
+    scientific = FALSE,
+    trim = TRUE,
+    digits = 15
+  )
+  if (grepl(".", percent, fixed = TRUE)) {
+    percent <- sub("0+$", "", percent)
+    percent <- sub("[.]$", "", percent)
+  }
+  paste0("Form >", percent, "% Missing")
+}
+
+.redcapmissing_flex_event_forms_context_columns <- function() {
+  c(
+    "record_id",
+    "redcap_event_name",
+    "form",
+    "redcap_repeat_instrument",
+    "redcap_repeat_instance"
+  )
+}
+
+.redcapmissing_flex_event_forms_prepare_field_counts <- function(x, contexts) {
+  spec <- .redcapmissing_report_spec(x)
+  field_counts <- spec$.flex_event_forms_field_counts
+  if (is.null(field_counts)) {
+    stop(
+      "`flex_event_forms()` requires field-count data added by the current ",
+      "`find_missing()`. Rerun `find_missing()` to rebuild this report.",
+      call. = FALSE
+    )
+  }
+  if (!is.data.frame(field_counts)) {
+    stop(
+      "`flex_event_forms()` found corrupt field-count data. Rerun ",
+      "`find_missing()` to rebuild this report.",
+      call. = FALSE
+    )
+  }
+
+  context_columns <- .redcapmissing_flex_event_forms_context_columns()
+  required_columns <- c(
+    context_columns,
+    "field_assessed",
+    "field_failed"
+  )
+  missing_columns <- setdiff(required_columns, names(field_counts))
+  if (length(missing_columns) > 0) {
+    stop(
+      "`flex_event_forms()` field-count data is missing required column(s): ",
+      paste(missing_columns, collapse = ", "),
+      ". Rerun `find_missing()` to rebuild this report.",
+      call. = FALSE
+    )
+  }
+
+  field_counts <- tibble::as_tibble(
+    field_counts[, required_columns, drop = FALSE]
+  )
+  for (column in context_columns) {
+    if (anyNA(field_counts[[column]])) {
+      row <- which(is.na(field_counts[[column]]))[[1]]
+      stop(
+        "`flex_event_forms()` found a missing `",
+        column,
+        "` in cached row ",
+        row,
+        ". Rerun `find_missing()` to rebuild this report.",
+        call. = FALSE
+      )
+    }
+    field_counts[[column]] <- .miss_chr_vec(field_counts[[column]])
+  }
+  blank_record <- .miss_is_blank_vec(field_counts$record_id)
+  if (any(blank_record)) {
+    stop(
+      "`flex_event_forms()` found a blank record ID in cached row ",
+      which(blank_record)[[1]],
+      ". Rerun `find_missing()` to rebuild this report.",
+      call. = FALSE
+    )
+  }
+
+  for (column in c("field_assessed", "field_failed")) {
+    values <- field_counts[[column]]
+    invalid <- !is.numeric(values) ||
+      length(values) != nrow(field_counts)
+    if (!isTRUE(invalid)) {
+      invalid_rows <- which(
+        is.na(values) |
+          !is.finite(values) |
+          values < 0 |
+          values != floor(values)
+      )
+      invalid <- length(invalid_rows) > 0
+    } else {
+      invalid_rows <- seq_len(max(1L, nrow(field_counts)))
+    }
+    if (isTRUE(invalid)) {
+      row <- invalid_rows[[1]]
+      label <- if (nrow(field_counts) >= row) {
+        .redcapmissing_flex_event_forms_record_context_label(
+          field_counts[row, , drop = FALSE]
+        )
+      } else {
+        paste0("cached row ", row)
+      }
+      stop(
+        "`flex_event_forms()` found invalid `",
+        column,
+        "` for ",
+        label,
+        ". Counts must be finite, nonnegative whole numbers. Rerun ",
+        "`find_missing()` to rebuild this report.",
+        call. = FALSE
+      )
+    }
+  }
+
+  failed_exceeds_assessed <-
+    field_counts$field_failed > field_counts$field_assessed
+  if (any(failed_exceeds_assessed)) {
+    row <- which(failed_exceeds_assessed)[[1]]
+    stop(
+      "`flex_event_forms()` found `field_failed` greater than ",
+      "`field_assessed` for ",
+      .redcapmissing_flex_event_forms_record_context_label(
+        field_counts[row, , drop = FALSE]
+      ),
+      ". Rerun `find_missing()` to rebuild this report.",
+      call. = FALSE
+    )
+  }
+
+  cache_keys <- .redcapmissing_flex_event_forms_record_key(field_counts)
+  if (anyDuplicated(cache_keys)) {
+    row <- which(duplicated(cache_keys))[[1]]
+    stop(
+      "`flex_event_forms()` found duplicate field-count data for ",
+      .redcapmissing_flex_event_forms_record_context_label(
+        field_counts[row, , drop = FALSE]
+      ),
+      ". Rerun `find_missing()` to rebuild this report.",
+      call. = FALSE
+    )
+  }
+
+  eligibility <- spec$record_eligibility
+  if (!is.data.frame(eligibility) ||
+      any(!context_columns %in% names(eligibility))) {
+    stop(
+      "`flex_event_forms()` requires complete record-eligibility data. ",
+      "Rerun `find_missing()` to rebuild this report.",
+      call. = FALSE
+    )
+  }
+  eligibility <- tibble::as_tibble(
+    eligibility[, context_columns, drop = FALSE]
+  )
+  for (column in context_columns) {
+    if (anyNA(eligibility[[column]])) {
+      stop(
+        "`flex_event_forms()` found incomplete record-eligibility data. ",
+        "Rerun `find_missing()` to rebuild this report.",
+        call. = FALSE
+      )
+    }
+    eligibility[[column]] <- .miss_chr_vec(eligibility[[column]])
+  }
+  eligibility_keys <- .redcapmissing_flex_event_forms_record_key(eligibility)
+  if (anyDuplicated(eligibility_keys)) {
+    row <- which(duplicated(eligibility_keys))[[1]]
+    stop(
+      "`flex_event_forms()` found duplicate record eligibility for ",
+      .redcapmissing_flex_event_forms_record_context_label(
+        eligibility[row, , drop = FALSE]
+      ),
+      ". Rerun `find_missing()` to rebuild this report.",
+      call. = FALSE
+    )
+  }
+
+  missing_cache_keys <- setdiff(eligibility_keys, cache_keys)
+  if (length(missing_cache_keys) > 0) {
+    row <- match(missing_cache_keys[[1]], eligibility_keys)
+    stop(
+      "`flex_event_forms()` has no field-count data for ",
+      .redcapmissing_flex_event_forms_record_context_label(
+        eligibility[row, , drop = FALSE]
+      ),
+      ". Rerun `find_missing()` to rebuild this report.",
+      call. = FALSE
+    )
+  }
+  extra_cache_keys <- setdiff(cache_keys, eligibility_keys)
+  if (length(extra_cache_keys) > 0) {
+    row <- match(extra_cache_keys[[1]], cache_keys)
+    stop(
+      "`flex_event_forms()` found field-count data outside eligibility for ",
+      .redcapmissing_flex_event_forms_record_context_label(
+        field_counts[row, , drop = FALSE]
+      ),
+      ". Rerun `find_missing()` to rebuild this report.",
+      call. = FALSE
+    )
+  }
+
+  displayed_keys <- unique(.redcapmissing_flex_event_forms_key(contexts))
+  cache_context_keys <- unique(.redcapmissing_flex_event_forms_key(field_counts))
+  missing_context_keys <- setdiff(displayed_keys, cache_context_keys)
+  if (length(missing_context_keys) > 0) {
+    row <- match(missing_context_keys[[1]],
+      .redcapmissing_flex_event_forms_key(contexts)
+    )
+    stop(
+      "`flex_event_forms()` has no cached records for ",
+      .redcapmissing_flex_event_forms_context_label(
+        contexts[row, , drop = FALSE]
+      ),
+      ". Rerun `find_missing()` to rebuild this report.",
+      call. = FALSE
+    )
+  }
+  extra_context_keys <- setdiff(cache_context_keys, displayed_keys)
+  if (length(extra_context_keys) > 0) {
+    row <- match(extra_context_keys[[1]],
+      .redcapmissing_flex_event_forms_key(field_counts)
+    )
+    stop(
+      "`flex_event_forms()` found cached records for an undisplayed ",
+      .redcapmissing_flex_event_forms_context_label(
+        field_counts[row, , drop = FALSE]
+      ),
+      ". Rerun `find_missing()` to rebuild this report.",
+      call. = FALSE
+    )
+  }
+
+  field_counts
+}
+
+.redcapmissing_flex_event_forms_classify_contexts <- function(
+  field_counts,
+  x,
+  missing_threshold
+) {
+  start_checks <- c(
+    "event-row-started",
+    "instance-row-started",
+    "form-started"
+  )
+  missing_rows <- x$missing
+  start_keys <- character()
+  if (!is.null(missing_rows) && nrow(missing_rows) > 0) {
+    missing_rows <- .redcapmissing_flex_event_forms_normalize(missing_rows)
+    start_rows <- missing_rows[
+      missing_rows$validation_check %in% start_checks,
+      ,
+      drop = FALSE
+    ]
+    if (nrow(start_rows) > 0) {
+      start_keys <- unique(
+        .redcapmissing_flex_event_forms_record_key(start_rows)
+      )
+    }
+  }
+
+  record_keys <- .redcapmissing_flex_event_forms_record_key(field_counts)
+  field_counts$form_not_started <- record_keys %in% start_keys
+  field_counts$effective_missing_fraction <- ifelse(
+    field_counts$form_not_started,
+    1,
+    ifelse(
+      field_counts$field_assessed == 0,
+      0,
+      field_counts$field_failed / field_counts$field_assessed
+    )
+  )
+  field_counts$form_missing_threshold <- if (missing_threshold == 1) {
+    field_counts$effective_missing_fraction == 1
+  } else {
+    field_counts$effective_missing_fraction > missing_threshold
+  }
+  field_counts
+}
+
+.redcapmissing_flex_event_forms_context_classifications <- function(
+  classifications,
+  context
+) {
+  classifications[
+    classifications$redcap_event_name == context$redcap_event_name &
+      classifications$form == context$form &
+      classifications$redcap_repeat_instrument ==
+        context$redcap_repeat_instrument &
+      classifications$redcap_repeat_instance ==
+        context$redcap_repeat_instance,
+    ,
+    drop = FALSE
+  ]
 }
 
 .redcapmissing_flex_event_forms_contexts <- function(validation_set, x) {
@@ -388,9 +767,15 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     repeat_instance = character(),
     n = character(),
     form_incomplete = character(),
+    form_not_started = character(),
+    form_missing_threshold = character(),
     has_repeat = has_repeat,
     form_incomplete_count = numeric(),
-    form_incomplete_denominator = numeric()
+    form_incomplete_denominator = numeric(),
+    form_not_started_count = numeric(),
+    form_not_started_denominator = numeric(),
+    form_missing_threshold_count = numeric(),
+    form_missing_threshold_denominator = numeric()
   )
 }
 
@@ -398,6 +783,22 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   form_rows <- out$row_type == "form"
   all_count <- sum(out$.form_incomplete_count[form_rows], na.rm = TRUE)
   all_denominator <- sum(out$.form_incomplete_denominator[form_rows], na.rm = TRUE)
+  all_not_started_count <- sum(
+    out$.form_not_started_count[form_rows],
+    na.rm = TRUE
+  )
+  all_not_started_denominator <- sum(
+    out$.form_not_started_denominator[form_rows],
+    na.rm = TRUE
+  )
+  all_missing_threshold_count <- sum(
+    out$.form_missing_threshold_count[form_rows],
+    na.rm = TRUE
+  )
+  all_missing_threshold_denominator <- sum(
+    out$.form_missing_threshold_denominator[form_rows],
+    na.rm = TRUE
+  )
 
   all_row <- .redcapmissing_flex_event_forms_row(
     row_type = "all",
@@ -410,9 +811,21 @@ flex_event_forms.redcapmissing <- function(x, ...) {
       count = all_count,
       denominator = all_denominator
     ),
+    form_not_started = .redcapmissing_flex_event_forms_format_fraction(
+      count = all_not_started_count,
+      denominator = all_not_started_denominator
+    ),
+    form_missing_threshold = .redcapmissing_flex_event_forms_format_fraction(
+      count = all_missing_threshold_count,
+      denominator = all_missing_threshold_denominator
+    ),
     has_repeat = has_repeat,
     form_incomplete_count = all_count,
-    form_incomplete_denominator = all_denominator
+    form_incomplete_denominator = all_denominator,
+    form_not_started_count = all_not_started_count,
+    form_not_started_denominator = all_not_started_denominator,
+    form_missing_threshold_count = all_missing_threshold_count,
+    form_missing_threshold_denominator = all_missing_threshold_denominator
   )
 
   rbind(all_row, out)
@@ -442,6 +855,8 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     repeat_instance = "",
     n = .redcapmissing_flex_event_forms_format_stats(event_stats),
     form_incomplete = "",
+    form_not_started = "",
+    form_missing_threshold = "",
     has_repeat = has_repeat
   )
 }
@@ -451,6 +866,7 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   event_stats,
   validation_set,
   x,
+  classifications,
   has_repeat,
   single_event
 ) {
@@ -477,6 +893,27 @@ flex_event_forms.redcapmissing <- function(x, ...) {
     context = context,
     x = x
   )
+  context_classifications <-
+    .redcapmissing_flex_event_forms_context_classifications(
+      classifications = classifications,
+      context = context
+    )
+  if (nrow(context_classifications) != form_incomplete_denominator) {
+    stop(
+      "`flex_event_forms()` found ",
+      nrow(context_classifications),
+      " cached record context(s), but the displayed denominator is ",
+      form_incomplete_denominator,
+      " for ",
+      .redcapmissing_flex_event_forms_context_label(context),
+      ". Rerun `find_missing()` to rebuild the report.",
+      call. = FALSE
+    )
+  }
+  form_not_started <- sum(context_classifications$form_not_started)
+  form_missing_threshold <- sum(
+    context_classifications$form_missing_threshold
+  )
 
   .redcapmissing_flex_event_forms_row(
     row_type = "form",
@@ -495,9 +932,21 @@ flex_event_forms.redcapmissing <- function(x, ...) {
       count = form_incomplete,
       denominator = form_incomplete_denominator
     ),
+    form_not_started = .redcapmissing_flex_event_forms_format_fraction(
+      count = form_not_started,
+      denominator = form_incomplete_denominator
+    ),
+    form_missing_threshold = .redcapmissing_flex_event_forms_format_fraction(
+      count = form_missing_threshold,
+      denominator = form_incomplete_denominator
+    ),
     has_repeat = has_repeat,
     form_incomplete_count = form_incomplete,
-    form_incomplete_denominator = form_incomplete_denominator
+    form_incomplete_denominator = form_incomplete_denominator,
+    form_not_started_count = form_not_started,
+    form_not_started_denominator = form_incomplete_denominator,
+    form_missing_threshold_count = form_missing_threshold,
+    form_missing_threshold_denominator = form_incomplete_denominator
   )
 }
 
@@ -710,9 +1159,15 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   repeat_instance,
   n,
   form_incomplete,
+  form_not_started,
+  form_missing_threshold,
   has_repeat,
   form_incomplete_count = NA_real_,
-  form_incomplete_denominator = NA_real_
+  form_incomplete_denominator = NA_real_,
+  form_not_started_count = NA_real_,
+  form_not_started_denominator = NA_real_,
+  form_missing_threshold_count = NA_real_,
+  form_missing_threshold_denominator = NA_real_
 ) {
   out <- tibble::tibble(
     row_type = row_type,
@@ -725,8 +1180,15 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   }
   out[["N"]] <- n
   out[["Form Incomplete"]] <- form_incomplete
+  out[["Form Not Started"]] <- form_not_started
+  out[["Form Missing Threshold"]] <- form_missing_threshold
   out[[".form_incomplete_count"]] <- form_incomplete_count
   out[[".form_incomplete_denominator"]] <- form_incomplete_denominator
+  out[[".form_not_started_count"]] <- form_not_started_count
+  out[[".form_not_started_denominator"]] <- form_not_started_denominator
+  out[[".form_missing_threshold_count"]] <- form_missing_threshold_count
+  out[[".form_missing_threshold_denominator"]] <-
+    form_missing_threshold_denominator
   out
 }
 
@@ -758,6 +1220,15 @@ flex_event_forms.redcapmissing <- function(x, ...) {
   }
 
   paste(parts, collapse = ", ")
+}
+
+.redcapmissing_flex_event_forms_record_context_label <- function(context) {
+  paste0(
+    "record `",
+    context$record_id[[1]],
+    "`, ",
+    .redcapmissing_flex_event_forms_context_label(context)
+  )
 }
 
 .redcapmissing_flex_event_forms_has_repeat <- function(contexts) {
