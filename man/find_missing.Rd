@@ -113,7 +113,8 @@ including assessed, passed, failed, pass-rate, and fail-rate columns.}
 event, repeat, form, and field context. The final \code{url} column is a raw
 REDCap Data Entry URL for the record/form context when the connection
 provides the required instance, version, and project metadata, plus an
-event ID for longitudinal projects; otherwise it is \code{NA}.}
+event ID for longitudinal projects; otherwise it is \code{NA}. Use
+\code{\link[=get_missing]{get_missing()}} for the recommended focused missing-row view.}
 \item{\code{spec}}{Normalized report context, including requested forms,
 events, labels, record eligibility, unused record specifications,
 instances, ignored fields/IDs, REDCap ID column, system fields, project
@@ -193,7 +194,7 @@ baseline_missing <- find_missing(
 )
 
 tidy(baseline_missing)
-baseline_missing$missing
+get_missing(baseline_missing)
 
 detailed_missing <- find_missing(
   data = records,
@@ -241,6 +242,6 @@ projects using the API}. R package version 2.12.0.
 \url{https://doi.org/10.5281/zenodo.10564837}.
 }
 \seealso{
-\code{\link[=registry]{registry()}}, \code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}},
+\code{\link[=get_missing]{get_missing()}}, \code{\link[=registry]{registry()}}, \code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}},
 \code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}
 }

@@ -123,7 +123,8 @@
 #'     event, repeat, form, and field context. The final `url` column is a raw
 #'     REDCap Data Entry URL for the record/form context when the connection
 #'     provides the required instance, version, and project metadata, plus an
-#'     event ID for longitudinal projects; otherwise it is `NA`.}
+#'     event ID for longitudinal projects; otherwise it is `NA`. Use
+#'     [get_missing()] for the recommended focused missing-row view.}
 #'   \item{`spec`}{Normalized report context, including requested forms,
 #'     events, labels, record eligibility, unused record specifications,
 #'     instances, ignored fields/IDs, REDCap ID column, system fields, project
@@ -134,7 +135,7 @@
 #'     `validation_rows`, `checks`, and `failures` row tables.}
 #' }
 #'
-#' @seealso [registry()], [redcapAPI::redcapConnection()],
+#' @seealso [get_missing()], [registry()], [redcapAPI::redcapConnection()],
 #'   [redcapAPI::exportRecordsTyped()]
 #' @references
 #' Nutter B, Garbett S, Obregon S, Obadia T, Lehr M, High B, Lane S,
@@ -170,7 +171,7 @@
 #' )
 #'
 #' tidy(baseline_missing)
-#' baseline_missing$missing
+#' get_missing(baseline_missing)
 #'
 #' detailed_missing <- find_missing(
 #'   data = records,

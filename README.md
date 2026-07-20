@@ -102,7 +102,7 @@ The example below uses a synthetic connection-like object so it can run
 without live REDCap credentials. In routine use, replace `rcon` and
 `records` with a real `redcapAPI::redcapConnection()` and typed export.
 The summary shows every validation check that ran in this compact
-example; `report$missing` shows only the failed rows.
+example; `get_missing(report)` shows the failed rows.
 
 ``` r
 library(redcapmissing)
@@ -154,18 +154,23 @@ print(check_summary_rows, row.names = FALSE)
 #>        event:form     form-started        2      0
 #>        event:form   field-complete        7      1
 
-failed_rows <- as.data.frame(report$missing[
+missing_view <- get_missing(
+  report,
+  validation_check = "field-complete"
+)
+failed_rows <- as.data.frame(missing_view[
   ,
   c(
     "record_id",
-    "validation_level",
+    "validation_context",
+    "form",
     "validation_check",
     "field_name"
   )
 ])
 print(failed_rows, row.names = FALSE)
-#>  record_id validation_level validation_check       field_name
-#>         r1       event:form   field-complete conditional_note
+#>  record_id validation_context          form validation_check       field_name
+#>         r1            overall baseline_form   field-complete conditional_note
 ```
 
 ## Report outputs
@@ -174,11 +179,13 @@ print(failed_rows, row.names = FALSE)
 validation summary. Common outputs are:
 
 - `report$summary`: compact validation summary used by `tidy(report)`
-- `report$missing`: failed validation rows with native `validation_step`
-  and `validation_row_id` identifiers; its final `url` column is a raw
-  REDCap Data Entry URL when the connection includes the required
-  instance, version, and project metadata, plus an event ID for
-  longitudinal projects; otherwise `NA`
+- `get_missing(report)`: recommended focused missing-row view with nine
+  documented columns and optional filtering by canonical validation
+  check
+- `report$missing`: full failed rows with native `validation_step` and
+  `validation_row_id` identifiers; its final `url` column is a raw
+  REDCap Data Entry URL when connection metadata are available;
+  otherwise `NA`
 - `report$spec`: normalized forms, events, labels, record eligibility,
   instances, ignored fields/IDs, ID column, and REDCap system fields
 - `report$diagnostics`: timing and row-count metadata for

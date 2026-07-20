@@ -1,3 +1,12 @@
+# redcapmissing 5.1.0
+
+## 2026-07-20
+
+- Added `get_missing()` as the recommended focused accessor for failed
+  validation rows. It returns nine stable user-facing columns and can filter
+  by one or more canonical validation checks while preserving report row
+  order.
+
 # redcapmissing 5.0.2
 
 ## 2026-07-18

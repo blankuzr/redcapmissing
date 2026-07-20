@@ -145,9 +145,13 @@ report <- find_missing(
   forms = "baseline_form"
 )
 
-report$missing[, c(
+get_missing(
+  report,
+  validation_check = "field-complete"
+)[, c(
   "record_id",
-  "validation_level",
+  "validation_context",
+  "form",
   "validation_check",
   "field_name"
 )]
@@ -157,7 +161,7 @@ Record `r1` is branch-open for `conditional_note`, so the missing value is a
 `field-complete` failure. Record `r2` is branch-closed, so the field is not in
 the assessment pool.
 
-The final `url` column in `report$missing` is a raw REDCap Data Entry URL for
+The `url` column from `get_missing(report)` is a raw REDCap Data Entry URL for
 each failed record/form context when `rcon` includes the required instance,
 version, and project metadata, plus an event ID for longitudinal projects. It
 is `NA` for connection-like objects that do not provide that metadata,
@@ -321,10 +325,15 @@ repeat_report <- find_missing(
   instances = 2L
 )
 
-repeat_report$missing[
-  repeat_report$missing$validation_check == "instance-row-started",
-  c("record_id", "redcap_repeat_instance", "validation_check")
-]
+get_missing(
+  repeat_report,
+  validation_check = "instance-row-started"
+)[, c(
+  "record_id",
+  "validation_context",
+  "form",
+  "validation_check"
+)]
 ```
 
 The missing instance `2` for record `r1` fails `instance-row-started` and is
