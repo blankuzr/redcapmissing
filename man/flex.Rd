@@ -42,9 +42,10 @@ for display, and formats passed/failed counts with percentages. The optional
 \code{events}, \code{forms}, and \code{validation_check} arguments filter by raw values
 present in \code{tidy(x)} before labels are applied.
 
-Use \code{flex_event_forms()} when you want the reduced event/form report with
-total record N in the column label, event row-started passed/assessed counts,
-and form rows nested under event header rows instead of the full
+Use \code{flex_event_forms()} for a reduced event/form report with event and
+repeat-instance started/due counts plus \verb{Form Incomplete},
+\verb{Form Not Started}, and a configurable branching-aware missingness metric.
+It nests form rows under event headers instead of showing the full
 validation-check summary.
 }
 \examples{

@@ -11,9 +11,10 @@
 #' `events`, `forms`, and `validation_check` arguments filter by raw values
 #' present in `tidy(x)` before labels are applied.
 #'
-#' Use `flex_event_forms()` when you want the reduced event/form report with
-#' total record N in the column label, event row-started passed/assessed counts,
-#' and form rows nested under event header rows instead of the full
+#' Use `flex_event_forms()` for a reduced event/form report with event and
+#' repeat-instance started/due counts plus `Form Incomplete`,
+#' `Form Not Started`, and a configurable branching-aware missingness metric.
+#' It nests form rows under event headers instead of showing the full
 #' validation-check summary.
 #'
 #' @param x A `redcapmissing` object created by [find_missing()].

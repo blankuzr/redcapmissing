@@ -59,6 +59,10 @@ expect_compact_matches_details <- function(args) {
   expect_equal(compact$diagnostics$summary_rows, nrow(compact$summary))
   expect_equal(compact$diagnostics$missing_rows, nrow(compact$missing))
   expect_equal(compact$spec$total_n, detailed$spec$total_n)
+  expect_equal(
+    compact$spec$.flex_event_forms_field_counts,
+    detailed$spec$.flex_event_forms_field_counts
+  )
   expect_false(any(c(
     "agent",
     "validation_rows",
@@ -99,6 +103,58 @@ test_that("public report API exposes canonical validation surfaces", {
   expect_true("registry" %in% getNamespaceExports("redcapmissing"))
   expect_false("form" %in% names(report_args))
   expect_false("redcap_missing_report" %in% getNamespaceExports("redcapmissing"))
+})
+
+test_that("find_missing caches exact-context field assessment counts", {
+  records <- tibble::tibble(
+    record_id = c("open", "closed"),
+    branch_flag = c("1", "0"),
+    required_note = c("", "entered"),
+    optional_note = c("", ""),
+    checkbox_field___1 = c("1", "1"),
+    checkbox_field___2 = c("0", "0"),
+    checkbox_other = c("", ""),
+    conditional_note = c("", "")
+  )
+  report <- find_missing(
+    data = records,
+    rcon = fake_rcon(baseline_form_meta()),
+    forms = "baseline_form",
+    details = TRUE
+  )
+  cache <- report$spec$.flex_event_forms_field_counts
+  eligibility <- report$spec$record_eligibility
+  field_checks <- report$details$checks[["field-complete"]]
+
+  expect_identical(names(report), c(
+    "summary",
+    "missing",
+    "spec",
+    "diagnostics",
+    "details"
+  ))
+  expect_identical(names(cache), c(
+    "record_id",
+    "redcap_event_name",
+    "form",
+    "redcap_repeat_instrument",
+    "redcap_repeat_instance",
+    "field_assessed",
+    "field_failed"
+  ))
+  expect_equal(nrow(cache), nrow(eligibility))
+  expect_equal(sort(cache$record_id), sort(eligibility$record_id))
+  expect_false(anyDuplicated(cache[, 1:5, drop = FALSE]) > 0)
+
+  for (record_id in cache$record_id) {
+    record_checks <- field_checks[field_checks$record_id == record_id, ]
+    record_cache <- cache[cache$record_id == record_id, ]
+    expect_equal(record_cache$field_assessed, nrow(record_checks))
+    expect_equal(
+      record_cache$field_failed,
+      sum(!record_checks$validation_passed)
+    )
+  }
 })
 
 test_that("old report argument names are not supported", {
