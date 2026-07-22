@@ -27,39 +27,35 @@ instruments/events, it should include \code{redcap_repeat_instrument} and
 \code{redcap_repeat_instance} when those columns are present in the export.}
 
 \item{rcon}{A \code{redcapAPI::redcapConnection()} object, or an offline or
-preserved connection-like object that mirrors the same methods, and that
-provides project metadata through \code{rcon$metadata()} and instrument labels
-through \code{rcon$instruments()}. When available, form-event mapping,
-repeating instrument/event metadata, and project information are also read
-from the connection object.}
+preserved connection-like object with the same methods. It must provide
+project metadata through \code{rcon$metadata()} and instrument labels through
+\code{rcon$instruments()}; form-event mapping, repeat structure, and project
+information are used when available.}
 
 \item{forms}{Required character vector of REDCap form/instrument names to
 assess. No default is supplied so callers must choose the form or forms
 deliberately. Duplicate form names are not allowed.}
 
-\item{events}{Character vector of REDCap unique event names to apply to all
-requested forms, a named list of event vectors by form, or \code{NULL}. When a
-form is offered on multiple REDCap events, this argument can restrict the
-report to a selected subset of those events. If \code{NULL}, all offered events
-are assessed. Named lists may omit forms or use \code{NULL} entries to request a
-form's default offered events. If a form is offered on only one event,
-supplied event values are ignored for that form. If a form is regular on
-some events and repeating on others, \code{events} also determines whether
-repeat-instance logic is activated. Defaults to \code{NULL}.}
+\item{events}{A character vector of raw REDCap event names applied to all
+requested forms, a named list of event vectors by form, or \code{NULL}. \code{NULL}
+and omitted or \code{NULL} list entries select every event where the form is
+offered. List names must be unique requested forms, and values cannot be
+empty vectors. Values for a form offered on only one event are ignored. For
+forms that are regular on some events and repeating on others, the selected
+events determine whether repeat-instance checks apply. Defaults to \code{NULL}.}
 
-\item{records}{Named list of REDCap record eligibility by raw
-\code{redcap_event_name}, or \code{NULL}. A top-level event vector applies to every
-requested form and selected repeat instance at that event. A nested
-event/form vector applies to that form at the event and every selected
-repeat instance for that form. A nested event/form/instance list applies
-only to the named repeat instance. Omitted event, form, or instance entries
-use the default eligibility created by \code{data}, \code{forms}, \code{events},
-\code{instances}, and \code{ignore_ids}. Values must contain at least one non-blank
-record ID; \code{NULL}, empty, \code{NA}, and blank values are not allowed inside
-\code{records}. Supplied IDs are normalized to character values and are not
-checked through a live REDCap record export. IDs not present in \code{data} are
-allowed and can create upstream row-started failures. Defaults to \code{NULL},
-which means \code{records} does not restrict any event/form/instance context.}
+\item{records}{A fully named list of record eligibility by raw
+\code{redcap_event_name}, or \code{NULL}. An event-level vector applies to every
+requested form and selected instance; an event/form vector applies only to
+that form; and an event/form/instance list applies only to the named
+positive whole-number instance. Names must be unique; event names must be
+known project events, and nested names must identify requested forms and
+valid contexts. Omitted contexts use eligibility derived from \code{data} and
+the other selection arguments. Each supplied value must contain only
+non-blank record IDs; \code{NULL}, empty, \code{NA}, and blank values error. IDs are
+normalized to character and may be absent from \code{data}, in which case they
+can produce row-started failures. Defaults to \code{NULL}, which applies no
+record restriction.}
 
 \item{required_fields}{Logical scalar. When \code{TRUE}, only fields marked as
 required in the REDCap metadata \code{required_field} column are assessed. When
@@ -80,100 +76,60 @@ report is built. Defaults to \code{NULL}, which means no records are ignored.}
 assessment. Defaults to \code{"descriptive"} because descriptive fields do not
 capture values. These types are excluded regardless of \code{required_fields}.}
 
-\item{instances}{Positive whole-number scalar count, vector of positive
-whole-number repeat-instance IDs, named list by form, or \code{NULL}. When a
-requested form is assessed in a REDCap repeating event or as a repeating
-instrument, a scalar such as \code{2L} checks that repeat instances \code{1} and \code{2}
-exist. A vector with length greater than one, such as \code{c(2L, 3L)}, checks
-exactly those repeat-instance IDs. Named lists may omit forms or use \code{NULL}
-entries to request defaults. If a requested form repeats and no instance
-setting is supplied for it, the function warns once and assumes instance
-\code{1}. Global \code{instances} values apply only to forms with requested repeating
-contexts; named non-\code{NULL} entries for non-repeating requested contexts
-error.}
+\item{instances}{A positive whole-number scalar count, vector of positive
+whole-number instance IDs, named list by form, or \code{NULL}. A scalar such as
+\code{2L} requests instances \code{1} and \code{2}; a longer vector such as \code{c(2L, 3L)}
+requests exactly those IDs. List names must be unique requested forms;
+omitted or \code{NULL} entries use the default. A repeating form without an
+explicit setting warns once and uses instance \code{1}. Global values affect
+only requested repeating contexts; a named non-\code{NULL} setting for a form
+with no requested repeating context errors. Defaults to \code{NULL}.}
 
 \item{details}{Logical scalar. When \code{FALSE}, the report omits full
 validation-row tables and check-specific row tables. When \code{TRUE}, these
 row-level tables are stored under \code{report$details}. Defaults to \code{FALSE}.}
 
-\item{progress}{Logical scalar. When \code{TRUE}, displays a CLI progress status
-with completed, active, and pending forms, the active form's processing
-percentage, and overall \code{find_missing()} progress. In dynamic terminals,
-updates replace the current line; colors and Unicode symbols are used when
-supported. Percentages describe processing progress, not data
-completeness. Defaults to \code{interactive()}.}
+\item{progress}{Logical scalar. When \code{TRUE}, displays processing progress by
+form; percentages do not represent data completeness. Defaults to
+\code{interactive()}.}
 }
 \value{
 A list with class \code{"redcapmissing"} containing:
 \describe{
-\item{\code{summary}}{Compact validation summary rows used by \code{\link[=get_summary]{get_summary()}},
-including assessed, passed, failed, pass-rate, and fail-rate columns.}
-\item{\code{missing}}{Failed validation rows keyed by generic native
-\code{validation_step} and \code{validation_row_id} identifiers plus REDCap record,
-event, repeat, form, and field context. The final \code{url} column is a raw
-REDCap Data Entry URL for the record/form context when the connection
-provides the required instance, version, and project metadata, plus an
-event ID for longitudinal projects; otherwise it is \code{NA}. Use
-\code{\link[=get_missing]{get_missing()}} for the stable 12-column missing-row view, including
-raw event and repeat context.}
-\item{\code{spec}}{Normalized report context, including requested forms,
-events, labels, record eligibility, unused record specifications,
-instances, ignored fields/IDs, REDCap ID column, system fields, project
-cache, and total eligible record count. \code{spec$record_eligibility} always
-contains every final assessed record/event/form/repeat-instance context,
-including when \code{records} is omitted.}
-\item{\code{diagnostics}}{Timing and row-count metadata useful for benchmarking
-and troubleshooting.}
+\item{\code{summary}}{Compact validation summaries used by \code{\link[=get_summary]{get_summary()}}.}
+\item{\code{missing}}{Compact failed-validation rows used by \code{\link[=get_missing]{get_missing()}}.}
+\item{\code{spec}}{Normalized report configuration and REDCap context used by
+report methods. \code{spec$record_eligibility} contains every final assessed
+record/event/form/repeat-instance context, including when \code{records} is
+omitted.}
+\item{\code{diagnostics}}{Timing and row-count metadata.}
 \item{\code{details}}{\code{NULL} by default. When \code{details = TRUE}, a list with
 \code{validation_rows}, \code{checks}, and \code{failures} row tables.}
 }
 }
 \description{
-\code{find_missing()} checks one or more REDCap instruments/forms for missingness
-using the canonical validation model returned by \code{\link[=registry]{registry()}}. Expected data
-are derived from REDCap project metadata and structure supplied through a
-\code{redcapAPI::redcapConnection()} workflow.
+\code{find_missing()} checks expected REDCap event, repeat, form, and field
+contexts for missingness. Expectations come from project metadata supplied
+through \code{rcon} and the validation taxonomy returned by \code{\link[=registry]{registry()}}.
 }
 \details{
-A field is expected when it is on the requested form and, if it has REDCap
-branching logic, that branching logic evaluates to \code{TRUE} for the record row.
-Fields without branching logic are always expected on rows where the form is
-offered. Blank values and \code{NA} values are considered missing.
-
-The function relies on \code{redcapAPI} project structure exposed through \code{rcon}
-to avoid checking a form on events or repeating rows where that form is not
-offered. It inspects available connection methods such as \code{rcon$metadata()},
-\code{rcon$instruments()}, \code{rcon$events()}, \code{rcon$mapping()} /
-\code{rcon$mappings()}, \code{rcon$repeatInstrumentEvent()}, and
-\code{rcon$projectInformation()} when present.
+A field is expected on rows where its requested form is offered and its
+REDCap branching logic, if any, evaluates to \code{TRUE}. Blank and \code{NA} values
+are missing.
 
 Checkbox fields are treated as one REDCap root field. A checkbox root is
-considered answered when at least one exported child column
-(\code{field___choice}) is selected. Unselected sibling checkboxes are not flagged
-as missing once the root question has at least one selected child.
-
-Validation is performed by native \code{redcapmissing} code. The package builds
-validation rows with:
-\describe{
-\item{\code{validation_level}}{The emitted context label. Event/form checks use
-\code{"event:form"} for non-repeating contexts and
-\code{"event:form:instance"} for repeat-instance contexts.}
-\item{\code{validation_check}}{One of \code{"event-row-started"},
-\code{"instance-row-started"}, \code{"form-started"}, or \code{"field-complete"}.}
-\item{\code{validation_passed}}{Whether that row passed its validation check.}
-}
+answered when at least one exported child column (\code{field___choice}) is
+selected; unselected siblings are not separately flagged.
 
 The checks are assessed in registry order. Failed checks remove the
-record/event/repeat/form context from every downstream assessment.
+record/event/repeat/form context from downstream assessment. The function
+stops if no record IDs remain after filtering, except that explicit \code{records}
+entries can declare expected contexts for IDs absent from \code{data}; those
+contexts can fail a row-started check.
 
-After record filtering, \code{find_missing()} stops when no record IDs remain
-assessable. Explicit \code{records} entries are the exception: they can declare
-expected record contexts that continue into row-started assessment even when
-those IDs have no matching rows in \code{data}.
-
-By default, the returned report keeps only compact summaries, failed rows,
-project specification metadata, and diagnostics. Set \code{details = TRUE} when
-row-level check tables are needed for debugging or regression tests.
+Set \code{details = TRUE} to retain row-level check tables for troubleshooting.
+See \code{vignette("redcapmissing", package = "redcapmissing")} for synthetic
+event, record-eligibility, and repeat-instance workflows.
 }
 \examples{
 \dontrun{
@@ -193,7 +149,7 @@ records <- redcapAPI::exportRecordsTyped(
   )
 )
 
-baseline_missing <- find_missing(
+report <- find_missing(
   data = records,
   rcon = rcon,
   forms = "baseline_form",
@@ -201,17 +157,8 @@ baseline_missing <- find_missing(
   ignore_fields = c("status_flag", "screening_code")
 )
 
-get_summary(baseline_missing)
-get_missing(baseline_missing)
-
-detailed_missing <- find_missing(
-  data = records,
-  rcon = rcon,
-  forms = "baseline_form",
-  details = TRUE
-)
-
-detailed_missing$details$checks[["field-complete"]]
+get_summary(report)
+get_missing(report)
 
 repeat_missing <- find_missing(
   data = records,
@@ -219,35 +166,8 @@ repeat_missing <- find_missing(
   forms = "repeat_form",
   instances = 2L
 )
-
-multi_form_missing <- find_missing(
-  data = records,
-  rcon = rcon,
-  forms = c("imaging", "demographics"),
-  events = list(
-    imaging = c("event_2_arm_1", "event_3_arm_1")
-  )
-)
-
-staged_missing <- find_missing(
-  data = records,
-  rcon = rcon,
-  forms = c("surgery", "demographics"),
-  records = list(
-    event_1_arm_1 = c("record_a", "record_b"),
-    event_2_arm_1 = c("record_a", "record_b"),
-    event_3_arm_1 = "record_b"
-  )
-)
 }
 
-}
-\references{
-Nutter B, Garbett S, Obregon S, Obadia T, Lehr M, High B, Lane S,
-Beasley W, Gray W, Kennedy N, Hsi-Nien T, Horner J, Stephens J, Beck C,
-Johnson B, Chase P, Tobias P (2026). \emph{redcapAPI: Accessing data from REDCap
-projects using the API}. R package version 2.12.0.
-\url{https://doi.org/10.5281/zenodo.10564837}.
 }
 \seealso{
 \code{\link[=get_summary]{get_summary()}}, \code{\link[=get_missing]{get_missing()}}, \code{\link[=flexify]{flexify()}}, \code{\link[=registry]{registry()}},

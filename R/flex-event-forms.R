@@ -7,65 +7,55 @@
 #' threshold metrics.
 #'
 #' @details
-#' The table is a reporting reduction of [get_summary()] plus report
-#' metadata. The `N (started/due)` column shows `event-row-started` as
-#' `started/due (%)`; non-longitudinal reports use a synthetic `Single event`
-#' row with `Total N/Total N`. If multiple
-#' `event-row-started` summary rows are present for the same event, they must
-#' agree on `passed` and `assessed` counts. The first body row summarizes all
-#' displayed form opportunities by summing the shown form-row numerators and
-#' denominators without deduplicating records across forms. In this reduced
-#' table, `Form Incomplete` shows unique failed record contexts with
-#' `event-row-started`,
-#' `instance-row-started`, `form-started`, or `field-complete` failures for the
-#' exact event/form/repeat context. Multiple missing fields in the same record
-#' context count once. The form-row denominator is the exact row-started
-#' assessed N for that same context: `event-row-started` for non-repeat
-#' longitudinal rows and `instance-row-started` for repeat rows. Missing or
-#' invalid exact row-started denominators are treated as broken report objects.
-#' Non-longitudinal reports use `Total N` as the display-only row-started
-#' denominator for the synthetic `Single event` display row. Because the
-#' denominator follows exact `record_eligibility`, forms under the same event
-#' can have different assessed Ns when `records`, event selection, or repeat
-#' context gives them different eligible record contexts.
+#' The form-row denominator is the row-started assessed count for the exact
+#' event/form/repeat context: `event-row-started` for non-repeat longitudinal
+#' rows and `instance-row-started` for repeat rows. Non-longitudinal reports use
+#' `Total N` for their synthetic `Single event` row. Missing or invalid exact
+#' denominators indicate a broken report. Because denominators follow exact
+#' record eligibility, forms under one event may have different assessed Ns.
 #'
-#' `Form Not Started` uses that same denominator and counts a record context
-#' once when an applicable `event-row-started`, `instance-row-started`, or
-#' `form-started` check fails. The dynamically named threshold column treats a
-#' start-check failure as an effective missing fraction of `1`. For a started
-#' form it uses failed over assessed `field-complete` checks after record
-#' eligibility, field filters, branching logic, and checkbox-root handling. A
-#' started form with no applicable field checks has an effective fraction of
-#' `0`. For cutoffs below
-#' `1`, the comparison is strict and unrounded, so exactly 10% does not count
-#' at the default cutoff. At a cutoff of `1`, the column changes to
-#' `Form = 100% Missing` and counts contexts whose effective fraction is `1`.
-#' Below `1`, the heading prints the cutoff percentage without unnecessary
-#' trailing zeros; for example, `missing_threshold = 0.125` produces
-#' `Form >12.5% Missing`.
-#' `Form Not Started` and the threshold column display `N/D (%)` on form and
-#' `All` rows; event-header cells are blank.
+#' The reduced table uses these metrics:
+#' \describe{
+#'   \item{`N (started/due)`}{Event headers show `event-row-started` as
+#'     `started/due (\%)`; duplicate summary rows for an event must agree. Repeat
+#'     form rows show `instance-row-started` the same way, while non-repeat form
+#'     rows are blank. A synthetic `Single event` header shows
+#'     `Total N/Total N`.}
+#'   \item{`Form Incomplete`}{The number of unique record contexts with an
+#'     `event-row-started`, `instance-row-started`, `form-started`, or
+#'     `field-complete` failure. Multiple failed fields in one context count
+#'     once.}
+#'   \item{`Form Not Started`}{The number of unique record contexts with an
+#'     applicable `event-row-started`, `instance-row-started`, or `form-started`
+#'     failure.}
+#'   \item{Missing-threshold column}{A start-check failure has an effective
+#'     missing fraction of `1`. For a started form, the fraction is failed over
+#'     assessed `field-complete` checks after record eligibility, field filters,
+#'     branching logic, and checkbox-root handling; no applicable field checks
+#'     gives a fraction of `0`. Below `1`, the unrounded fraction must be
+#'     strictly greater than `missing_threshold`. At `1`, the metric counts
+#'     fractions equal to `1` and is headed `Form = 100\% Missing`. Other
+#'     headings omit unnecessary trailing zeros, such as
+#'     `Form >12.5\% Missing`.}
+#' }
+#'
+#' `Form Not Started` and the threshold metric display `N/D (%)` on form and
+#' `All` rows. The `All` row sums displayed form opportunities without
+#' deduplicating records across forms; event-header cells for these metrics are
+#' blank.
 #'
 #' Reports created before `redcapmissing` 5.2.0 must be regenerated with
 #' [find_missing()], including reports that retain detailed validation rows.
+#' This function requires the optional `flextable` and `glue` packages.
 #'
 #' @param x A `redcapmissing` object created by [find_missing()].
 #' @param missing_threshold A finite numeric scalar from `0` through `1`;
-#'   defaults to `0.10`. Below `1`, contexts whose unrounded effective missing
-#'   fraction is strictly greater than the cutoff contribute to the threshold
-#'   column, whose heading prints the cutoff percentage without unnecessary
-#'   trailing zeros. At `1`, contexts whose effective fraction equals `1`
-#'   contribute to `Form = 100% Missing`.
+#'   defaults to `0.10`. See Details for the strict cutoff rule.
 #' @param ... Additional arguments passed to methods; currently unused by the
 #'   `redcapmissing` method.
 #'
-#' @return A `flextable` object with event header rows and form rows nested
-#'   under each event. Repeat instrument and instance columns are
-#'   included only when the report contains repeat context. Repeat form rows
-#'   show `instance-row-started` as `started/due (%)` in the N column;
-#'   non-repeat form rows leave the N cell blank. Form and `All` rows display
-#'   `Form Not Started` and the dynamic missing-threshold metric as `N/D (%)`.
-#'   This function requires the optional `flextable` and `glue` packages.
+#' @return A `flextable` object containing an `All` row, event headers, and form
+#'   rows. Repeat columns appear only when the report contains repeat context.
 #'
 #' @examples
 #' \dontrun{
