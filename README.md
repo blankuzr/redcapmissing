@@ -205,15 +205,19 @@ Optional reporting helpers are available for formatted outputs.
 `flex(report)` and `flex_event_forms(report)` require `flextable` and
 `glue`; `flex_html()` also requires `htmltools`. `flex(report)` displays
 labeled event, form, repeat context, validation-check, and pass/fail
-columns. Use raw values from `tidy(report)` in `flex(events = ...)`,
-`flex(forms = ...)`, and `flex(validation_check = ...)` to subset rows
-before display labels are applied. `flex_event_forms(report)` returns a
-reduced event/form table with an `All` summary row, event and
-repeat-instance started/due counts, and three form-opportunity metrics.
-Each form row uses the exact row-started assessed N for its context:
-`event-row-started` for non-repeat longitudinal rows,
-`instance-row-started` for repeat rows, and `Total N` for the
-display-only non-longitudinal `Single event` row.
+columns. Each filter must use raw values present in the corresponding
+`tidy(report)` column. When `events`, `forms`, and `validation_check`
+are combined, `flex()` applies them by intersection before display
+labels are added. Unknown values and a combination that produces no rows
+are errors. `flex_event_forms(report)` returns a reduced event/form
+table with an `All` summary row, event and repeat-instance started/due
+counts, and three form-opportunity metrics. Each form row uses the exact
+row-started assessed N for its context: `event-row-started` for
+non-repeat longitudinal rows, `instance-row-started` for repeat rows,
+and `Total N` for the display-only non-longitudinal `Single event` row.
+Forms under the same event can therefore have different assessed Ns when
+final record eligibility differs because of `records`, event selection,
+or repeat context.
 
 - `Form Incomplete` counts each record context once when any applicable
   `event-row-started`, `instance-row-started`, `form-started`, or
@@ -228,7 +232,9 @@ display-only non-longitudinal `Single event` row.
   missing fraction. Below `1`, the comparison is strict and unrounded,
   so exactly 10% does not count at the default. At
   `missing_threshold = 1`, the heading becomes `Form = 100% Missing` and
-  contexts with 100% effective missingness count.
+  contexts with 100% effective missingness count. Other headings print
+  the cutoff without unnecessary trailing zeros, so
+  `missing_threshold = 0.125` produces `Form >12.5% Missing`.
 
 `Form Incomplete` is displayed as N (%) on form rows and N/D (%) on the
 `All` row. `Form Not Started` and the dynamic threshold column display
@@ -261,6 +267,13 @@ eligibility implied by `data`, `forms`, `events`, `instances`, and
 `ignore_ids`. Empty, missing, `NULL`, and blank-only record values are
 errors. To remove an event from assessment entirely, exclude it with
 `events` rather than using an empty `records` entry.
+
+Every report stores `spec$record_eligibility` with one row for each
+final assessed record/event/form/repeat-instance context, even when
+`records` is omitted. If filtering leaves no assessable record IDs,
+`find_missing()` stops. Explicit `records` entries are the exception
+because they can declare expected contexts whose absent data rows should
+fail a row-started check.
 
 ``` r
 staged_report <- find_missing(

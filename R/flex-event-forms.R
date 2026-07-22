@@ -24,7 +24,10 @@
 #' longitudinal rows and `instance-row-started` for repeat rows. Missing or
 #' invalid exact row-started denominators are treated as broken report objects.
 #' Non-longitudinal reports use `Total N` as the display-only row-started
-#' denominator for the synthetic `Single event` display row.
+#' denominator for the synthetic `Single event` display row. Because the
+#' denominator follows exact `record_eligibility`, forms under the same event
+#' can have different assessed Ns when `records`, event selection, or repeat
+#' context gives them different eligible record contexts.
 #'
 #' `Form Not Started` uses that same denominator and counts a record context
 #' once when an applicable `event-row-started`, `instance-row-started`, or
@@ -37,6 +40,9 @@
 #' `1`, the comparison is strict and unrounded, so exactly 10% does not count
 #' at the default cutoff. At a cutoff of `1`, the column changes to
 #' `Form = 100% Missing` and counts contexts whose effective fraction is `1`.
+#' Below `1`, the heading prints the cutoff percentage without unnecessary
+#' trailing zeros; for example, `missing_threshold = 0.125` produces
+#' `Form >12.5% Missing`.
 #' `Form Not Started` and the threshold column display `N/D (%)` on form and
 #' `All` rows; event-header cells are blank.
 #'
@@ -47,8 +53,9 @@
 #' @param missing_threshold A finite numeric scalar from `0` through `1`;
 #'   defaults to `0.10`. Below `1`, contexts whose unrounded effective missing
 #'   fraction is strictly greater than the cutoff contribute to the threshold
-#'   column. At `1`, contexts whose effective fraction equals `1` contribute to
-#'   `Form = 100% Missing`.
+#'   column, whose heading prints the cutoff percentage without unnecessary
+#'   trailing zeros. At `1`, contexts whose effective fraction equals `1`
+#'   contribute to `Form = 100% Missing`.
 #' @param ... Additional arguments passed to methods; currently unused by the
 #'   `redcapmissing` method.
 #'

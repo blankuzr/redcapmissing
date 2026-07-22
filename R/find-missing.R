@@ -38,6 +38,11 @@
 #' The checks are assessed in registry order. Failed checks remove the
 #' record/event/repeat/form context from every downstream assessment.
 #'
+#' After record filtering, `find_missing()` stops when no record IDs remain
+#' assessable. Explicit `records` entries are the exception: they can declare
+#' expected record contexts that continue into row-started assessment even when
+#' those IDs have no matching rows in `data`.
+#'
 #' By default, the returned report keeps only compact summaries, failed rows,
 #' project specification metadata, and diagnostics. Set `details = TRUE` when
 #' row-level check tables are needed for debugging or regression tests.
@@ -71,13 +76,13 @@
 #'   event/form vector applies to that form at the event and every selected
 #'   repeat instance for that form. A nested event/form/instance list applies
 #'   only to the named repeat instance. Omitted event, form, or instance entries
-#'   use the default eligibility created by `data`, `forms`, `events`, and
-#'   `instances`. Values must contain at least one non-blank record ID; `NULL`,
-#'   empty, `NA`, and blank values are not allowed inside `records`. Supplied
-#'   IDs are normalized to character values and are not checked through a live
-#'   REDCap record export. IDs not present in `data` are allowed and can create
-#'   upstream row-started failures. Defaults to `NULL`, which means `records`
-#'   does not restrict any event/form/instance context.
+#'   use the default eligibility created by `data`, `forms`, `events`,
+#'   `instances`, and `ignore_ids`. Values must contain at least one non-blank
+#'   record ID; `NULL`, empty, `NA`, and blank values are not allowed inside
+#'   `records`. Supplied IDs are normalized to character values and are not
+#'   checked through a live REDCap record export. IDs not present in `data` are
+#'   allowed and can create upstream row-started failures. Defaults to `NULL`,
+#'   which means `records` does not restrict any event/form/instance context.
 #' @param required_fields Logical scalar. When `TRUE`, only fields marked as
 #'   required in the REDCap metadata `required_field` column are assessed. When
 #'   `FALSE`, all fields on the form are assessed after `exclude_types` and
@@ -128,7 +133,9 @@
 #'   \item{`spec`}{Normalized report context, including requested forms,
 #'     events, labels, record eligibility, unused record specifications,
 #'     instances, ignored fields/IDs, REDCap ID column, system fields, project
-#'     cache, and total eligible record count.}
+#'     cache, and total eligible record count. `spec$record_eligibility` always
+#'     contains every final assessed record/event/form/repeat-instance context,
+#'     including when `records` is omitted.}
 #'   \item{`diagnostics`}{Timing and row-count metadata useful for benchmarking
 #'     and troubleshooting.}
 #'   \item{`details`}{`NULL` by default. When `details = TRUE`, a list with
