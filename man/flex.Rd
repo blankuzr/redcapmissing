@@ -38,9 +38,11 @@ report as a \code{flextable} for reporting workflows.
 \details{
 \code{flex()} is a display wrapper around \code{\link[=tidy.redcapmissing]{tidy.redcapmissing()}}. It preserves
 one row per validation summary context, applies REDCap event and form labels
-for display, and formats passed/failed counts with percentages. The optional
-\code{events}, \code{forms}, and \code{validation_check} arguments filter by raw values
-present in \code{tidy(x)} before labels are applied.
+for display, and formats passed/failed counts with percentages. Each optional
+\code{events}, \code{forms}, or \code{validation_check} filter must contain raw values
+present in the corresponding \code{tidy(x)} column. Multiple filters are applied
+by intersection before labels are added. Unknown values and a valid filter
+combination that produces no validation rows are errors.
 
 Use \code{flex_event_forms()} for a reduced event/form report with event and
 repeat-instance started/due counts plus \verb{Form Incomplete},

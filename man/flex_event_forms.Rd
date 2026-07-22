@@ -15,8 +15,9 @@ flex_event_forms(x, missing_threshold = 0.1, ...)
 \item{missing_threshold}{A finite numeric scalar from \code{0} through \code{1};
 defaults to \code{0.10}. Below \code{1}, contexts whose unrounded effective missing
 fraction is strictly greater than the cutoff contribute to the threshold
-column. At \code{1}, contexts whose effective fraction equals \code{1} contribute to
-\verb{Form = 100\% Missing}.}
+column, whose heading prints the cutoff percentage without unnecessary
+trailing zeros. At \code{1}, contexts whose effective fraction equals \code{1}
+contribute to \verb{Form = 100\% Missing}.}
 
 \item{...}{Additional arguments passed to methods; currently unused by the
 \code{redcapmissing} method.}
@@ -54,7 +55,10 @@ assessed N for that same context: \code{event-row-started} for non-repeat
 longitudinal rows and \code{instance-row-started} for repeat rows. Missing or
 invalid exact row-started denominators are treated as broken report objects.
 Non-longitudinal reports use \verb{Total N} as the display-only row-started
-denominator for the synthetic \verb{Single event} display row.
+denominator for the synthetic \verb{Single event} display row. Because the
+denominator follows exact \code{record_eligibility}, forms under the same event
+can have different assessed Ns when \code{records}, event selection, or repeat
+context gives them different eligible record contexts.
 
 \verb{Form Not Started} uses that same denominator and counts a record context
 once when an applicable \code{event-row-started}, \code{instance-row-started}, or
@@ -67,6 +71,9 @@ started form with no applicable field checks has an effective fraction of
 \code{1}, the comparison is strict and unrounded, so exactly 10\% does not count
 at the default cutoff. At a cutoff of \code{1}, the column changes to
 \verb{Form = 100\% Missing} and counts contexts whose effective fraction is \code{1}.
+Below \code{1}, the heading prints the cutoff percentage without unnecessary
+trailing zeros; for example, \code{missing_threshold = 0.125} produces
+\verb{Form >12.5\% Missing}.
 \verb{Form Not Started} and the threshold column display \verb{N/D (\%)} on form and
 \code{All} rows; event-header cells are blank.
 

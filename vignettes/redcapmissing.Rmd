@@ -11,6 +11,10 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
+default_output_hook <- knitr::knit_hooks$get("output")
+knitr::knit_hooks$set(output = function(x, options) {
+  default_output_hook(gsub("[[:blank:]]+(?=\\r?\\n|$)", "", x, perl = TRUE), options)
+})
 library(redcapmissing)
 ```
 
@@ -225,6 +229,12 @@ and `ignore_ids`. Empty, missing, `NULL`, and blank-only record values are
 errors. To remove an event from assessment entirely, exclude it with `events`
 rather than using an empty `records` entry.
 
+Every report stores `spec$record_eligibility` with one row for each final
+assessed record/event/form/repeat-instance context, even when `records` is
+omitted. If filtering leaves no assessable record IDs, `find_missing()` stops.
+Explicit `records` entries are the exception because they can declare expected
+contexts whose absent data rows should fail a row-started check.
+
 ```{r}
 staged_metadata <- dplyr::bind_rows(
   meta_row("record_id", "demographics", required = "y"),
@@ -371,9 +381,11 @@ html <- flex_html(ft)
 ```
 
 `flex()` displays the canonical checks with human-readable event, form, and
-repeat labels. Its `events`, `forms`, and `validation_check` arguments use raw
-values from `tidy(report)` to filter rows before labels are applied. `tidy()`
-and `report$summary` keep the canonical hyphenated `validation_check` values.
+repeat labels. Its `events`, `forms`, and `validation_check` arguments must use
+raw values present in the corresponding `tidy(report)` columns. Multiple
+filters are applied by intersection before labels are added. Unknown values and
+a combination that produces no validation rows are errors. `tidy()` and
+`report$summary` keep the canonical hyphenated `validation_check` values.
 `flex_event_forms()` returns a reduced event/form table with an `All` summary
 row, event started/due counts in the N column, and three
 form-opportunity metrics nested under each event. A form row's
@@ -384,8 +396,10 @@ missing fields in one record context count once. Its denominator is the exact
 row-started assessed N for that context:
 `event-row-started` for non-repeat longitudinal rows, `instance-row-started`
 for repeat rows, and `Total N` for the display-only non-longitudinal
-`Single event` row. `Form Not Started` uses the same denominator and counts
-each context once when an applicable `event-row-started`,
+`Single event` row. Forms under the same event can therefore have different
+assessed Ns when final record eligibility differs because of `records`, event
+selection, or repeat context. `Form Not Started` uses the same denominator and
+counts each context once when an applicable `event-row-started`,
 `instance-row-started`, or `form-started` check fails. The dynamic
 `Form >10% Missing` column treats a start-check failure as 100% missing;
 otherwise it uses failed divided by assessed `field-complete` checks after the
@@ -394,12 +408,14 @@ below 1, the comparison uses the unrounded fraction and is strictly greater
 than `missing_threshold`, so exactly 10% does not count at the default. At
 `missing_threshold = 1`, the heading becomes `Form = 100% Missing` and
 contexts with 100% effective missingness count. A started form with no
-applicable field checks has a 0% effective fraction. `Form Not Started` and the
-threshold column display N/D (%), and the `All` row sums shown form
-opportunities without deduplicating records across forms. Repeat form rows show
-repeat-instance started/due counts in the N column, while non-repeat form rows
-leave that cell blank. Projects whose REDCap record ID field has another name
-still produce populated event and form rows.
+applicable field checks has a 0% effective fraction. Other headings print the
+cutoff without unnecessary trailing zeros, so `missing_threshold = 0.125`
+produces `Form >12.5% Missing`. `Form Not Started` and the threshold column
+display N/D (%), and the `All` row sums shown form opportunities without
+deduplicating records across forms. Repeat form rows show repeat-instance
+started/due counts in the N column, while non-repeat form rows leave that cell
+blank. Projects whose REDCap record ID field has another name still produce
+populated event and form rows.
 The public `validation_level` values are `event:form` and
 `event:form:instance`. For another cutoff, pass a fraction such as
 `flex_event_forms(report, missing_threshold = 0.125)`. Reports created before

@@ -609,6 +609,13 @@ entries use the default eligibility implied by <code>data</code>,
 blank-only record values are errors. To remove an event from assessment
 entirely, exclude it with <code>events</code> rather than using an empty
 <code>records</code> entry.</p>
+<p>Every report stores <code>spec$record_eligibility</code> with one row
+for each final assessed record/event/form/repeat-instance context, even
+when <code>records</code> is omitted. If filtering leaves no assessable
+record IDs, <code>find_missing()</code> stops. Explicit
+<code>records</code> entries are the exception because they can declare
+expected contexts whose absent data rows should fail a row-started
+check.</p>
 <pre class="r"><code>staged_metadata &lt;- dplyr::bind_rows(
   meta_row(&quot;record_id&quot;, &quot;demographics&quot;, required = &quot;y&quot;),
   meta_row(&quot;demographics_started&quot;, &quot;demographics&quot;, required = &quot;y&quot;),
@@ -647,13 +654,14 @@ staged_report &lt;- find_missing(
 
 staged_report$spec$record_eligibility
 #&gt; # A tibble: 5 × 6
-#&gt;   record_id redcap_event_name form         redcap_repeat_instrument redcap_repeat_instance eligibility_source
-#&gt;   &lt;chr&gt;     &lt;chr&gt;             &lt;chr&gt;        &lt;chr&gt;                    &lt;chr&gt;                  &lt;chr&gt;
-#&gt; 1 record_a  event_b           surgery      &quot;&quot;                       &quot;&quot;                     records_event
-#&gt; 2 record_b  event_b           surgery      &quot;&quot;                       &quot;&quot;                     records_event
-#&gt; 3 record_b  event_c           surgery      &quot;&quot;                       &quot;&quot;                     records_form
-#&gt; 4 record_a  event_a           demographics &quot;&quot;                       &quot;&quot;                     records_event
-#&gt; 5 record_b  event_a           demographics &quot;&quot;                       &quot;&quot;                     records_event
+#&gt;   record_id redcap_event_name form         redcap_repeat_instrument
+#&gt;   &lt;chr&gt;     &lt;chr&gt;             &lt;chr&gt;        &lt;chr&gt;
+#&gt; 1 record_a  event_b           surgery      &quot;&quot;
+#&gt; 2 record_b  event_b           surgery      &quot;&quot;
+#&gt; 3 record_b  event_c           surgery      &quot;&quot;
+#&gt; 4 record_a  event_a           demographics &quot;&quot;
+#&gt; 5 record_b  event_a           demographics &quot;&quot;
+#&gt; # ℹ 2 more variables: redcap_repeat_instance &lt;chr&gt;, eligibility_source &lt;chr&gt;
 
 staged_summary &lt;- tidy(staged_report)
 staged_summary[
@@ -759,11 +767,12 @@ canonical validation metadata. Repeat context columns are shown only
 when the report contains repeat contexts:</p>
 <pre class="r"><code>tidy(report)
 #&gt; # A tibble: 3 × 9
-#&gt;   redcap_event_name form          validation_level validation_check  assessed passed failed pass_rate fail_rate
-#&gt;   &lt;chr&gt;             &lt;chr&gt;         &lt;chr&gt;            &lt;chr&gt;                &lt;int&gt;  &lt;int&gt;  &lt;int&gt;     &lt;dbl&gt;     &lt;dbl&gt;
-#&gt; 1 &quot;&quot;                baseline_form event:form       event-row-started        0      0      0     0         0
-#&gt; 2 &quot;&quot;                baseline_form event:form       form-started             2      2      0     1         0
-#&gt; 3 &quot;&quot;                baseline_form event:form       field-complete           7      6      1     0.857     0.143</code></pre>
+#&gt;   redcap_event_name form       validation_level validation_check assessed passed
+#&gt;   &lt;chr&gt;             &lt;chr&gt;      &lt;chr&gt;            &lt;chr&gt;               &lt;int&gt;  &lt;int&gt;
+#&gt; 1 &quot;&quot;                baseline_… event:form       event-row-start…        0      0
+#&gt; 2 &quot;&quot;                baseline_… event:form       form-started            2      2
+#&gt; 3 &quot;&quot;                baseline_… event:form       field-complete          7      6
+#&gt; # ℹ 3 more variables: failed &lt;int&gt;, pass_rate &lt;dbl&gt;, fail_rate &lt;dbl&gt;</code></pre>
 <p>For reporting workflows, optional formatting helpers are
 available:</p>
 <pre class="r"><code>ft &lt;- flex(report)
@@ -772,9 +781,11 @@ event_form_ft &lt;- flex_event_forms(report)
 html &lt;- flex_html(ft)</code></pre>
 <p><code>flex()</code> displays the canonical checks with human-readable
 event, form, and repeat labels. Its <code>events</code>,
-<code>forms</code>, and <code>validation_check</code> arguments use raw
-values from <code>tidy(report)</code> to filter rows before labels are
-applied. <code>tidy()</code> and <code>report$summary</code> keep the
+<code>forms</code>, and <code>validation_check</code> arguments must use
+raw values present in the corresponding <code>tidy(report)</code>
+columns. Multiple filters are applied by intersection before labels are
+added. Unknown values and a combination that produces no validation rows
+are errors. <code>tidy()</code> and <code>report$summary</code> keep the
 canonical hyphenated <code>validation_check</code> values.
 <code>flex_event_forms()</code> returns a reduced event/form table with
 an <code>All</code> summary row, event started/due counts in the N
@@ -788,28 +799,33 @@ denominator is the exact row-started assessed N for that context:
 <code>event-row-started</code> for non-repeat longitudinal rows,
 <code>instance-row-started</code> for repeat rows, and
 <code>Total N</code> for the display-only non-longitudinal
-<code>Single event</code> row. <code>Form Not Started</code> uses the
-same denominator and counts each context once when an applicable
-<code>event-row-started</code>, <code>instance-row-started</code>, or
-<code>form-started</code> check fails. The dynamic
-<code>Form &gt;10% Missing</code> column treats a start-check failure as
-100% missing; otherwise it uses failed divided by assessed
-<code>field-complete</code> checks after the record, field, branching,
-and checkbox-root rules are applied. For cutoffs below 1, the comparison
-uses the unrounded fraction and is strictly greater than
+<code>Single event</code> row. Forms under the same event can therefore
+have different assessed Ns when final record eligibility differs because
+of <code>records</code>, event selection, or repeat context.
+<code>Form Not Started</code> uses the same denominator and counts each
+context once when an applicable <code>event-row-started</code>,
+<code>instance-row-started</code>, or <code>form-started</code> check
+fails. The dynamic <code>Form &gt;10% Missing</code> column treats a
+start-check failure as 100% missing; otherwise it uses failed divided by
+assessed <code>field-complete</code> checks after the record, field,
+branching, and checkbox-root rules are applied. For cutoffs below 1, the
+comparison uses the unrounded fraction and is strictly greater than
 <code>missing_threshold</code>, so exactly 10% does not count at the
 default. At <code>missing_threshold = 1</code>, the heading becomes
 <code>Form = 100% Missing</code> and contexts with 100% effective
 missingness count. A started form with no applicable field checks has a
-0% effective fraction. <code>Form Not Started</code> and the threshold
-column display N/D (%), and the <code>All</code> row sums shown form
-opportunities without deduplicating records across forms. Repeat form
-rows show repeat-instance started/due counts in the N column, while
-non-repeat form rows leave that cell blank. Projects whose REDCap record
-ID field has another name still produce populated event and form rows.
-The public <code>validation_level</code> values are
-<code>event:form</code> and <code>event:form:instance</code>. For
-another cutoff, pass a fraction such as
+0% effective fraction. Other headings print the cutoff without
+unnecessary trailing zeros, so <code>missing_threshold = 0.125</code>
+produces <code>Form &gt;12.5% Missing</code>.
+<code>Form Not Started</code> and the threshold column display N/D (%),
+and the <code>All</code> row sums shown form opportunities without
+deduplicating records across forms. Repeat form rows show
+repeat-instance started/due counts in the N column, while non-repeat
+form rows leave that cell blank. Projects whose REDCap record ID field
+has another name still produce populated event and form rows. The public
+<code>validation_level</code> values are <code>event:form</code> and
+<code>event:form:instance</code>. For another cutoff, pass a fraction
+such as
 <code>flex_event_forms(report, missing_threshold = 0.125)</code>.
 Reports created before <code>redcapmissing</code> 5.2.0 must be
 regenerated with <code>find_missing()</code>.</p>

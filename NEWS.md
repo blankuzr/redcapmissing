@@ -1,3 +1,11 @@
+# redcapmissing 5.2.1
+
+## 2026-07-22
+
+- Aligned current help, README, and vignette documentation with the existing
+  record-eligibility, empty-assessment, `flex()` filter-intersection,
+  exact-context denominator, and missing-threshold heading contracts.
+
 # redcapmissing 5.2.0
 
 ## 2026-07-20

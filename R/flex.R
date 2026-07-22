@@ -7,9 +7,11 @@
 #' @details
 #' `flex()` is a display wrapper around [tidy.redcapmissing()]. It preserves
 #' one row per validation summary context, applies REDCap event and form labels
-#' for display, and formats passed/failed counts with percentages. The optional
-#' `events`, `forms`, and `validation_check` arguments filter by raw values
-#' present in `tidy(x)` before labels are applied.
+#' for display, and formats passed/failed counts with percentages. Each optional
+#' `events`, `forms`, or `validation_check` filter must contain raw values
+#' present in the corresponding `tidy(x)` column. Multiple filters are applied
+#' by intersection before labels are added. Unknown values and a valid filter
+#' combination that produces no validation rows are errors.
 #'
 #' Use `flex_event_forms()` for a reduced event/form report with event and
 #' repeat-instance started/due counts plus `Form Incomplete`,

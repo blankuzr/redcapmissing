@@ -53,13 +53,13 @@ requested form and selected repeat instance at that event. A nested
 event/form vector applies to that form at the event and every selected
 repeat instance for that form. A nested event/form/instance list applies
 only to the named repeat instance. Omitted event, form, or instance entries
-use the default eligibility created by \code{data}, \code{forms}, \code{events}, and
-\code{instances}. Values must contain at least one non-blank record ID; \code{NULL},
-empty, \code{NA}, and blank values are not allowed inside \code{records}. Supplied
-IDs are normalized to character values and are not checked through a live
-REDCap record export. IDs not present in \code{data} are allowed and can create
-upstream row-started failures. Defaults to \code{NULL}, which means \code{records}
-does not restrict any event/form/instance context.}
+use the default eligibility created by \code{data}, \code{forms}, \code{events},
+\code{instances}, and \code{ignore_ids}. Values must contain at least one non-blank
+record ID; \code{NULL}, empty, \code{NA}, and blank values are not allowed inside
+\code{records}. Supplied IDs are normalized to character values and are not
+checked through a live REDCap record export. IDs not present in \code{data} are
+allowed and can create upstream row-started failures. Defaults to \code{NULL},
+which means \code{records} does not restrict any event/form/instance context.}
 
 \item{required_fields}{Logical scalar. When \code{TRUE}, only fields marked as
 required in the REDCap metadata \code{required_field} column are assessed. When
@@ -118,7 +118,9 @@ event ID for longitudinal projects; otherwise it is \code{NA}. Use
 \item{\code{spec}}{Normalized report context, including requested forms,
 events, labels, record eligibility, unused record specifications,
 instances, ignored fields/IDs, REDCap ID column, system fields, project
-cache, and total eligible record count.}
+cache, and total eligible record count. \code{spec$record_eligibility} always
+contains every final assessed record/event/form/repeat-instance context,
+including when \code{records} is omitted.}
 \item{\code{diagnostics}}{Timing and row-count metadata useful for benchmarking
 and troubleshooting.}
 \item{\code{details}}{\code{NULL} by default. When \code{details = TRUE}, a list with
@@ -162,6 +164,11 @@ validation rows with:
 
 The checks are assessed in registry order. Failed checks remove the
 record/event/repeat/form context from every downstream assessment.
+
+After record filtering, \code{find_missing()} stops when no record IDs remain
+assessable. Explicit \code{records} entries are the exception: they can declare
+expected record contexts that continue into row-started assessment even when
+those IDs have no matching rows in \code{data}.
 
 By default, the returned report keeps only compact summaries, failed rows,
 project specification metadata, and diagnostics. Set \code{details = TRUE} when
