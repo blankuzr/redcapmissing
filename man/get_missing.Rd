@@ -57,20 +57,13 @@ optional metadata; raw context values remain in the columns.
 context and validation check.
 }
 \details{
-Row-started and form-started failures do not describe an individual field,
-so their field metadata columns contain \code{NA}. The \code{url} column remains a raw
-REDCap Data Entry URL when one is available and otherwise contains \code{NA}.
+Filtering follows \code{\link[=get_summary]{get_summary()}}: raw, case-sensitive filters are combined
+by intersection and only subset the completed report. Event and form values
+are validated against its configured scope, and validation checks against
+\code{\link[=registry]{registry()}}. Valid filters with no failures return a zero-row tibble with
+the documented schema.
 
-Filters use raw, case-sensitive values and are combined by intersection.
-They only subset the completed report; they do not rerun validation.
-Duplicate filter values are treated as a set. Event and form filters are
-validated against the report's configured scope, including configured
-contexts with no failed rows. Validation checks are validated against
-\code{\link[=registry]{registry()}}. A valid filter, or combination of filters, with no matching
-failures returns a zero-row tibble with the documented schema.
-
-\code{get_missing()} preserves the row order and values stored in
-\code{report$missing}.
+Output preserves the failure-row order from the completed report.
 }
 \examples{
 \dontrun{

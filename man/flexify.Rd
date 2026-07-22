@@ -13,13 +13,11 @@ documented columns.}
 }
 \value{
 A \code{flextable} object with one display column per retained input
-column. This function requires the optional \code{flextable} package.
+column.
 }
 \description{
 \code{flexify()} turns a tibble returned by \code{\link[=get_summary]{get_summary()}} or \code{\link[=get_missing]{get_missing()}}
-into a presentation-ready \code{flextable}. The tibble may be filtered, reordered,
-grouped, or reduced to a non-empty subset of its documented columns before
-formatting.
+into a presentation-ready \code{flextable}.
 }
 \details{
 Column names and storage types must remain compatible with either the
@@ -38,6 +36,8 @@ Input row and column order are preserved. If both repeat-context columns are
 present and entirely blank, they are omitted together when at least one other
 display column remains. \code{flexify()} formats an ungrouped copy and does not
 modify \code{x}.
+
+This function requires the optional \code{flextable} package.
 }
 \examples{
 \dontshow{if (requireNamespace("flextable", quietly = TRUE)) withAutoprint(\{ # examplesIf}

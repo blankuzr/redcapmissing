@@ -6,30 +6,15 @@
 #' context and validation check.
 #'
 #' @details
-#' Row-started and form-started failures do not describe an individual field,
-#' so their field metadata columns contain `NA`. The `url` column remains a raw
-#' REDCap Data Entry URL when one is available and otherwise contains `NA`.
+#' Filtering follows [get_summary()]: raw, case-sensitive filters are combined
+#' by intersection and only subset the completed report. Event and form values
+#' are validated against its configured scope, and validation checks against
+#' [registry()]. Valid filters with no failures return a zero-row tibble with
+#' the documented schema.
 #'
-#' Filters use raw, case-sensitive values and are combined by intersection.
-#' They only subset the completed report; they do not rerun validation.
-#' Duplicate filter values are treated as a set. Event and form filters are
-#' validated against the report's configured scope, including configured
-#' contexts with no failed rows. Validation checks are validated against
-#' [registry()]. A valid filter, or combination of filters, with no matching
-#' failures returns a zero-row tibble with the documented schema.
+#' Output preserves the failure-row order from the completed report.
 #'
-#' `get_missing()` preserves the row order and values stored in
-#' `report$missing`.
-#'
-#' @param report A `redcapmissing` object created by [find_missing()].
-#' @param validation_check `NULL`, or a non-empty character vector containing
-#'   raw, canonical validation-check codes from [registry()]. `NULL` keeps all
-#'   checks.
-#' @param events `NULL`, or a non-empty character vector containing raw REDCap
-#'   `redcap_event_name` values configured in the report. `NULL` keeps all
-#'   events.
-#' @param forms `NULL`, or a non-empty character vector containing raw REDCap
-#'   instrument/form names configured in the report. `NULL` keeps all forms.
+#' @inheritParams get_summary
 #'
 #' @return A tibble containing failed validation rows with these columns:
 #' \describe{

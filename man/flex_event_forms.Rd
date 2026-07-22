@@ -13,23 +13,14 @@ flex_event_forms(x, missing_threshold = 0.1, ...)
 \item{x}{A \code{redcapmissing} object created by \code{\link[=find_missing]{find_missing()}}.}
 
 \item{missing_threshold}{A finite numeric scalar from \code{0} through \code{1};
-defaults to \code{0.10}. Below \code{1}, contexts whose unrounded effective missing
-fraction is strictly greater than the cutoff contribute to the threshold
-column, whose heading prints the cutoff percentage without unnecessary
-trailing zeros. At \code{1}, contexts whose effective fraction equals \code{1}
-contribute to \verb{Form = 100\% Missing}.}
+defaults to \code{0.10}. See Details for the strict cutoff rule.}
 
 \item{...}{Additional arguments passed to methods; currently unused by the
 \code{redcapmissing} method.}
 }
 \value{
-A \code{flextable} object with event header rows and form rows nested
-under each event. Repeat instrument and instance columns are
-included only when the report contains repeat context. Repeat form rows
-show \code{instance-row-started} as \verb{started/due (\%)} in the N column;
-non-repeat form rows leave the N cell blank. Form and \code{All} rows display
-\verb{Form Not Started} and the dynamic missing-threshold metric as \verb{N/D (\%)}.
-This function requires the optional \code{flextable} and \code{glue} packages.
+A \code{flextable} object containing an \code{All} row, event headers, and form
+rows. Repeat columns appear only when the report contains repeat context.
 }
 \description{
 \code{flex_event_forms()} formats a REDCap missingness report as a reduced
@@ -38,47 +29,46 @@ counts plus form-level incomplete, not-started, and configurable missingness
 threshold metrics.
 }
 \details{
-The table is a reporting reduction of \code{\link[=get_summary]{get_summary()}} plus report
-metadata. The \code{N (started/due)} column shows \code{event-row-started} as
-\verb{started/due (\%)}; non-longitudinal reports use a synthetic \verb{Single event}
-row with \verb{Total N/Total N}. If multiple
-\code{event-row-started} summary rows are present for the same event, they must
-agree on \code{passed} and \code{assessed} counts. The first body row summarizes all
-displayed form opportunities by summing the shown form-row numerators and
-denominators without deduplicating records across forms. In this reduced
-table, \verb{Form Incomplete} shows unique failed record contexts with
-\code{event-row-started},
-\code{instance-row-started}, \code{form-started}, or \code{field-complete} failures for the
-exact event/form/repeat context. Multiple missing fields in the same record
-context count once. The form-row denominator is the exact row-started
-assessed N for that same context: \code{event-row-started} for non-repeat
-longitudinal rows and \code{instance-row-started} for repeat rows. Missing or
-invalid exact row-started denominators are treated as broken report objects.
-Non-longitudinal reports use \verb{Total N} as the display-only row-started
-denominator for the synthetic \verb{Single event} display row. Because the
-denominator follows exact \code{record_eligibility}, forms under the same event
-can have different assessed Ns when \code{records}, event selection, or repeat
-context gives them different eligible record contexts.
+The form-row denominator is the row-started assessed count for the exact
+event/form/repeat context: \code{event-row-started} for non-repeat longitudinal
+rows and \code{instance-row-started} for repeat rows. Non-longitudinal reports use
+\verb{Total N} for their synthetic \verb{Single event} row. Missing or invalid exact
+denominators indicate a broken report. Because denominators follow exact
+record eligibility, forms under one event may have different assessed Ns.
 
-\verb{Form Not Started} uses that same denominator and counts a record context
-once when an applicable \code{event-row-started}, \code{instance-row-started}, or
-\code{form-started} check fails. The dynamically named threshold column treats a
-start-check failure as an effective missing fraction of \code{1}. For a started
-form it uses failed over assessed \code{field-complete} checks after record
-eligibility, field filters, branching logic, and checkbox-root handling. A
-started form with no applicable field checks has an effective fraction of
-\code{0}. For cutoffs below
-\code{1}, the comparison is strict and unrounded, so exactly 10\% does not count
-at the default cutoff. At a cutoff of \code{1}, the column changes to
-\verb{Form = 100\% Missing} and counts contexts whose effective fraction is \code{1}.
-Below \code{1}, the heading prints the cutoff percentage without unnecessary
-trailing zeros; for example, \code{missing_threshold = 0.125} produces
-\verb{Form >12.5\% Missing}.
-\verb{Form Not Started} and the threshold column display \verb{N/D (\%)} on form and
-\code{All} rows; event-header cells are blank.
+The reduced table uses these metrics:
+\describe{
+\item{\code{N (started/due)}}{Event headers show \code{event-row-started} as
+\verb{started/due (\\\%)}; duplicate summary rows for an event must agree. Repeat
+form rows show \code{instance-row-started} the same way, while non-repeat form
+rows are blank. A synthetic \verb{Single event} header shows
+\verb{Total N/Total N}.}
+\item{\verb{Form Incomplete}}{The number of unique record contexts with an
+\code{event-row-started}, \code{instance-row-started}, \code{form-started}, or
+\code{field-complete} failure. Multiple failed fields in one context count
+once.}
+\item{\verb{Form Not Started}}{The number of unique record contexts with an
+applicable \code{event-row-started}, \code{instance-row-started}, or \code{form-started}
+failure.}
+\item{Missing-threshold column}{A start-check failure has an effective
+missing fraction of \code{1}. For a started form, the fraction is failed over
+assessed \code{field-complete} checks after record eligibility, field filters,
+branching logic, and checkbox-root handling; no applicable field checks
+gives a fraction of \code{0}. Below \code{1}, the unrounded fraction must be
+strictly greater than \code{missing_threshold}. At \code{1}, the metric counts
+fractions equal to \code{1} and is headed \verb{Form = 100\\\% Missing}. Other
+headings omit unnecessary trailing zeros, such as
+\verb{Form >12.5\\\% Missing}.}
+}
+
+\verb{Form Not Started} and the threshold metric display \verb{N/D (\%)} on form and
+\code{All} rows. The \code{All} row sums displayed form opportunities without
+deduplicating records across forms; event-header cells for these metrics are
+blank.
 
 Reports created before \code{redcapmissing} 5.2.0 must be regenerated with
 \code{\link[=find_missing]{find_missing()}}, including reports that retain detailed validation rows.
+This function requires the optional \code{flextable} and \code{glue} packages.
 }
 \examples{
 \dontrun{

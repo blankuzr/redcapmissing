@@ -375,53 +375,12 @@ REDCap credentials.</p>
 #&gt; | event:form / event:form:instance   | form-started          | form has data                   |
 #&gt; | event:form / event:form:instance   | field-complete        | field complete                  |
 #&gt; +------------------------------------+-----------------------+---------------------------------+</code></pre>
-<p>The checks are organized by validation level:</p>
-<ul>
-<li><code>event:form / event:form:instance</code>: one contextual
-event/form validation-level. Report rows use <code>event:form</code> for
-non-repeating contexts and <code>event:form:instance</code> for
-repeat-instance contexts.</li>
-</ul>
-<p><code>event-row-started</code>, <code>instance-row-started</code>,
-<code>form-started</code>, and <code>field-complete</code> failures
-remove that context from downstream assessment.</p>
-<table>
-<colgroup>
-<col width="33%" />
-<col width="33%" />
-<col width="33%" />
-</colgroup>
-<thead>
-<tr class="header">
-<th>validation_level</th>
-<th>validation_check</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>event:form / event:form:instance</td>
-<td><code>event-row-started</code></td>
-<td>The expected REDCap event row exists in the export.</td>
-</tr>
-<tr class="even">
-<td>event:form / event:form:instance</td>
-<td><code>instance-row-started</code></td>
-<td>The expected REDCap repeat instance row exists in the export.</td>
-</tr>
-<tr class="odd">
-<td>event:form / event:form:instance</td>
-<td><code>form-started</code></td>
-<td>The exported form context has at least one entered data-capturing
-field.</td>
-</tr>
-<tr class="even">
-<td>event:form / event:form:instance</td>
-<td><code>field-complete</code></td>
-<td>field complete</td>
-</tr>
-</tbody>
-</table>
+<p>The four checks run in registry order. Report rows use
+<code>event:form</code> for non-repeating contexts and
+<code>event:form:instance</code> for repeat-instance contexts; any
+failed check removes that context from downstream assessment. See
+<code>?registry</code> for the complete taxonomy and column
+definitions.</p>
 </div>
 <div id="synthetic-redcap-helpers" class="section level2">
 <h2>Synthetic REDCap helpers</h2>
@@ -767,53 +726,10 @@ instance <code>1</code> and warns once.</p>
 </div>
 <div id="inspecting-results" class="section level2">
 <h2>Inspecting results</h2>
-<p>Use <code>get_summary()</code> for validation counts and rates and
-<code>get_missing()</code> for failed record and field rows:</p>
-<pre class="r"><code>get_summary(
-  report,
-  validation_check = NULL,
-  events = NULL,
-  forms = NULL
-)
-
-get_missing(
-  report,
-  validation_check = NULL,
-  events = NULL,
-  forms = NULL
-)</code></pre>
-<p><code>NULL</code> keeps all values for a filter; otherwise it must be
-a nonempty character vector without <code>NA</code>, blank, or
-whitespace-only entries. Values are raw and case-sensitive. Both
-accessors deduplicate filter values, apply multiple filters by
-intersection, and preserve stored row order. Validation checks are
-validated against <code>registry()</code>; events and forms are
-validated against the report’s configured scope rather than only rows
-with failures. Invalid or unknown values error. Valid filters with no
-matching rows return a correctly typed zero-row tibble. There is no
-accessor <code>instances</code> argument:
-<code>find_missing(instances = ...)</code> declares expected repeat
-contexts, while exact instances can be filtered from
-<code>redcap_repeat_instance</code> afterward.</p>
-<p><code>get_summary()</code> always returns 11 columns:</p>
-<pre class="text"><code>redcap_event_name, form,
-redcap_repeat_instrument, redcap_repeat_instance,
-validation_level, validation_check,
-assessed, passed, failed, pass_rate, fail_rate</code></pre>
-<p><code>get_missing()</code> always returns 12 columns:</p>
-<pre class="text"><code>record_id,
-redcap_event_name, redcap_repeat_instrument, redcap_repeat_instance,
-validation_context, form, validation_check,
-field_name, field_label, field_type, branching_logic, url</code></pre>
-<p>The three raw context columns are present even in non-longitudinal,
-non-repeating, and zero-row results, with <code>&quot;&quot;</code> for
-inapplicable context. This stable shape supports ordinary filtering
-after extraction, including by record or exact repeat instance.
-Accessors never recompute the report denominators. They also attach a
-<code>redcapmissing_labels</code> attribute containing event and form
-labels for presentation; the raw data values do not change, and
-presentation falls back to them when later manipulation removes the
-attribute.</p>
+<p>Use <code>get_summary()</code> to review validation counts and rates.
+Use <code>get_missing()</code> to identify the failed record or field
+contexts that need follow-up. Both accessors can focus the report by
+validation check, event, or form.</p>
 <pre class="r"><code>summary_result &lt;- get_summary(report)
 summary_result
 #&gt; # A tibble: 3 × 11
@@ -825,83 +741,31 @@ summary_result
 #&gt; # ℹ abbreviated name: ¹​redcap_repeat_instrument
 #&gt; # ℹ 7 more variables: validation_level &lt;chr&gt;, validation_check &lt;chr&gt;,
 #&gt; #   assessed &lt;int&gt;, passed &lt;int&gt;, failed &lt;int&gt;, pass_rate &lt;dbl&gt;,
-#&gt; #   fail_rate &lt;dbl&gt;</code></pre>
-<p>For reporting workflows, pass an accessor tibble to
-<code>flexify()</code>:</p>
-<pre class="r"><code>ft &lt;- flexify(summary_result)
+#&gt; #   fail_rate &lt;dbl&gt;
 
-field_summary &lt;- get_summary(
+missing_result &lt;- get_missing(
   report,
   validation_check = &quot;field-complete&quot;
 )
-field_ft &lt;- flexify(field_summary)
-
-missing_subset &lt;- get_missing(report)
-missing_subset &lt;- missing_subset[
-  missing_subset$record_id == &quot;r1&quot;,
-  c(&quot;record_id&quot;, &quot;form&quot;, &quot;field_name&quot;, &quot;url&quot;)
-]
-missing_ft &lt;- flexify(missing_subset)
-
-event_form_ft &lt;- flex_event_forms(report)
-html &lt;- flex_html(ft)</code></pre>
-<p><code>flexify()</code> has no additional arguments. It accepts any
-nonempty column subset, in any order, that is wholly compatible with one
-accessor schema, including shared-only subsets such as <code>form</code>
-and <code>validation_check</code>. It preserves row and column order and
-displays one output column per supplied column, with friendly headers,
-registry labels, event/form label metadata, one-decimal rates, blank
-<code>NA</code> cells, and hyperlinks for available URLs. If both repeat
-columns are supplied and entirely blank, they are suppressed together
-when another display column remains. The input tibble is not modified;
-added, renamed, or cross-schema columns are rejected.</p>
-<p>Version 6.0 removes <code>tidy()</code>,
-<code>tidy.redcapmissing()</code>, and the old report-input
-<code>flex()</code> helper, along with the <code>generics</code>
-dependency. Use <code>get_summary()</code> for summary rows and compose
-either accessor with <code>flexify()</code> for flextable output.</p>
-<p><code>flex_event_forms()</code> returns a reduced event/form table
-with an <code>All</code> summary row, event started/due counts in the N
-column, and three form-opportunity metrics nested under each event. A
-form row’s <code>Form Incomplete</code> numerator is the number of
-unique record contexts with a failed <code>event-row-started</code>,
-<code>instance-row-started</code>, <code>form-started</code>, or
-<code>field-complete</code> check for that exact event/form/repeat
-context. Multiple missing fields in one record context count once. Its
-denominator is the exact row-started assessed N for that context:
-<code>event-row-started</code> for non-repeat longitudinal rows,
-<code>instance-row-started</code> for repeat rows, and
-<code>Total N</code> for the display-only non-longitudinal
-<code>Single event</code> row. Forms under the same event can therefore
-have different assessed Ns when final record eligibility differs because
-of <code>records</code>, event selection, or repeat context.
-<code>Form Not Started</code> uses the same denominator and counts each
-context once when an applicable <code>event-row-started</code>,
-<code>instance-row-started</code>, or <code>form-started</code> check
-fails. The dynamic <code>Form &gt;10% Missing</code> column treats a
-start-check failure as 100% missing; otherwise it uses failed divided by
-assessed <code>field-complete</code> checks after the record, field,
-branching, and checkbox-root rules are applied. For cutoffs below 1, the
-comparison uses the unrounded fraction and is strictly greater than
-<code>missing_threshold</code>, so exactly 10% does not count at the
-default. At <code>missing_threshold = 1</code>, the heading becomes
-<code>Form = 100% Missing</code> and contexts with 100% effective
-missingness count. A started form with no applicable field checks has a
-0% effective fraction. Other headings print the cutoff without
-unnecessary trailing zeros, so <code>missing_threshold = 0.125</code>
-produces <code>Form &gt;12.5% Missing</code>.
-<code>Form Not Started</code> and the threshold column display N/D (%),
-and the <code>All</code> row sums shown form opportunities without
-deduplicating records across forms. Repeat form rows show
-repeat-instance started/due counts in the N column, while non-repeat
-form rows leave that cell blank. Projects whose REDCap record ID field
-has another name still produce populated event and form rows. The public
-<code>validation_level</code> values are <code>event:form</code> and
-<code>event:form:instance</code>. For another cutoff, pass a fraction
-such as
-<code>flex_event_forms(report, missing_threshold = 0.125)</code>.
-Reports created before <code>redcapmissing</code> 5.2.0 must be
-regenerated with <code>find_missing()</code>.</p>
+missing_result[, c(&quot;record_id&quot;, &quot;form&quot;, &quot;field_name&quot;, &quot;field_label&quot;)]
+#&gt; # A tibble: 1 × 4
+#&gt;   record_id form          field_name       field_label
+#&gt;   &lt;chr&gt;     &lt;chr&gt;         &lt;chr&gt;            &lt;chr&gt;
+#&gt; 1 r1        baseline_form conditional_note conditional_note</code></pre>
+<p>See <code>?get_summary</code> and <code>?get_missing</code> for their
+complete filtering and return contracts.</p>
+<p>For presentation, <code>flexify()</code> turns either accessor result
+into a flextable, while <code>flex_event_forms()</code> provides a
+compact event/form overview of due, started, and incomplete form
+opportunities:</p>
+<pre class="r"><code>summary_ft &lt;- flexify(summary_result)
+missing_ft &lt;- flexify(missing_result)
+event_form_ft &lt;- flex_event_forms(event_report)</code></pre>
+<p>Use the accessor tables for detailed review and
+<code>flex_event_forms()</code> for a high-level reporting view. See
+<code>?flexify</code> for compatible input shapes and formatting
+behavior, and <code>?flex_event_forms</code> for the complete metric and
+threshold definitions.</p>
 </div>
 
 

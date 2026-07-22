@@ -50,14 +50,11 @@ context stored in the completed report.
 }
 \details{
 Filters use raw, case-sensitive values and are combined by intersection.
-They only subset the completed report; they do not rerun validation or
-recalculate denominators. Duplicate filter values are treated as a set.
-
-Event and form filters are validated against the report's configured scope,
-including configured contexts with no matching summary rows. Validation
-checks are validated against \code{\link[=registry]{registry()}}. A valid filter, or combination
-of filters, with no matching rows returns a zero-row tibble with the
-documented schema.
+They subset the completed report without rerunning validation or recalculating
+denominators, and duplicate values are treated as a set. Event and form
+values are validated against the configured report scope; validation checks
+are validated against \code{\link[=registry]{registry()}}. Valid filters with no matching rows
+return a zero-row tibble with the documented schema.
 }
 \examples{
 \dontrun{

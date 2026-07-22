@@ -2,9 +2,7 @@
 #'
 #' @description
 #' `flexify()` turns a tibble returned by [get_summary()] or [get_missing()]
-#' into a presentation-ready `flextable`. The tibble may be filtered, reordered,
-#' grouped, or reduced to a non-empty subset of its documented columns before
-#' formatting.
+#' into a presentation-ready `flextable`.
 #'
 #' @details
 #' Column names and storage types must remain compatible with either the
@@ -24,12 +22,14 @@
 #' display column remains. `flexify()` formats an ungrouped copy and does not
 #' modify `x`.
 #'
+#' This function requires the optional `flextable` package.
+#'
 #' @param x A tibble returned by [get_summary()] or [get_missing()], optionally
 #'   filtered, grouped, reordered, or reduced to a non-empty subset of its
 #'   documented columns.
 #'
 #' @return A `flextable` object with one display column per retained input
-#'   column. This function requires the optional `flextable` package.
+#'   column.
 #'
 #' @examplesIf requireNamespace("flextable", quietly = TRUE)
 #' summary_rows <- tibble::tibble(
