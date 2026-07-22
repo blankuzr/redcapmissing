@@ -207,7 +207,7 @@ event_report <- find_missing(
   forms = "status_form"
 )
 
-tidy(event_report)[
+get_summary(event_report)[
   ,
   c("validation_level", "validation_check", "redcap_event_name", "assessed", "failed")
 ]
@@ -274,7 +274,7 @@ staged_report <- find_missing(
 
 staged_report$spec$record_eligibility
 
-staged_summary <- tidy(staged_report)
+staged_summary <- get_summary(staged_report)
 staged_summary[
   staged_summary$validation_check == "event-row-started",
   c("form", "redcap_event_name", "assessed", "failed")
@@ -340,6 +340,9 @@ get_missing(
   validation_check = "instance-row-started"
 )[, c(
   "record_id",
+  "redcap_event_name",
+  "redcap_repeat_instrument",
+  "redcap_repeat_instance",
   "validation_context",
   "form",
   "validation_check"
@@ -363,29 +366,103 @@ instance `1` and warns once.
 
 ## Inspecting results
 
-`tidy(report)` returns a raw context-first summary with canonical validation
-metadata. Repeat context columns are shown only when the report contains repeat
-contexts:
+Use `get_summary()` for validation counts and rates and `get_missing()` for
+failed record and field rows:
 
-```{r}
-tidy(report)
+```r
+get_summary(
+  report,
+  validation_check = NULL,
+  events = NULL,
+  forms = NULL
+)
+
+get_missing(
+  report,
+  validation_check = NULL,
+  events = NULL,
+  forms = NULL
+)
 ```
 
-For reporting workflows, optional formatting helpers are available:
+`NULL` keeps all values for a filter; otherwise it must be a nonempty character
+vector without `NA`, blank, or whitespace-only entries. Values are raw and
+case-sensitive. Both accessors deduplicate filter values, apply multiple
+filters by intersection, and preserve stored row order. Validation checks are
+validated against `registry()`; events and forms are
+validated against the report's configured scope rather than only rows with
+failures. Invalid or unknown values error. Valid filters with no matching rows
+return a correctly typed zero-row tibble. There is no accessor `instances`
+argument: `find_missing(instances = ...)` declares expected repeat contexts,
+while exact instances can be filtered from `redcap_repeat_instance` afterward.
+
+`get_summary()` always returns 11 columns:
+
+```text
+redcap_event_name, form,
+redcap_repeat_instrument, redcap_repeat_instance,
+validation_level, validation_check,
+assessed, passed, failed, pass_rate, fail_rate
+```
+
+`get_missing()` always returns 12 columns:
+
+```text
+record_id,
+redcap_event_name, redcap_repeat_instrument, redcap_repeat_instance,
+validation_context, form, validation_check,
+field_name, field_label, field_type, branching_logic, url
+```
+
+The three raw context columns are present even in non-longitudinal,
+non-repeating, and zero-row results, with `""` for inapplicable context. This
+stable shape supports ordinary filtering after extraction, including by record
+or exact repeat instance. Accessors never recompute the report denominators.
+They also attach a `redcapmissing_labels` attribute containing event and form
+labels for presentation; the raw data values do not change, and presentation
+falls back to them when later manipulation removes the attribute.
+
+```{r}
+summary_result <- get_summary(report)
+summary_result
+```
+
+For reporting workflows, pass an accessor tibble to `flexify()`:
 
 ```{r, eval = FALSE}
-ft <- flex(report)
-field_ft <- flex(report, validation_check = "field-complete")
+ft <- flexify(summary_result)
+
+field_summary <- get_summary(
+  report,
+  validation_check = "field-complete"
+)
+field_ft <- flexify(field_summary)
+
+missing_subset <- get_missing(report)
+missing_subset <- missing_subset[
+  missing_subset$record_id == "r1",
+  c("record_id", "form", "field_name", "url")
+]
+missing_ft <- flexify(missing_subset)
+
 event_form_ft <- flex_event_forms(report)
 html <- flex_html(ft)
 ```
 
-`flex()` displays the canonical checks with human-readable event, form, and
-repeat labels. Its `events`, `forms`, and `validation_check` arguments must use
-raw values present in the corresponding `tidy(report)` columns. Multiple
-filters are applied by intersection before labels are added. Unknown values and
-a combination that produces no validation rows are errors. `tidy()` and
-`report$summary` keep the canonical hyphenated `validation_check` values.
+`flexify()` has no additional arguments. It accepts any nonempty column subset,
+in any order, that is wholly compatible with one accessor schema, including
+shared-only subsets such as `form` and `validation_check`. It preserves row and
+column order and displays one output column per supplied column, with friendly
+headers, registry labels, event/form label metadata, one-decimal rates, blank
+`NA` cells, and hyperlinks for available URLs. If both repeat columns are
+supplied and entirely blank, they are suppressed together when another display
+column remains. The input tibble is not modified; added, renamed, or
+cross-schema columns are rejected.
+
+Version 6.0 removes `tidy()`, `tidy.redcapmissing()`, and the old report-input
+`flex()` helper, along with the `generics` dependency. Use `get_summary()` for
+summary rows and compose either accessor with `flexify()` for flextable output.
+
 `flex_event_forms()` returns a reduced event/form table with an `All` summary
 row, event started/due counts in the N column, and three
 form-opportunity metrics nested under each event. A form row's

@@ -66,7 +66,28 @@ get_missing_fixture <- function() {
   )
 
   structure(
-    list(summary = tibble::tibble(), missing = missing_rows),
+    list(
+      summary = tibble::tibble(),
+      missing = missing_rows,
+      spec = list(
+        forms = c("status_form", "repeat_form", "empty_form"),
+        events = list(
+          status_form = c("baseline_event", "followup_event"),
+          repeat_form = "baseline_event",
+          empty_form = "unused_event"
+        ),
+        event_labels = c(
+          baseline_event = "Baseline",
+          followup_event = "Follow-up",
+          unused_event = "Unused"
+        ),
+        form_labels = c(
+          status_form = "Status",
+          repeat_form = "Repeat",
+          empty_form = "Empty"
+        )
+      )
+    ),
     class = "redcapmissing"
   )
 }
@@ -74,6 +95,9 @@ get_missing_fixture <- function() {
 get_missing_expected_columns <- function() {
   c(
     "record_id",
+    "redcap_event_name",
+    "redcap_repeat_instrument",
+    "redcap_repeat_instance",
     "validation_context",
     "form",
     "validation_check",
@@ -85,7 +109,7 @@ get_missing_expected_columns <- function() {
   )
 }
 
-test_that("get_missing exposes the focused missing-row contract", {
+test_that("get_missing exposes its stable raw-context contract", {
   report <- get_missing_fixture()
   original_report <- report
 
@@ -93,10 +117,14 @@ test_that("get_missing exposes the focused missing-row contract", {
 
   expect_true("get_missing" %in% getNamespaceExports("redcapmissing"))
   expect_identical(
-    names(formals(get_missing)),
-    c("report", "validation_check")
+    as.list(formals(get_missing)),
+    alist(
+      report = ,
+      validation_check = NULL,
+      events = NULL,
+      forms = NULL
+    )
   )
-  expect_s3_class(missing_rows, "tbl_df")
   expect_identical(class(missing_rows), c("tbl_df", "tbl", "data.frame"))
   expect_identical(names(missing_rows), get_missing_expected_columns())
   expect_identical(
@@ -104,38 +132,46 @@ test_that("get_missing exposes the focused missing-row contract", {
     rep("character", length(get_missing_expected_columns()))
   )
   expect_identical(
-    missing_rows,
-    tibble::as_tibble(report$missing[get_missing_expected_columns()])
+    lapply(get_missing_expected_columns(), function(column) {
+      missing_rows[[column]]
+    }),
+    lapply(get_missing_expected_columns(), function(column) {
+      report$missing[[column]]
+    })
   )
   expect_identical(
-    missing_rows$validation_check,
-    report$missing$validation_check
+    attr(missing_rows, "redcapmissing_labels"),
+    list(
+      events = report$spec$event_labels,
+      forms = report$spec$form_labels
+    )
   )
+  expect_identical(missing_rows$redcap_repeat_instance, c("", "2", "", ""))
   expect_identical(missing_rows$url, report$missing$url)
+  expect_identical(report, original_report)
+})
+
+test_that("get_missing preserves field metadata missingness", {
+  missing_rows <- get_missing(get_missing_fixture())
   non_field_columns <- c(
     "field_name",
     "field_label",
     "field_type",
     "branching_logic"
   )
+
   expect_true(all(vapply(
     missing_rows[1:3, non_field_columns],
     function(column) all(is.na(column)),
     logical(1)
   )))
-  expect_false(any(c(
-    "redcap_event_name",
-    "redcap_repeat_instrument",
-    "redcap_repeat_instance"
-  ) %in% names(missing_rows)))
-  expect_identical(report, original_report)
+  expect_identical(missing_rows$field_name[[4]], "status_value")
 })
 
-test_that("get_missing filters canonical checks without reordering rows", {
+test_that("get_missing applies shared filters by intersection without reordering", {
   report <- get_missing_fixture()
 
   field_rows <- get_missing(report, validation_check = "field-complete")
-  expect_identical(field_rows$validation_check, "field-complete")
   expect_identical(field_rows$record_id, "r1")
 
   selected_rows <- get_missing(
@@ -147,65 +183,109 @@ test_that("get_missing filters canonical checks without reordering rows", {
     c("event-row-started", "form-started")
   )
 
+  event_rows <- get_missing(report, events = "followup_event")
+  expect_identical(event_rows$record_id, "r3")
+
+  form_rows <- get_missing(report, forms = "status_form")
+  expect_identical(form_rows$record_id, c("r3", "r2", "r1"))
+
+  joint_rows <- get_missing(
+    report,
+    validation_check = "field-complete",
+    events = "baseline_event",
+    forms = "status_form"
+  )
+  expect_identical(joint_rows$record_id, "r1")
+
   duplicate_filter <- get_missing(
     report,
-    validation_check = c("field-complete", "field-complete")
+    validation_check = c("field-complete", "field-complete"),
+    events = c("baseline_event", "baseline_event"),
+    forms = c("status_form", "status_form")
   )
-  expect_identical(duplicate_filter, field_rows)
+  expect_identical(duplicate_filter, joint_rows)
+})
 
-  report$missing <- report$missing[
-    report$missing$validation_check != "instance-row-started",
+test_that("get_missing accepts configured scopes with no failures", {
+  report <- get_missing_fixture()
+
+  for (result in list(
+    get_missing(report, events = "unused_event"),
+    get_missing(report, forms = "empty_form"),
+    get_missing(report, events = "followup_event", forms = "repeat_form")
+  )) {
+    expect_equal(nrow(result), 0)
+    expect_identical(names(result), get_missing_expected_columns())
+    expect_identical(
+      unname(vapply(result, typeof, character(1))),
+      rep("character", length(get_missing_expected_columns()))
+    )
+    expect_identical(
+      attr(result, "redcapmissing_labels"),
+      list(
+        events = report$spec$event_labels,
+        forms = report$spec$form_labels
+      )
+    )
+  }
+
+  no_instance_failure <- report
+  no_instance_failure$missing <- no_instance_failure$missing[
+    no_instance_failure$missing$validation_check != "instance-row-started",
     ,
     drop = FALSE
   ]
-  absent_rows <- get_missing(
-    report,
-    validation_check = "instance-row-started"
-  )
-  expect_equal(nrow(absent_rows), 0)
-  expect_identical(names(absent_rows), get_missing_expected_columns())
-  expect_identical(
-    unname(vapply(absent_rows, typeof, character(1))),
-    rep("character", length(get_missing_expected_columns()))
+  expect_equal(
+    nrow(get_missing(
+      no_instance_failure,
+      validation_check = "instance-row-started"
+    )),
+    0
   )
 })
 
-test_that("get_missing rejects invalid validation-check filters", {
+test_that("get_missing rejects malformed and unknown filter values", {
   report <- get_missing_fixture()
 
-  expect_error(
-    get_missing(report, validation_check = 1),
-    "must be `NULL` or a non-empty character vector",
-    fixed = TRUE
-  )
-  expect_error(
-    get_missing(report, validation_check = character()),
-    "must be `NULL` or a non-empty character vector",
-    fixed = TRUE
-  )
-  expect_error(
-    get_missing(report, validation_check = NA_character_),
-    "may not contain `NA` or blank values",
-    fixed = TRUE
-  )
-  expect_error(
-    get_missing(report, validation_check = c("field-complete", " ")),
-    "may not contain `NA` or blank values",
-    fixed = TRUE
-  )
+  for (arg in c("validation_check", "events", "forms")) {
+    for (bad_value in list(1, character())) {
+      args <- list(report = report)
+      args[[arg]] <- bad_value
+      expect_error(
+        do.call(get_missing, args),
+        paste0("`", arg, "` must be `NULL` or a non-empty character vector"),
+        fixed = TRUE
+      )
+    }
+    for (bad_value in list(NA_character_, "", " ", c("valid", "\t"))) {
+      args <- list(report = report)
+      args[[arg]] <- bad_value
+      expect_error(
+        do.call(get_missing, args),
+        paste0("`", arg, "` may not contain `NA` or blank values"),
+        fixed = TRUE
+      )
+    }
+  }
+
   expect_error(
     get_missing(report, validation_check = "FIELD-COMPLETE"),
     "Unknown `validation_check` value(s): `FIELD-COMPLETE`",
     fixed = TRUE
   )
   expect_error(
-    get_missing(report, validation_check = "unknown-check"),
-    "Unknown `validation_check` value(s): `unknown-check`",
+    get_missing(report, events = "BASELINE_EVENT"),
+    "Unknown `events` value(s): `BASELINE_EVENT`",
+    fixed = TRUE
+  )
+  expect_error(
+    get_missing(report, forms = "STATUS_FORM"),
+    "Unknown `forms` value(s): `STATUS_FORM`",
     fixed = TRUE
   )
 })
 
-test_that("get_missing requires a complete current report schema", {
+test_that("get_missing requires the current full report schema", {
   expect_error(
     get_missing(list()),
     "`report` must be a `redcapmissing` object",
@@ -269,7 +349,7 @@ test_that("get_missing requires a complete current report schema", {
   )
 })
 
-test_that("get_missing preserves the zero-row schema from find_missing", {
+test_that("get_missing preserves a find_missing zero-row schema and labels", {
   records <- tibble::tibble(
     record_id = "r1",
     branch_flag = "0",
@@ -291,10 +371,46 @@ test_that("get_missing preserves the zero-row schema from find_missing", {
   expect_equal(nrow(report$missing), 0)
   expect_equal(nrow(missing_rows), 0)
   expect_identical(names(missing_rows), get_missing_expected_columns())
+  expect_true(all(c(
+    "redcap_event_name",
+    "redcap_repeat_instrument",
+    "redcap_repeat_instance"
+  ) %in% names(missing_rows)))
   expect_identical(
-    unname(vapply(missing_rows, typeof, character(1))),
-    rep("character", length(get_missing_expected_columns()))
+    attr(missing_rows, "redcapmissing_labels")$events,
+    report$spec$event_labels
   )
+})
+
+test_that("get_missing uses safe empty label vectors for legacy report objects", {
+  report <- get_missing_fixture()
+  report$spec <- NULL
+
+  out <- get_missing(report)
+
+  expect_identical(
+    attr(out, "redcapmissing_labels"),
+    list(
+      events = structure(character(), names = character()),
+      forms = structure(character(), names = character())
+    )
+  )
+})
+
+test_that("get_missing output supports downstream record and repeat filtering", {
+  missing_rows <- get_missing(get_missing_fixture())
+  selected <- missing_rows[
+    missing_rows$record_id == "r1" &
+      missing_rows$redcap_repeat_instance == "2",
+    c("record_id", "form", "validation_check", "redcap_repeat_instance"),
+    drop = FALSE
+  ]
+
+  expect_identical(nrow(selected), 1L)
+  expect_identical(selected$record_id, "r1")
+  expect_identical(selected$form, "repeat_form")
+  expect_identical(selected$validation_check, "instance-row-started")
+  expect_true(all(vapply(selected, is.character, logical(1))))
 })
 
 test_that("get_missing preserves available and unavailable REDCap URLs", {

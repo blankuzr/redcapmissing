@@ -27,13 +27,13 @@ test_that("flex_html renders formatted summary HTML when optional packages are a
     forms = "baseline_form"
   )
 
-  html_out <- flex_html(flex(report))
+  html_out <- flex_html(flexify(get_summary(report)))
 
   expect_type(html_out, "character")
   expect_true(nchar(html_out) > 0)
 })
 
-test_that("flex_html renders multi-form formatted summaries", {
+test_that("flex_html renders multi-form formatted missing rows", {
   testthat::skip_if_not_installed("flextable")
   testthat::skip_if_not_installed("glue")
   testthat::skip_if_not_installed("htmltools")
@@ -54,7 +54,7 @@ test_that("flex_html renders multi-form formatted summaries", {
     rcon = fake_rcon(metadata),
     forms = c("alpha_form", "beta_form")
   )
-  html_out <- flex_html(flex(report))
+  html_out <- flex_html(flexify(get_missing(report)))
 
   expect_type(html_out, "character")
   expect_true(grepl("alpha_form", html_out, fixed = TRUE))

@@ -36,8 +36,8 @@ Savannah Obregon, Shawn Garbett, and Benjamin Nutter.
 \url{https://github.com/vubiostat/redcapAPI}.
 }
 \seealso{
-\code{\link[=find_missing]{find_missing()}}, \code{\link[=registry]{registry()}}, \code{\link[=tidy.redcapmissing]{tidy.redcapmissing()}}, \code{\link[=flex]{flex()}},
-\code{\link[=flex_event_forms]{flex_event_forms()}}, \code{\link[=flex_html]{flex_html()}},
+\code{\link[=find_missing]{find_missing()}}, \code{\link[=get_summary]{get_summary()}}, \code{\link[=get_missing]{get_missing()}}, \code{\link[=flexify]{flexify()}},
+\code{\link[=registry]{registry()}}, \code{\link[=flex_event_forms]{flex_event_forms()}}, \code{\link[=flex_html]{flex_html()}},
 \code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}
 }
 \author{

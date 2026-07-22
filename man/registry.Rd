@@ -18,7 +18,7 @@ contextual event/form level to \code{"event:form"} or
 \code{"event:form:instance"} from the assessed REDCap context.}
 \item{\code{validation_check}}{The canonical validation-check code.}
 \item{\code{validation_label}}{The canonical validation label.}
-\item{\code{flex_label}}{The display label used by \code{\link[=flex]{flex()}}.}
+\item{\code{flex_label}}{The flextable display label used by \code{\link[=flexify]{flexify()}}.}
 \item{\code{description}}{A short user-facing description of the check.}
 \item{\code{r_identifier}, \code{component_stem}, \code{step_suffix}}{Internal R-safe
 stems and native validation-step metadata.}

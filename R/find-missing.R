@@ -121,7 +121,7 @@
 #'
 #' @return A list with class `"redcapmissing"` containing:
 #' \describe{
-#'   \item{`summary`}{Compact validation summary rows used by `tidy()`,
+#'   \item{`summary`}{Compact validation summary rows used by [get_summary()],
 #'     including assessed, passed, failed, pass-rate, and fail-rate columns.}
 #'   \item{`missing`}{Failed validation rows keyed by generic native
 #'     `validation_step` and `validation_row_id` identifiers plus REDCap record,
@@ -129,7 +129,8 @@
 #'     REDCap Data Entry URL for the record/form context when the connection
 #'     provides the required instance, version, and project metadata, plus an
 #'     event ID for longitudinal projects; otherwise it is `NA`. Use
-#'     [get_missing()] for the recommended focused missing-row view.}
+#'     [get_missing()] for the stable 12-column missing-row view, including
+#'     raw event and repeat context.}
 #'   \item{`spec`}{Normalized report context, including requested forms,
 #'     events, labels, record eligibility, unused record specifications,
 #'     instances, ignored fields/IDs, REDCap ID column, system fields, project
@@ -142,8 +143,8 @@
 #'     `validation_rows`, `checks`, and `failures` row tables.}
 #' }
 #'
-#' @seealso [get_missing()], [registry()], [redcapAPI::redcapConnection()],
-#'   [redcapAPI::exportRecordsTyped()]
+#' @seealso [get_summary()], [get_missing()], [flexify()], [registry()],
+#'   [redcapAPI::redcapConnection()], [redcapAPI::exportRecordsTyped()]
 #' @references
 #' Nutter B, Garbett S, Obregon S, Obadia T, Lehr M, High B, Lane S,
 #' Beasley W, Gray W, Kennedy N, Hsi-Nien T, Horner J, Stephens J, Beck C,
@@ -177,7 +178,7 @@
 #'   ignore_fields = c("status_flag", "screening_code")
 #' )
 #'
-#' tidy(baseline_missing)
+#' get_summary(baseline_missing)
 #' get_missing(baseline_missing)
 #'
 #' detailed_missing <- find_missing(

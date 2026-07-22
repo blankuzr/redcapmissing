@@ -106,7 +106,7 @@ completeness. Defaults to \code{interactive()}.}
 \value{
 A list with class \code{"redcapmissing"} containing:
 \describe{
-\item{\code{summary}}{Compact validation summary rows used by \code{tidy()},
+\item{\code{summary}}{Compact validation summary rows used by \code{\link[=get_summary]{get_summary()}},
 including assessed, passed, failed, pass-rate, and fail-rate columns.}
 \item{\code{missing}}{Failed validation rows keyed by generic native
 \code{validation_step} and \code{validation_row_id} identifiers plus REDCap record,
@@ -114,7 +114,8 @@ event, repeat, form, and field context. The final \code{url} column is a raw
 REDCap Data Entry URL for the record/form context when the connection
 provides the required instance, version, and project metadata, plus an
 event ID for longitudinal projects; otherwise it is \code{NA}. Use
-\code{\link[=get_missing]{get_missing()}} for the recommended focused missing-row view.}
+\code{\link[=get_missing]{get_missing()}} for the stable 12-column missing-row view, including
+raw event and repeat context.}
 \item{\code{spec}}{Normalized report context, including requested forms,
 events, labels, record eligibility, unused record specifications,
 instances, ignored fields/IDs, REDCap ID column, system fields, project
@@ -200,7 +201,7 @@ baseline_missing <- find_missing(
   ignore_fields = c("status_flag", "screening_code")
 )
 
-tidy(baseline_missing)
+get_summary(baseline_missing)
 get_missing(baseline_missing)
 
 detailed_missing <- find_missing(
@@ -249,6 +250,6 @@ projects using the API}. R package version 2.12.0.
 \url{https://doi.org/10.5281/zenodo.10564837}.
 }
 \seealso{
-\code{\link[=get_missing]{get_missing()}}, \code{\link[=registry]{registry()}}, \code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}},
-\code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}
+\code{\link[=get_summary]{get_summary()}}, \code{\link[=get_missing]{get_missing()}}, \code{\link[=flexify]{flexify()}}, \code{\link[=registry]{registry()}},
+\code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}
 }

@@ -2,18 +2,25 @@
 #'
 #' @description
 #' `flex_html()` renders a `flextable` object, such as one returned by
-#' [flex()] or [flex_event_forms()], to the HTML string used by email and
+#' [flexify()] or [flex_event_forms()], to the HTML string used by email and
 #' report insertion workflows.
 #'
 #' @param x A `flextable` object.
 #'
 #' @return A character scalar containing rendered HTML.
 #'
+#' @examples
+#' \dontrun{
+#' summary_html <- flex_html(flexify(get_summary(report)))
+#' missing_html <- flex_html(flexify(get_missing(report)))
+#' event_form_html <- flex_html(flex_event_forms(report))
+#' }
+#'
 #' @export
 flex_html <- function(x) {
   if (!inherits(x, "flextable")) {
     stop(
-      "`x` must be a `flextable` object created by `flex()` or ",
+      "`x` must be a `flextable` object, such as one created by `flexify()` or ",
       "`flex_event_forms()`.",
       call. = FALSE
     )
