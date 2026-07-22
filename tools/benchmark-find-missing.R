@@ -17,6 +17,18 @@ if (is.na(bench_iterations) || bench_iterations < 1L) {
   bench_iterations <- 3L
 }
 
+bench_progress_value <- tolower(trimws(Sys.getenv(
+  "REDCAPMISSING_BENCH_PROGRESS",
+  "false"
+)))
+if (!bench_progress_value %in% c("false", "true", "0", "1", "no", "yes")) {
+  stop(
+    "REDCAPMISSING_BENCH_PROGRESS must be true/false, yes/no, or 1/0.",
+    call. = FALSE
+  )
+}
+bench_progress <- bench_progress_value %in% c("true", "1", "yes")
+
 requested_tiers <- strsplit(
   Sys.getenv("REDCAPMISSING_BENCH_TIERS", "small,medium"),
   ",",
@@ -266,7 +278,7 @@ measure_tier <- function(tier, iteration) {
         forms = input$forms,
         instances = input$instances,
         details = FALSE,
-        progress = FALSE
+        progress = bench_progress
       )
     )
     report <- measurement$value
@@ -278,6 +290,7 @@ measure_tier <- function(tier, iteration) {
     iteration = iteration,
     records = nrow(input$records),
     forms = length(input$forms),
+    progress = bench_progress,
     elapsed_seconds = unname(elapsed),
     returned_report_size_mb = as.numeric(utils::object.size(report)) / 1024^2,
     allocated_mb = measurement$allocated_mb,
@@ -295,7 +308,7 @@ results <- dplyr::bind_rows(lapply(requested_tiers, function(tier) {
 }))
 
 summary <- results |>
-  dplyr::group_by(.data$tier) |>
+  dplyr::group_by(.data$tier, .data$progress) |>
   dplyr::summarise(
     iterations = dplyr::n(),
     records = max(.data$records),

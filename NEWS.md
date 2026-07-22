@@ -1,3 +1,15 @@
+# redcapmissing 6.0.2
+
+## 2026-07-22
+
+- Removed field-count-dependent CLI progress overhead from `find_missing()` by
+  reusing one formatting theme per run and skipping intermediate line assembly
+  in terminals that only display the final completion line. The progress-aware
+  benchmark now runs the 150-record, 10-form workload near the same speed as
+  `progress = FALSE` while preserving the existing progress display.
+- Added `REDCAPMISSING_BENCH_PROGRESS` to the package benchmark script so
+  progress-enabled and quiet runs can be measured explicitly.
+
 # redcapmissing 6.0.1
 
 ## 2026-07-22

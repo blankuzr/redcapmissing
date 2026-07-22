@@ -2363,6 +2363,7 @@ find_missing <- function(
   state$id <- NULL
   state$last_line <- NULL
   state$envir <- parent.frame()
+  state$theme <- if (state$enabled) .miss_cli_progress_theme() else NULL
 
   if (!state$enabled || !state$dynamic) {
     return(state)
@@ -2373,7 +2374,8 @@ find_missing <- function(
     form_index = state$form_index,
     form_fraction = state$form_fraction,
     overall_fraction = state$overall_fraction,
-    phase = "form"
+    phase = "form",
+    theme = state$theme
   )
   state$id <- tryCatch(
     cli::cli_progress_bar(
@@ -2443,12 +2445,16 @@ find_missing <- function(
       form_count = form_count
     )
   )
+  if (!isTRUE(state$dynamic) || is.null(state$id)) {
+    return(invisible(NULL))
+  }
   line <- .miss_cli_progress_line(
     forms = state$forms,
     form_index = state$form_index,
     form_fraction = state$form_fraction,
     overall_fraction = state$overall_fraction,
-    phase = "form"
+    phase = "form",
+    theme = state$theme
   )
   .miss_cli_progress_render(state, line, force = force)
 }
@@ -2469,12 +2475,16 @@ find_missing <- function(
     state$overall_fraction,
     .miss_cli_clamp_fraction(overall_fraction)
   )
+  if (!isTRUE(state$dynamic) || is.null(state$id)) {
+    return(invisible(NULL))
+  }
   line <- .miss_cli_progress_line(
     forms = state$forms,
     form_index = state$form_index,
     form_fraction = state$form_fraction,
     overall_fraction = state$overall_fraction,
-    phase = "finalizing"
+    phase = "finalizing",
+    theme = state$theme
   )
   .miss_cli_progress_render(state, line, force = force)
 }
@@ -2507,7 +2517,8 @@ find_missing <- function(
     form_index = state$form_index,
     form_fraction = state$form_fraction,
     overall_fraction = state$overall_fraction,
-    phase = line_phase
+    phase = line_phase,
+    theme = state$theme
   )
 
   if (isTRUE(state$dynamic) && !is.null(state$id)) {
@@ -2572,7 +2583,8 @@ find_missing <- function(
     "failed",
     "finalizing_failed"
   ),
-  width = cli::console_width()
+  width = cli::console_width(),
+  theme = NULL
 ) {
   phase <- match.arg(phase)
   forms <- .miss_chr_vec(forms)
@@ -2581,12 +2593,13 @@ find_missing <- function(
   form_fraction <- .miss_cli_clamp_fraction(form_fraction)
   overall_fraction <- .miss_cli_clamp_fraction(overall_fraction)
   width <- .miss_cli_progress_width(width)
-  symbols <- .miss_cli_progress_symbols()
-  completed_style <- .miss_cli_progress_style("completed")
-  active_style <- .miss_cli_progress_style("active")
-  overall_style <- .miss_cli_progress_style("overall")
-  pending_style <- .miss_cli_progress_style("pending")
-  failed_style <- .miss_cli_progress_style("failed")
+  theme <- theme %||% .miss_cli_progress_theme()
+  symbols <- theme$symbols
+  completed_style <- theme$styles$completed
+  active_style <- theme$styles$active
+  overall_style <- theme$styles$overall
+  pending_style <- theme$styles$pending
+  failed_style <- theme$styles$failed
   overall_text <- overall_style(cli::style_bold(paste0(
     "OVERALL ",
     .miss_percent(overall_fraction),
@@ -2902,6 +2915,16 @@ find_missing <- function(
     overall = "#3B82F6",
     pending = "#64748B",
     failed = "#EF4444"
+  )
+}
+
+.miss_cli_progress_theme <- function() {
+  palette <- .miss_cli_progress_palette()
+  styles <- lapply(names(palette), .miss_cli_progress_style)
+  names(styles) <- names(palette)
+  list(
+    symbols = .miss_cli_progress_symbols(),
+    styles = styles
   )
 }
 

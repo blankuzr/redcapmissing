@@ -357,6 +357,20 @@ test_that("dynamic progress replaces one line and cleans up on success", {
   )
   on.exit(options(old_options), add = TRUE)
 
+  progress_theme <- getFromNamespace(
+    ".miss_cli_progress_theme",
+    "redcapmissing"
+  )
+  expected_theme <- progress_theme()
+  theme_calls <- 0L
+  testthat::local_mocked_bindings(
+    .miss_cli_progress_theme = function() {
+      theme_calls <<- theme_calls + 1L
+      expected_theme
+    },
+    .package = "redcapmissing"
+  )
+
   active_before <- cli::cli_progress_num()
   on.exit({
     if (cli::cli_progress_num() > active_before) {
@@ -383,6 +397,7 @@ test_that("dynamic progress replaces one line and cleans up on success", {
   )
 
   expect_s3_class(report, "redcapmissing")
+  expect_identical(theme_calls, 1L)
   expect_identical(active_before, 0L)
   expect_identical(cli::cli_progress_num(), 0L)
   expect_gt(length(update_messages), 1L)
@@ -436,6 +451,63 @@ test_that("non-dynamic progress emits only the final completion line", {
     progress_output,
     "\u2713 find_missing complete \u00b7 2/2 forms \u00b7 OVERALL 100%"
   )
+})
+
+test_that("non-dynamic progress reuses its theme and formats only completion", {
+  old_options <- options(
+    cli.dynamic = FALSE,
+    cli.num_colors = 1,
+    cli.unicode = FALSE,
+    width = 120
+  )
+  on.exit(options(old_options), add = TRUE)
+
+  progress_start <- getFromNamespace(
+    ".miss_cli_progress_start",
+    "redcapmissing"
+  )
+  progress_update <- getFromNamespace(
+    ".miss_cli_progress_update",
+    "redcapmissing"
+  )
+  progress_finish <- getFromNamespace(
+    ".miss_cli_progress_finish",
+    "redcapmissing"
+  )
+  progress_theme <- getFromNamespace(
+    ".miss_cli_progress_theme",
+    "redcapmissing"
+  )
+  expected_theme <- progress_theme()
+  theme_calls <- 0L
+  line_themes <- list()
+
+  testthat::local_mocked_bindings(
+    .miss_cli_progress_theme = function() {
+      theme_calls <<- theme_calls + 1L
+      expected_theme
+    },
+    .miss_cli_progress_line = function(..., theme = NULL) {
+      line_themes[[length(line_themes) + 1L]] <<- theme
+      "progress complete"
+    },
+    .package = "redcapmissing"
+  )
+
+  state <- progress_start(forms = c("form_a", "form_b"), progress = TRUE)
+  for (fraction in seq(0, 1, length.out = 25L)) {
+    progress_update(
+      state = state,
+      form_index = 1L,
+      form_fraction = fraction
+    )
+  }
+  progress_output <- utils::capture.output(progress_finish(state, result = "done"))
+
+  expect_identical(theme_calls, 1L)
+  expect_length(line_themes, 1L)
+  expect_identical(line_themes[[1]], expected_theme)
+  expect_identical(progress_output, "progress complete")
 })
 
 test_that("progress FALSE is silent on output and message streams", {
