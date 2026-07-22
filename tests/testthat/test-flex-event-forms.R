@@ -403,7 +403,10 @@ test_that("flex_event_forms rejects invalid inputs", {
 test_that("flex_event_forms reduces longitudinal forms under event rows", {
   skip_flex_event_forms_packages()
 
-  flex_out <- flex_event_forms(flex_event_forms_longitudinal_report())
+  expect_warning(
+    flex_out <- flex_event_forms(flex_event_forms_longitudinal_report()),
+    NA
+  )
   body <- tibble::as_tibble(flex_out$body$dataset)
 
   expect_s3_class(flex_out, "flextable")
@@ -460,7 +463,7 @@ test_that("flex_event_forms reduces longitudinal forms under event rows", {
   )
 })
 
-test_that("flex_event_forms event headers follow tidy summaries over raw checks", {
+test_that("flex_event_forms event headers follow accessor summaries over raw checks", {
   skip_flex_event_forms_packages()
 
   report <- flex_event_forms_longitudinal_report(details = TRUE)
@@ -472,32 +475,32 @@ test_that("flex_event_forms event headers follow tidy summaries over raw checks"
     drop = FALSE
   ]
 
-  tidy_event <- tidy(report)
-  tidy_event <- tidy_event[
-    tidy_event$validation_check == "event-row-started" &
-      tidy_event$redcap_event_name == "event_2_arm_1",
+  summary_event <- get_summary(report)
+  summary_event <- summary_event[
+    summary_event$validation_check == "event-row-started" &
+      summary_event$redcap_event_name == "event_2_arm_1",
     c("passed", "assessed"),
     drop = FALSE
   ]
-  tidy_event <- unique(tidy_event)
+  summary_event <- unique(summary_event)
   body <- tibble::as_tibble(flex_event_forms(report)$body$dataset)
-  tidy_event_pct <- round(
-    (tidy_event$passed[[1]] / tidy_event$assessed[[1]]) * 100,
+  summary_event_pct <- round(
+    (summary_event$passed[[1]] / summary_event$assessed[[1]]) * 100,
     1
   )
-  tidy_event_n <- paste0(
-    tidy_event$passed[[1]],
+  summary_event_n <- paste0(
+    summary_event$passed[[1]],
     "/",
-    tidy_event$assessed[[1]],
+    summary_event$assessed[[1]],
     " (",
-    tidy_event_pct,
+    summary_event_pct,
     "%)"
   )
 
-  expect_equal(nrow(tidy_event), 1)
+  expect_equal(nrow(summary_event), 1)
   expect_equal(
     body[body$Event == "Follow-up", "N (started/due)", drop = TRUE],
-    tidy_event_n
+    summary_event_n
   )
 })
 
@@ -505,7 +508,7 @@ test_that("flex_event_forms form-incomplete percentage uses context assessed den
   skip_flex_event_forms_packages()
 
   report <- flex_event_forms_partly_started_event_report()
-  summary_out <- tidy(report)
+  summary_out <- get_summary(report)
   followup_event <- summary_out[
     summary_out$validation_check == "event-row-started" &
       summary_out$redcap_event_name == "followup_event",
@@ -637,18 +640,18 @@ test_that("flex_event_forms counts reports whose REDCap ID field is not record_i
   skip_flex_event_forms_packages()
 
   report <- flex_event_forms_custom_id_report()
-  tidy_out <- tidy(report)
-  flex_body <- tibble::as_tibble(flex(report)$body$dataset)
+  summary_out <- get_summary(report)
+  flex_body <- tibble::as_tibble(flexify(summary_out)$body$dataset)
   event_form_body <- tibble::as_tibble(flex_event_forms(report)$body$dataset)
 
   expect_equal(report$spec$id_col, "study_id")
   expect_true("record_id" %in% names(report$details$validation_rows))
   expect_false("study_id" %in% names(report$details$validation_rows))
-  expect_true(nrow(tidy_out) > 0)
-  expect_true(any(tidy_out$passed > 0))
+  expect_true(nrow(summary_out) > 0)
+  expect_true(any(summary_out$passed > 0))
   expect_true(nrow(flex_body) > 0)
-  expect_true(any(flex_body$Assessed > 0))
-  expect_true(any(flex_body$Form == "status_form label"))
+  expect_true(any(flex_body$assessed > 0))
+  expect_true(any(flex_body$form == "status_form label"))
 
   expect_equal(
     event_form_body,
@@ -773,7 +776,7 @@ test_that("flex_event_forms does not count unassessed forms as incomplete", {
   skip_flex_event_forms_packages()
 
   report <- flex_event_forms_no_assessed_fields_report()
-  summary_out <- tidy(report)
+  summary_out <- get_summary(report)
   form_started <- summary_out[
     summary_out$validation_check == "form-started",
     ,
@@ -807,7 +810,7 @@ test_that("flex_event_forms shows forms for missing events", {
   skip_flex_event_forms_packages()
 
   report <- flex_event_forms_missing_event_report()
-  summary_out <- tidy(report)
+  summary_out <- get_summary(report)
   closeout_event <- summary_out[
     summary_out$validation_check == "event-row-started" &
       summary_out$redcap_event_name == "closeout_event",

@@ -38,7 +38,7 @@ counts plus form-level incomplete, not-started, and configurable missingness
 threshold metrics.
 }
 \details{
-The table is a reporting reduction of \code{\link[=tidy.redcapmissing]{tidy.redcapmissing()}} plus report
+The table is a reporting reduction of \code{\link[=get_summary]{get_summary()}} plus report
 metadata. The \code{N (started/due)} column shows \code{event-row-started} as
 \verb{started/due (\%)}; non-longitudinal reports use a synthetic \verb{Single event}
 row with \verb{Total N/Total N}. If multiple
@@ -96,5 +96,5 @@ flex_html(event_form_table)
 
 }
 \seealso{
-\code{\link[=find_missing]{find_missing()}}, \code{\link[=tidy.redcapmissing]{tidy.redcapmissing()}}, \code{\link[=flex]{flex()}}, \code{\link[=flex_html]{flex_html()}}
+\code{\link[=find_missing]{find_missing()}}, \code{\link[=get_summary]{get_summary()}}, \code{\link[=flexify]{flexify()}}, \code{\link[=flex_html]{flex_html()}}
 }

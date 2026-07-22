@@ -1,3 +1,19 @@
+# redcapmissing 6.0.0
+
+## 2026-07-22
+
+- Added `get_summary()` as the primary summary accessor and expanded
+  `get_missing()` to stable schemas that always include event, repeat
+  instrument, and repeat instance context. Both accessors now share strict,
+  case-sensitive `validation_check`, `events`, and `forms` filtering.
+- Added `flexify()` for formatting full accessor results or compatible column
+  subsets as one-to-one flextable columns, including label-aware event/form
+  display and visual suppression of an entirely blank repeat-column pair.
+- Removed `tidy()`, `tidy.redcapmissing()`, `flex()`, the
+  `flex.redcapmissing` S3 registration, and the `generics` dependency. Use
+  `get_summary()` for report summaries and pass `get_summary()` or
+  `get_missing()` results to `flexify()` for flextable output.
+
 # redcapmissing 5.2.1
 
 ## 2026-07-22
@@ -19,6 +35,9 @@
 - `flex_event_forms()` now validates the report context required by these
   metrics. Reports created before `redcapmissing` 5.2.0 must be regenerated
   with `find_missing()` before using the expanded table.
+- Replaced the single-line Ember Tag startup message with a multi-line
+  branch-spectrum radar mark that displays only the package name, installed
+  version, and release name.
 
 # redcapmissing 5.1.0
 

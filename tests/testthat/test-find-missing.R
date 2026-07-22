@@ -924,7 +924,7 @@ test_that("failed event-row-started checks do not create blank-event downstream 
   expect_false(any(
     blank_event_summary$validation_check %in% c("form-started", "field-complete")
   ))
-  expect_false(any(tidy(report)$redcap_event_name == ""))
+  expect_false(any(get_summary(report)$redcap_event_name == ""))
 
   form_started <- validation_summary[
     validation_summary$validation_check == "form-started",
@@ -1062,7 +1062,7 @@ test_that("failed instance-row-started checks do not create blank-event downstre
   expect_equal(nrow(fm_checks(report, "form-started")), 0)
   expect_equal(nrow(fm_checks(report, "field-complete")), 0)
   expect_false(any(validation_summary$redcap_event_name == ""))
-  expect_false(any(tidy(report)$redcap_event_name == ""))
+  expect_false(any(get_summary(report)$redcap_event_name == ""))
   expect_setequal(
     validation_summary$validation_check,
     "instance-row-started"

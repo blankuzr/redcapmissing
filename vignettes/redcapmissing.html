@@ -576,7 +576,7 @@ event_report &lt;- find_missing(
   forms = &quot;status_form&quot;
 )
 
-tidy(event_report)[
+get_summary(event_report)[
   ,
   c(&quot;validation_level&quot;, &quot;validation_check&quot;, &quot;redcap_event_name&quot;, &quot;assessed&quot;, &quot;failed&quot;)
 ]
@@ -663,7 +663,7 @@ staged_report$spec$record_eligibility
 #&gt; 5 record_b  event_a           demographics &quot;&quot;
 #&gt; # ℹ 2 more variables: redcap_repeat_instance &lt;chr&gt;, eligibility_source &lt;chr&gt;
 
-staged_summary &lt;- tidy(staged_report)
+staged_summary &lt;- get_summary(staged_report)
 staged_summary[
   staged_summary$validation_check == &quot;event-row-started&quot;,
   c(&quot;form&quot;, &quot;redcap_event_name&quot;, &quot;assessed&quot;, &quot;failed&quot;)
@@ -734,14 +734,19 @@ get_missing(
   validation_check = &quot;instance-row-started&quot;
 )[, c(
   &quot;record_id&quot;,
+  &quot;redcap_event_name&quot;,
+  &quot;redcap_repeat_instrument&quot;,
+  &quot;redcap_repeat_instance&quot;,
   &quot;validation_context&quot;,
   &quot;form&quot;,
   &quot;validation_check&quot;
 )]
-#&gt; # A tibble: 1 × 4
-#&gt;   record_id validation_context               form        validation_check
-#&gt;   &lt;chr&gt;     &lt;chr&gt;                            &lt;chr&gt;       &lt;chr&gt;
-#&gt; 1 r1        event: baseline_event; repeat: 2 repeat_form instance-row-started</code></pre>
+#&gt; # A tibble: 1 × 7
+#&gt;   record_id redcap_event_name redcap_repeat_instrument redcap_repeat_instance
+#&gt;   &lt;chr&gt;     &lt;chr&gt;             &lt;chr&gt;                    &lt;chr&gt;
+#&gt; 1 r1        baseline_event    repeat_form              2
+#&gt; # ℹ 3 more variables: validation_context &lt;chr&gt;, form &lt;chr&gt;,
+#&gt; #   validation_check &lt;chr&gt;</code></pre>
 <p>The missing instance <code>2</code> for record <code>r1</code> fails
 <code>instance-row-started</code> and is removed from downstream form
 and field assessment.</p>
@@ -762,33 +767,101 @@ instance <code>1</code> and warns once.</p>
 </div>
 <div id="inspecting-results" class="section level2">
 <h2>Inspecting results</h2>
-<p><code>tidy(report)</code> returns a raw context-first summary with
-canonical validation metadata. Repeat context columns are shown only
-when the report contains repeat contexts:</p>
-<pre class="r"><code>tidy(report)
-#&gt; # A tibble: 3 × 9
-#&gt;   redcap_event_name form       validation_level validation_check assessed passed
-#&gt;   &lt;chr&gt;             &lt;chr&gt;      &lt;chr&gt;            &lt;chr&gt;               &lt;int&gt;  &lt;int&gt;
-#&gt; 1 &quot;&quot;                baseline_… event:form       event-row-start…        0      0
-#&gt; 2 &quot;&quot;                baseline_… event:form       form-started            2      2
-#&gt; 3 &quot;&quot;                baseline_… event:form       field-complete          7      6
-#&gt; # ℹ 3 more variables: failed &lt;int&gt;, pass_rate &lt;dbl&gt;, fail_rate &lt;dbl&gt;</code></pre>
-<p>For reporting workflows, optional formatting helpers are
-available:</p>
-<pre class="r"><code>ft &lt;- flex(report)
-field_ft &lt;- flex(report, validation_check = &quot;field-complete&quot;)
+<p>Use <code>get_summary()</code> for validation counts and rates and
+<code>get_missing()</code> for failed record and field rows:</p>
+<pre class="r"><code>get_summary(
+  report,
+  validation_check = NULL,
+  events = NULL,
+  forms = NULL
+)
+
+get_missing(
+  report,
+  validation_check = NULL,
+  events = NULL,
+  forms = NULL
+)</code></pre>
+<p><code>NULL</code> keeps all values for a filter; otherwise it must be
+a nonempty character vector without <code>NA</code>, blank, or
+whitespace-only entries. Values are raw and case-sensitive. Both
+accessors deduplicate filter values, apply multiple filters by
+intersection, and preserve stored row order. Validation checks are
+validated against <code>registry()</code>; events and forms are
+validated against the report’s configured scope rather than only rows
+with failures. Invalid or unknown values error. Valid filters with no
+matching rows return a correctly typed zero-row tibble. There is no
+accessor <code>instances</code> argument:
+<code>find_missing(instances = ...)</code> declares expected repeat
+contexts, while exact instances can be filtered from
+<code>redcap_repeat_instance</code> afterward.</p>
+<p><code>get_summary()</code> always returns 11 columns:</p>
+<pre class="text"><code>redcap_event_name, form,
+redcap_repeat_instrument, redcap_repeat_instance,
+validation_level, validation_check,
+assessed, passed, failed, pass_rate, fail_rate</code></pre>
+<p><code>get_missing()</code> always returns 12 columns:</p>
+<pre class="text"><code>record_id,
+redcap_event_name, redcap_repeat_instrument, redcap_repeat_instance,
+validation_context, form, validation_check,
+field_name, field_label, field_type, branching_logic, url</code></pre>
+<p>The three raw context columns are present even in non-longitudinal,
+non-repeating, and zero-row results, with <code>&quot;&quot;</code> for
+inapplicable context. This stable shape supports ordinary filtering
+after extraction, including by record or exact repeat instance.
+Accessors never recompute the report denominators. They also attach a
+<code>redcapmissing_labels</code> attribute containing event and form
+labels for presentation; the raw data values do not change, and
+presentation falls back to them when later manipulation removes the
+attribute.</p>
+<pre class="r"><code>summary_result &lt;- get_summary(report)
+summary_result
+#&gt; # A tibble: 3 × 11
+#&gt;   redcap_event_name form          redcap_repeat_instrum…¹ redcap_repeat_instance
+#&gt;   &lt;chr&gt;             &lt;chr&gt;         &lt;chr&gt;                   &lt;chr&gt;
+#&gt; 1 &quot;&quot;                baseline_form &quot;&quot;                      &quot;&quot;
+#&gt; 2 &quot;&quot;                baseline_form &quot;&quot;                      &quot;&quot;
+#&gt; 3 &quot;&quot;                baseline_form &quot;&quot;                      &quot;&quot;
+#&gt; # ℹ abbreviated name: ¹​redcap_repeat_instrument
+#&gt; # ℹ 7 more variables: validation_level &lt;chr&gt;, validation_check &lt;chr&gt;,
+#&gt; #   assessed &lt;int&gt;, passed &lt;int&gt;, failed &lt;int&gt;, pass_rate &lt;dbl&gt;,
+#&gt; #   fail_rate &lt;dbl&gt;</code></pre>
+<p>For reporting workflows, pass an accessor tibble to
+<code>flexify()</code>:</p>
+<pre class="r"><code>ft &lt;- flexify(summary_result)
+
+field_summary &lt;- get_summary(
+  report,
+  validation_check = &quot;field-complete&quot;
+)
+field_ft &lt;- flexify(field_summary)
+
+missing_subset &lt;- get_missing(report)
+missing_subset &lt;- missing_subset[
+  missing_subset$record_id == &quot;r1&quot;,
+  c(&quot;record_id&quot;, &quot;form&quot;, &quot;field_name&quot;, &quot;url&quot;)
+]
+missing_ft &lt;- flexify(missing_subset)
+
 event_form_ft &lt;- flex_event_forms(report)
 html &lt;- flex_html(ft)</code></pre>
-<p><code>flex()</code> displays the canonical checks with human-readable
-event, form, and repeat labels. Its <code>events</code>,
-<code>forms</code>, and <code>validation_check</code> arguments must use
-raw values present in the corresponding <code>tidy(report)</code>
-columns. Multiple filters are applied by intersection before labels are
-added. Unknown values and a combination that produces no validation rows
-are errors. <code>tidy()</code> and <code>report$summary</code> keep the
-canonical hyphenated <code>validation_check</code> values.
-<code>flex_event_forms()</code> returns a reduced event/form table with
-an <code>All</code> summary row, event started/due counts in the N
+<p><code>flexify()</code> has no additional arguments. It accepts any
+nonempty column subset, in any order, that is wholly compatible with one
+accessor schema, including shared-only subsets such as <code>form</code>
+and <code>validation_check</code>. It preserves row and column order and
+displays one output column per supplied column, with friendly headers,
+registry labels, event/form label metadata, one-decimal rates, blank
+<code>NA</code> cells, and hyperlinks for available URLs. If both repeat
+columns are supplied and entirely blank, they are suppressed together
+when another display column remains. The input tibble is not modified;
+added, renamed, or cross-schema columns are rejected.</p>
+<p>Version 6.0 removes <code>tidy()</code>,
+<code>tidy.redcapmissing()</code>, and the old report-input
+<code>flex()</code> helper, along with the <code>generics</code>
+dependency. Use <code>get_summary()</code> for summary rows and compose
+either accessor with <code>flexify()</code> for flextable output.</p>
+<p><code>flex_event_forms()</code> returns a reduced event/form table
+with an <code>All</code> summary row, event started/due counts in the N
 column, and three form-opportunity metrics nested under each event. A
 form row’s <code>Form Incomplete</code> numerator is the number of
 unique record contexts with a failed <code>event-row-started</code>,

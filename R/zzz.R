@@ -44,29 +44,49 @@
   release_name,
   release_update
 ) {
-  .redcapmissing_startup_banner_line(
-    pkgname = pkgname,
-    version = version,
-    release_name = release_name
-  )
-}
+  target_style <- cli::make_ansi_style("#f7fcff")
+  sweep_style <- cli::make_ansi_style("#22d3ee")
+  blip_style <- cli::make_ansi_style("#ef4444")
+  blue_style <- cli::make_ansi_style("#3b82f6")
+  green_style <- cli::make_ansi_style("#22c55e")
+  gold_style <- cli::make_ansi_style("#fbbf24")
+  version_style <- cli::make_ansi_style("#94a3b8")
+  release_style <- cli::make_ansi_style("#c084fc")
 
-.redcapmissing_startup_banner_line <- function(
-  pkgname,
-  version,
-  release_name
-) {
-  prompt_style <- cli::make_ansi_style("#ff8a00")
-  package_style <- cli::make_ansi_style("#ff8a00")
-  version_style <- cli::make_ansi_style("#ff2d20")
-  release_style <- cli::make_ansi_style("#ffd166")
-
-  paste0(
-    prompt_style("> "),
-    package_style(pkgname),
-    " ",
-    version_style(paste0("{v", version, "}")),
-    " ~ ",
-    release_style(release_name)
+  c(
+    paste0(strrep(" ", 13L), target_style("\u25c9")),
+    paste0(strrep(" ", 12L), sweep_style("\u2571 \u2572")),
+    paste0(
+      strrep(" ", 11L),
+      blip_style("\u25cf"),
+      "   ",
+      blip_style("\u25cf")
+    ),
+    paste0(
+      strrep(" ", 10L),
+      sweep_style("\u2571\u2572"),
+      "   ",
+      sweep_style("\u2571\u2572")
+    ),
+    paste0(
+      strrep(" ", 9L),
+      blue_style("\u00b7"),
+      "  ",
+      blue_style("\u00b7"),
+      " ",
+      gold_style("\u00b7"),
+      "  ",
+      gold_style("\u00b7")
+    ),
+    "",
+    paste0(strrep(" ", 7L), green_style(pkgname)),
+    paste0(
+      strrep(" ", 7L),
+      version_style(paste0("v", version)),
+      " ",
+      gold_style("\u00b7"),
+      " ",
+      release_style(release_name)
+    )
   )
 }

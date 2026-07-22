@@ -101,8 +101,8 @@ redcapmissing::registry()
 The example below uses a synthetic connection-like object so it can run
 without live REDCap credentials. In routine use, replace `rcon` and
 `records` with a real `redcapAPI::redcapConnection()` and typed export.
-The summary shows every validation check that ran in this compact
-example; `get_missing(report)` shows the failed rows.
+`get_summary(report)` shows every validation check that ran in this
+compact example; `get_missing(report)` shows the failed rows.
 
 ``` r
 library(redcapmissing)
@@ -139,7 +139,7 @@ report <- find_missing(
   forms = "baseline_form"
 )
 
-check_summary <- tidy(report)
+check_summary <- get_summary(report)
 check_summary_rows <- as.data.frame(check_summary[
   check_summary$assessed > 0,
   c(
@@ -175,49 +175,134 @@ print(failed_rows, row.names = FALSE)
 
 ## Report outputs
 
-`find_missing()` returns a `"redcapmissing"` object centered on a native
-validation summary. Common outputs are:
+`find_missing()` returns a `"redcapmissing"` report with compact
+internal summary and failure tables, normalized project context in
+`report$spec`, timing and row counts in `report$diagnostics`, and
+optional row-level details. Use the documented accessors instead of
+depending on the wider internal tables:
 
-- `report$summary`: compact validation summary used by `tidy(report)`
-- `get_missing(report)`: recommended focused missing-row view with nine
-  documented columns and optional filtering by canonical validation
-  check
-- `report$missing`: full failed rows with native `validation_step` and
-  `validation_row_id` identifiers; its final `url` column is a raw
-  REDCap Data Entry URL when connection metadata are available;
-  otherwise `NA`
-- `report$spec`: normalized forms, events, labels, record eligibility,
-  instances, ignored fields/IDs, ID column, and REDCap system fields
-- `report$diagnostics`: timing and row-count metadata for
-  troubleshooting
-- `report$details`: `NULL` by default; when `details = TRUE`, contains
-  `validation_rows`, `checks`, and `failures`
-- `tidy(report)`: one summary row per validation check and REDCap
-  context
+``` r
+get_summary(
+  report,
+  validation_check = NULL,
+  events = NULL,
+  forms = NULL
+)
 
-`tidy(report)` returns raw REDCap event/form context first, followed by
-canonical validation columns and pass/fail rates. Repeat instrument and
-repeat instance columns are included only when the report contains
-repeat contexts. `validation_level` is `event:form` or
-`event:form:instance`.
+get_missing(
+  report,
+  validation_check = NULL,
+  events = NULL,
+  forms = NULL
+)
+```
 
-Optional reporting helpers are available for formatted outputs.
-`flex(report)` and `flex_event_forms(report)` require `flextable` and
-`glue`; `flex_html()` also requires `htmltools`. `flex(report)` displays
-labeled event, form, repeat context, validation-check, and pass/fail
-columns. Each filter must use raw values present in the corresponding
-`tidy(report)` column. When `events`, `forms`, and `validation_check`
-are combined, `flex()` applies them by intersection before display
-labels are added. Unknown values and a combination that produces no rows
-are errors. `flex_event_forms(report)` returns a reduced event/form
-table with an `All` summary row, event and repeat-instance started/due
-counts, and three form-opportunity metrics. Each form row uses the exact
-row-started assessed N for its context: `event-row-started` for
-non-repeat longitudinal rows, `instance-row-started` for repeat rows,
-and `Total N` for the display-only non-longitudinal `Single event` row.
-Forms under the same event can therefore have different assessed Ns when
-final record eligibility differs because of `records`, event selection,
-or repeat context.
+`NULL` keeps all values for a filter; otherwise it must be a nonempty
+character vector without `NA`, blank, or whitespace-only entries. Values
+are raw and case-sensitive. Duplicate filter values are treated as a
+set, multiple filters are applied by intersection, and stored row order
+is preserved. Validation checks are validated against `registry()`;
+events and forms are validated against the report's configured scope,
+even when that context has no failed rows. Invalid or unknown values are
+errors. A valid filter, or valid filter intersection, with no result
+rows returns a correctly typed zero-row tibble. Filters only subset the
+completed report; they never recompute denominators. There is no
+accessor `instances` argument: `find_missing(instances = ...)` declares
+expected repeat contexts, while exact instances can be filtered from
+`redcap_repeat_instance` afterward.
+
+`get_summary()` always returns these 11 columns:
+
+``` text
+redcap_event_name, form,
+redcap_repeat_instrument, redcap_repeat_instance,
+validation_level, validation_check,
+assessed, passed, failed, pass_rate, fail_rate
+```
+
+The context and validation columns are character, counts are integer,
+and rates are double. `get_missing()` always returns these 12 character
+columns:
+
+``` text
+record_id,
+redcap_event_name, redcap_repeat_instrument, redcap_repeat_instance,
+validation_context, form, validation_check,
+field_name, field_label, field_type, branching_logic, url
+```
+
+Both schemas keep `redcap_event_name`, `redcap_repeat_instrument`, and
+`redcap_repeat_instance`, including for non-longitudinal, non-repeating,
+and zero-row results. Inapplicable context is represented by `""`. This
+makes post-accessor filtering by event, record, form, validation check,
+or repeat instance predictable without changing any stored calculation:
+
+``` r
+field_summary <- get_summary(
+  report,
+  validation_check = "field-complete"
+)
+
+missing_subset <- get_missing(report)
+missing_subset <- missing_subset[
+  missing_subset$record_id == "r1",
+  c("record_id", "form", "field_name", "url")
+]
+```
+
+Accessor results carry a `redcapmissing_labels` attribute with the
+report's event and form labels for presentation. The data columns remain
+raw REDCap values. If a later manipulation removes the attribute,
+formatters fall back to those raw values.
+
+## Formatted outputs
+
+`flexify(x)` accepts a tibble returned by `get_summary()` or
+`get_missing()`. It has no filtering or formatting arguments: filter
+rows with an accessor or ordinary tibble operations, and select columns
+before calling it. Any nonempty column subset, in any order, is
+supported when all columns belong to one of the two accessor schemas;
+shared-only selections such as `form` and `validation_check` work too.
+Added or renamed columns, changed storage types, and mixtures of
+summary-only with missing-only columns are rejected.
+
+``` r
+summary_table <- flexify(field_summary)
+missing_table <- flexify(missing_subset)
+
+compact_summary <- get_summary(report)[
+  ,
+  c("form", "validation_check", "failed", "fail_rate")
+]
+compact_table <- flexify(compact_summary)
+
+flex_html(summary_table)
+```
+
+`flexify()` preserves input row and column order and displays one output
+column per supplied input column. It applies friendly headers, registry
+validation labels, event/form labels when their metadata remain
+available, one-decimal percentage formatting for rate columns, blank
+display for `NA`, and hyperlinks for available URLs. If both repeat
+columns are supplied and both are entirely blank, it suppresses that
+pair visually when another display column remains; the input tibble is
+unchanged.
+
+Version 6.0 removes `tidy()`, `tidy.redcapmissing()`, and the old
+report-input `flex()` helper, along with the `generics` dependency. Use
+`get_summary()` for summary rows and compose either accessor with
+`flexify()` for flextable output.
+
+`flex_event_forms(report)` remains the specialized reduced event/form
+table. It returns an `All` summary row, event and repeat-instance
+started/due counts, and three form-opportunity metrics. Each form row
+uses the exact row-started assessed N for its context:
+`event-row-started` for non-repeat longitudinal rows,
+`instance-row-started` for repeat rows, and `Total N` for the
+display-only non-longitudinal `Single event` row. Forms under the same
+event can therefore have different assessed Ns when final record
+eligibility differs because of `records`, event selection, or repeat
+context.
 
 - `Form Incomplete` counts each record context once when any applicable
   `event-row-started`, `instance-row-started`, `form-started`, or
@@ -245,7 +330,8 @@ blank. Reports created before `redcapmissing` 5.2.0 must be regenerated
 with `find_missing()`:
 
 ``` r
-flex(report, validation_check = "field-complete")
+flexify(get_summary(report, validation_check = "field-complete"))
+flexify(get_missing(report, validation_check = "field-complete"))
 flex_event_forms(report)
 flex_event_forms(report, missing_threshold = 0.125)
 ```

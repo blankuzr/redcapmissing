@@ -4,19 +4,32 @@
 \alias{get_missing}
 \title{Get focused missing rows from a REDCap missingness report}
 \usage{
-get_missing(report, validation_check = NULL)
+get_missing(report, validation_check = NULL, events = NULL, forms = NULL)
 }
 \arguments{
 \item{report}{A \code{redcapmissing} object created by \code{\link[=find_missing]{find_missing()}}.}
 
 \item{validation_check}{\code{NULL}, or a non-empty character vector containing
-canonical validation-check codes from \code{\link[=registry]{registry()}}. \code{NULL} returns all
-failed rows. Duplicate values are treated as a set.}
+raw, canonical validation-check codes from \code{\link[=registry]{registry()}}. \code{NULL} keeps all
+checks.}
+
+\item{events}{\code{NULL}, or a non-empty character vector containing raw REDCap
+\code{redcap_event_name} values configured in the report. \code{NULL} keeps all
+events.}
+
+\item{forms}{\code{NULL}, or a non-empty character vector containing raw REDCap
+instrument/form names configured in the report. \code{NULL} keeps all forms.}
 }
 \value{
 A tibble containing failed validation rows with these columns:
 \describe{
 \item{\code{record_id}}{The REDCap record identifier.}
+\item{\code{redcap_event_name}}{The raw REDCap event name, or \code{""} when event
+context is not applicable.}
+\item{\code{redcap_repeat_instrument}}{The raw REDCap repeat instrument, or
+\code{""} when repeat-instrument context is not applicable.}
+\item{\code{redcap_repeat_instance}}{The raw REDCap repeat instance, or \code{""}
+when repeat-instance context is not applicable.}
 \item{\code{validation_context}}{The overall, event, or repeat-instance
 context for the failed validation row.}
 \item{\code{form}}{The REDCap instrument/form name.}
@@ -32,21 +45,32 @@ check is not field-specific.}
 \item{\code{url}}{A raw REDCap Data Entry URL for the failed record/form
 context when available; otherwise \code{NA}.}
 }
+
+All returned columns use character storage. The tibble carries a
+\code{redcapmissing_labels} attribute containing named \code{events} and \code{forms}
+character vectors for presentation. Data manipulation may drop this
+optional metadata; raw context values remain in the columns.
 }
 \description{
-\code{get_missing()} returns the user-facing missing-row columns from a
-\code{\link[=find_missing]{find_missing()}} report. By default, it returns failures from every
-validation check. Use \code{validation_check} to keep one or more canonical
-checks from \code{\link[=registry]{registry()}}.
+\code{get_missing()} returns the user-facing failed validation rows from a
+\code{\link[=find_missing]{find_missing()}} report. By default, it returns failures from every report
+context and validation check.
 }
 \details{
 Row-started and form-started failures do not describe an individual field,
 so their field metadata columns contain \code{NA}. The \code{url} column remains a raw
 REDCap Data Entry URL when one is available and otherwise contains \code{NA}.
 
+Filters use raw, case-sensitive values and are combined by intersection.
+They only subset the completed report; they do not rerun validation.
+Duplicate filter values are treated as a set. Event and form filters are
+validated against the report's configured scope, including configured
+contexts with no failed rows. Validation checks are validated against
+\code{\link[=registry]{registry()}}. A valid filter, or combination of filters, with no matching
+failures returns a zero-row tibble with the documented schema.
+
 \code{get_missing()} preserves the row order and values stored in
-\code{report$missing}. Valid validation checks that have no failed rows in a
-report return a zero-row tibble with the documented columns.
+\code{report$missing}.
 }
 \examples{
 \dontrun{
@@ -58,9 +82,10 @@ report <- find_missing(
 
 get_missing(report)
 get_missing(report, validation_check = "field-complete")
+get_missing(report, events = "baseline_event", forms = "baseline_form")
 }
 
 }
 \seealso{
-\code{\link[=find_missing]{find_missing()}}, \code{\link[=registry]{registry()}}, \code{\link[=tidy.redcapmissing]{tidy.redcapmissing()}}
+\code{\link[=get_summary]{get_summary()}}, \code{\link[=find_missing]{find_missing()}}, \code{\link[=registry]{registry()}}, \code{\link[=flexify]{flexify()}}
 }

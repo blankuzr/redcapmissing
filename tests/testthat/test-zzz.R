@@ -9,15 +9,29 @@ test_that("startup message includes banner and release metadata", {
 
   expect_identical(
     message_lines,
-    "> redcapmissing {v1.2.3} ~ eye-spy"
+    c(
+      "             \u25c9",
+      "            \u2571 \u2572",
+      "           \u25cf   \u25cf",
+      "          \u2571\u2572   \u2571\u2572",
+      "         \u00b7  \u00b7 \u00b7  \u00b7",
+      "",
+      "       redcapmissing",
+      "       v1.2.3 \u00b7 eye-spy"
+    )
   )
-  expect_false(any(grepl("\u2588", message_lines, fixed = TRUE)))
-  expect_false(any(grepl("Release:", message_lines, fixed = TRUE)))
-  expect_false(any(grepl("Latest:", message_lines, fixed = TRUE)))
-  expect_false(any(grepl("Improved scope reporting", message_lines, fixed = TRUE)))
+  text_tokens <- regmatches(
+    message,
+    gregexpr("[[:alnum:]][[:alnum:].-]*", message, perl = TRUE)
+  )[[1]]
+
+  expect_identical(
+    text_tokens,
+    c("redcapmissing", "v1.2.3", "eye-spy")
+  )
 })
 
-test_that("startup message includes Ember Tag ANSI styling", {
+test_that("startup message includes branch-spectrum ANSI styling", {
   old_options <- options(cli.num_colors = 256)
   on.exit(options(old_options), add = TRUE)
 
@@ -27,11 +41,38 @@ test_that("startup message includes Ember Tag ANSI styling", {
   )
 
   message <- build_message(version = "1.2.3")
+  message_lines <- strsplit(message, "\n", fixed = TRUE)[[1]]
+  styled_lines <- message_lines[c(1:5, 7:8)]
+  ansi_codes <- regmatches(
+    as.character(message),
+    gregexpr("\033\\[[0-9;]+m", as.character(message), perl = TRUE)
+  )[[1]]
+  foreground_codes <- unique(ansi_codes[
+    grepl("38;", ansi_codes, fixed = TRUE)
+  ])
 
   expect_true(cli::ansi_has_any(message))
+  expect_true(all(vapply(
+    styled_lines,
+    cli::ansi_has_any,
+    logical(1)
+  )))
+  expect_gte(length(foreground_codes), 7L)
   expect_identical(
     cli::ansi_strip(message),
-    "> redcapmissing {v1.2.3} ~ eye-spy"
+    paste(
+      c(
+        "             \u25c9",
+        "            \u2571 \u2572",
+        "           \u25cf   \u25cf",
+        "          \u2571\u2572   \u2571\u2572",
+        "         \u00b7  \u00b7 \u00b7  \u00b7",
+        "",
+        "       redcapmissing",
+        "       v1.2.3 \u00b7 eye-spy"
+      ),
+      collapse = "\n"
+    )
   )
 })
 

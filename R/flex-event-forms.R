@@ -7,7 +7,7 @@
 #' threshold metrics.
 #'
 #' @details
-#' The table is a reporting reduction of [tidy.redcapmissing()] plus report
+#' The table is a reporting reduction of [get_summary()] plus report
 #' metadata. The `N (started/due)` column shows `event-row-started` as
 #' `started/due (%)`; non-longitudinal reports use a synthetic `Single event`
 #' row with `Total N/Total N`. If multiple
@@ -81,7 +81,7 @@
 #' flex_html(event_form_table)
 #' }
 #'
-#' @seealso [find_missing()], [tidy.redcapmissing()], [flex()], [flex_html()]
+#' @seealso [find_missing()], [get_summary()], [flexify()], [flex_html()]
 #'
 #' @export
 flex_event_forms <- function(x, missing_threshold = 0.10, ...) {
@@ -99,7 +99,7 @@ flex_event_forms.redcapmissing <- function(
   .redcapmissing_flex_event_forms_check_missing_threshold(missing_threshold)
   .redcapmissing_check_packages(c("flextable", "glue"), "flex_event_forms()")
 
-  validation_set <- generics::tidy(x)
+  validation_set <- get_summary(x)
   flex_parts <- .redcapmissing_flex_event_forms_build(
     validation_set = validation_set,
     x = x,
