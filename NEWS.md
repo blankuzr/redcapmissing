@@ -1,3 +1,14 @@
+# redcapmissing 6.0.1
+
+## 2026-07-22
+
+- Updated `flex_event_forms()` so form-row `Form Incomplete` values display
+  `N/D (%)`, matching the adjacent form metrics.
+- Reduced `find_missing()` runtime and allocation overhead by assembling field
+  plans and validation rows in bulk instead of constructing and name-repairing
+  small tibbles for every field. REDCap project-context queries remain cached
+  once per report rather than multiplying across requested forms.
+
 # redcapmissing 6.0.0
 
 ## 2026-07-22

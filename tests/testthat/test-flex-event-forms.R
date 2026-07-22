@@ -435,11 +435,11 @@ test_that("flex_event_forms reduces longitudinal forms under event rows", {
       `Form Incomplete` = c(
         "3/8 (37.5%)",
         "",
-        "0 (0%)",
-        "1 (50%)",
+        "0/2 (0%)",
+        "1/2 (50%)",
         "",
-        "1 (50%)",
-        "1 (50%)"
+        "1/2 (50%)",
+        "1/2 (50%)"
       ),
       `Form Not Started` = c(
         "1/8 (12.5%)",
@@ -523,7 +523,7 @@ test_that("flex_event_forms form-incomplete percentage uses context assessed den
   expect_equal(followup_event$assessed, 2L)
   expect_equal(body[["N (started/due)"]][[followup_row]], "1/2 (50%)")
   expect_equal(body$Form[[followup_form_row]], "status_form label")
-  expect_equal(body$`Form Incomplete`[[followup_form_row]], "1 (50%)")
+  expect_equal(body$`Form Incomplete`[[followup_form_row]], "1/2 (50%)")
 })
 
 test_that("flex_event_forms rejects denominators unreconciled with eligibility", {
@@ -659,7 +659,7 @@ test_that("flex_event_forms counts reports whose REDCap ID field is not record_i
       Event = c("All", "Baseline", "", "Follow-up", ""),
       Form = c("", "", "status_form label", "", "status_form label"),
       `N (started/due)` = c("", "2/2 (100%)", "", "2/2 (100%)", ""),
-      `Form Incomplete` = c("1/4 (25%)", "", "0 (0%)", "", "1 (50%)"),
+      `Form Incomplete` = c("1/4 (25%)", "", "0/2 (0%)", "", "1/2 (50%)"),
       `Form Not Started` = c("0/4 (0%)", "", "0/2 (0%)", "", "0/2 (0%)"),
       `Form >10% Missing` = c("1/4 (25%)", "", "0/2 (0%)", "", "1/2 (50%)")
     )
@@ -696,9 +696,9 @@ test_that("flex_event_forms repeat denominators use normalized record_id", {
   ]
 
   expect_equal(repeat_instance_one[["N (started/due)"]], "2/2 (100%)")
-  expect_equal(repeat_instance_one$`Form Incomplete`, "1 (50%)")
+  expect_equal(repeat_instance_one$`Form Incomplete`, "1/2 (50%)")
   expect_equal(repeat_instance_two[["N (started/due)"]], "0/2 (0%)")
-  expect_equal(repeat_instance_two$`Form Incomplete`, "2 (100%)")
+  expect_equal(repeat_instance_two$`Form Incomplete`, "2/2 (100%)")
 })
 
 test_that("flex_event_forms renders single-event reports with form rows", {
@@ -713,7 +713,7 @@ test_that("flex_event_forms renders single-event reports with form rows", {
       Event = c("All", "Single event", ""),
       Form = c("", "", "baseline_form label"),
       `N (started/due)` = c("", "1/1 (100%)", ""),
-      `Form Incomplete` = c("1/1 (100%)", "", "1 (100%)"),
+      `Form Incomplete` = c("1/1 (100%)", "", "1/1 (100%)"),
       `Form Not Started` = c("0/1 (0%)", "", "0/1 (0%)"),
       `Form >10% Missing` = c("1/1 (100%)", "", "1/1 (100%)")
     )
@@ -753,7 +753,7 @@ test_that("flex_event_forms counts each failed record context once", {
   body <- tibble::as_tibble(flex_event_forms(report)$body$dataset)
   form_row <- body[body$Form == "multi_form label", , drop = FALSE]
 
-  expect_equal(form_row$`Form Incomplete`, "1 (100%)")
+  expect_equal(form_row$`Form Incomplete`, "1/1 (100%)")
   expect_equal(body$`Form Incomplete`[[1]], "1/1 (100%)")
   expect_equal(form_row$`Form Not Started`, "0/1 (0%)")
   expect_equal(form_row$`Form >10% Missing`, "1/1 (100%)")
@@ -792,7 +792,7 @@ test_that("flex_event_forms does not count unassessed forms as incomplete", {
       Event = c("All", "Single event", ""),
       Form = c("", "", "conditional_form label"),
       `N (started/due)` = c("", "1/1 (100%)", ""),
-      `Form Incomplete` = c("0/1 (0%)", "", "0 (0%)"),
+      `Form Incomplete` = c("0/1 (0%)", "", "0/1 (0%)"),
       `Form Not Started` = c("0/1 (0%)", "", "0/1 (0%)"),
       `Form >10% Missing` = c("0/1 (0%)", "", "0/1 (0%)")
     )
@@ -837,7 +837,7 @@ test_that("flex_event_forms shows forms for missing events", {
   expect_equal(body$`Form Not Started`[[1]], "2/4 (50%)")
   expect_equal(body$`Form >10% Missing`[[1]], "2/4 (50%)")
   expect_equal(body$Form[[5]], "status_form label")
-  expect_equal(body$`Form Incomplete`[[5]], "2 (100%)")
+  expect_equal(body$`Form Incomplete`[[5]], "2/2 (100%)")
   expect_equal(body$`Form Not Started`[[5]], "2/2 (100%)")
   expect_equal(body$`Form >10% Missing`[[5]], "2/2 (100%)")
 })
@@ -866,7 +866,7 @@ test_that("flex_event_forms includes repeat context and missing repeat rows", {
       body$`Repeat Instance` == "2",
   ]
   expect_equal(repeat_instance_two[["N (started/due)"]], "0/2 (0%)")
-  expect_equal(repeat_instance_two$`Form Incomplete`, "2 (100%)")
+  expect_equal(repeat_instance_two$`Form Incomplete`, "2/2 (100%)")
   expect_equal(repeat_instance_two$`Form Not Started`, "2/2 (100%)")
   expect_equal(repeat_instance_two$`Form >10% Missing`, "2/2 (100%)")
 
@@ -878,7 +878,7 @@ test_that("flex_event_forms includes repeat context and missing repeat rows", {
       dplyr::lag(body$Event, default = "") == "Regular C",
   ]
   expect_equal(nrow(regular_c_form), 1)
-  expect_equal(regular_c_form$`Form Incomplete`, "2 (100%)")
+  expect_equal(regular_c_form$`Form Incomplete`, "2/2 (100%)")
 })
 
 test_that("flex_event_forms applies event and form row styling", {
@@ -928,8 +928,8 @@ test_that("flex_event_forms rendered HTML includes custom-ID labels and counts",
   expect_true(grepl("N (started/due)", html_out, fixed = TRUE))
   expect_true(grepl("1/4 (25%)", html_out, fixed = TRUE))
   expect_true(grepl("2/2 (100%)", html_out, fixed = TRUE))
-  expect_true(grepl("0 (0%)", html_out, fixed = TRUE))
-  expect_true(grepl("1 (50%)", html_out, fixed = TRUE))
+  expect_true(grepl("0/2 (0%)", html_out, fixed = TRUE))
+  expect_true(grepl("1/2 (50%)", html_out, fixed = TRUE))
   expect_false(grepl("Fields Missing", html_out, fixed = TRUE))
 })
 

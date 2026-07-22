@@ -157,6 +157,96 @@ test_that("find_missing caches exact-context field assessment counts", {
   }
 })
 
+test_that("find_missing supports a selected form containing only checkboxes", {
+  metadata <- dplyr::bind_rows(
+    meta_row("record_id", "identifier_form", required = "y"),
+    meta_row(
+      "consent_options",
+      "checkbox_form",
+      field_type = "checkbox",
+      choices = "1, First | 2, Second",
+      required = "y"
+    )
+  )
+  report <- find_missing(
+    data = tibble::tibble(
+      record_id = "r1",
+      consent_options___1 = "1",
+      consent_options___2 = "0"
+    ),
+    rcon = fake_rcon(metadata),
+    forms = "checkbox_form",
+    details = TRUE,
+    progress = FALSE
+  )
+  field_checks <- report$details$checks[["field-complete"]]
+
+  expect_equal(nrow(field_checks), 1L)
+  expect_equal(field_checks$field_name, "consent_options")
+  expect_true(field_checks$validation_passed)
+})
+
+test_that("find_missing does not multiply connection queries across forms", {
+  calls <- new.env(parent = emptyenv())
+  method_names <- c(
+    "metadata",
+    "instruments",
+    "events",
+    "mapping",
+    "repeat",
+    "project",
+    "version"
+  )
+  for (method in method_names) {
+    calls[[method]] <- 0L
+  }
+  counted <- function(method, value) {
+    force(value)
+    function() {
+      calls[[method]] <- calls[[method]] + 1L
+      value
+    }
+  }
+
+  metadata <- dplyr::bind_rows(
+    meta_row("record_id", "form_a", required = "y"),
+    meta_row("field_a", "form_a", required = "y"),
+    meta_row("field_b", "form_b", required = "y")
+  )
+  rcon <- list(
+    url = "https://redcap.example.edu/api/",
+    metadata = counted("metadata", metadata),
+    instruments = counted(
+      "instruments",
+      tibble::tibble(
+        instrument_name = c("form_a", "form_b"),
+        instrument_label = c("Form A", "Form B")
+      )
+    ),
+    events = counted("events", tibble::tibble()),
+    mapping = counted("mapping", tibble::tibble()),
+    repeatInstrumentEvent = counted("repeat", tibble::tibble()),
+    projectInformation = counted(
+      "project",
+      tibble::tibble(project_id = "1", is_longitudinal = 0L)
+    ),
+    version = counted("version", "14.2.0")
+  )
+
+  find_missing(
+    data = tibble::tibble(record_id = "r1", field_a = "", field_b = ""),
+    rcon = rcon,
+    forms = c("form_a", "form_b"),
+    progress = FALSE
+  )
+
+  expect_identical(calls$metadata, 1L)
+  expect_identical(calls$instruments, 1L)
+  expect_true(all(vapply(method_names, function(method) {
+    calls[[method]] <= 1L
+  }, logical(1))))
+})
+
 test_that("old report argument names are not supported", {
   records <- tibble::tibble(
     record_id = "r1",

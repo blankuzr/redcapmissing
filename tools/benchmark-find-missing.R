@@ -186,6 +186,15 @@ make_tier <- function(tier) {
         instances = NULL
       )
     },
+    reported = {
+      forms <- make_form_names(10L)
+      list(
+        forms = forms,
+        records = make_benchmark_records(150L, forms, 19L),
+        rcon = fake_rcon(make_benchmark_meta(forms, 19L)),
+        instances = NULL
+      )
+    },
     medium = {
       forms <- make_form_names(3L)
       events <- sprintf("event_%02d", 1:3)
@@ -325,7 +334,7 @@ if (nzchar(baseline_path) && file.exists(baseline_path)) {
     )
 }
 
-print(summary, n = Inf)
+print(summary, n = Inf, width = Inf)
 
 out_path <- Sys.getenv("REDCAPMISSING_BENCH_OUT", "")
 if (nzchar(out_path)) {

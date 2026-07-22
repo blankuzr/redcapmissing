@@ -54,84 +54,111 @@
 }
 
 .miss_derive_field_names <- function(meta) {
-  rows <- lapply(seq_len(nrow(meta)), function(i) {
-    field <- meta$field_name[[i]]
-    field_type <- meta$field_type[[i]]
+  if (nrow(meta) == 0) {
+    return(tibble::tibble(
+      original_field_name = character(),
+      choice_value = character(),
+      export_field_name = character()
+    ))
+  }
 
-    if (identical(field_type, "checkbox")) {
-      choices <- .miss_parse_choices(meta$select_choices_or_calculations[[i]])
-      if (nrow(choices) == 0) {
-        return(tibble::tibble(
-          original_field_name = field,
-          choice_value = NA_character_,
-          export_field_name = field
-        ))
-      }
+  field_name <- .miss_chr_vec(meta$field_name)
+  field_type <- .miss_chr_vec(meta$field_type)
+  checkbox <- !is.na(field_type) & field_type == "checkbox"
+  rows <- list(data.frame(
+    original_field_name = field_name[!checkbox],
+    choice_value = rep(NA_character_, sum(!checkbox)),
+    export_field_name = field_name[!checkbox],
+    .field_order = which(!checkbox),
+    .choice_order = rep.int(1L, sum(!checkbox)),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  ))
 
-      return(tibble::tibble(
+  checkbox_rows <- which(checkbox)
+  for (i in checkbox_rows) {
+    field <- field_name[[i]]
+    choices <- .miss_parse_choices(meta$select_choices_or_calculations[[i]])
+    if (nrow(choices) == 0) {
+      rows[[length(rows) + 1L]] <- data.frame(
         original_field_name = field,
-        choice_value = choices$code,
-        export_field_name = paste0(
-          field,
-          "___",
-          .miss_choice_suffix(choices$code)
-        )
-      ))
+        choice_value = NA_character_,
+        export_field_name = field,
+        .field_order = i,
+        .choice_order = 1L,
+        stringsAsFactors = FALSE,
+        check.names = FALSE
+      )
+      next
     }
 
-    tibble::tibble(
-      original_field_name = field,
-      choice_value = NA_character_,
-      export_field_name = field
+    rows[[length(rows) + 1L]] <- data.frame(
+      original_field_name = rep.int(field, nrow(choices)),
+      choice_value = choices$code,
+      export_field_name = paste0(
+        field,
+        "___",
+        .miss_choice_suffix(choices$code)
+      ),
+      .field_order = rep.int(i, nrow(choices)),
+      .choice_order = seq_len(nrow(choices)),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
     )
-  })
+  }
 
-  dplyr::bind_rows(rows)
+  out <- dplyr::bind_rows(rows)
+  out <- out[order(out$.field_order, out$.choice_order), , drop = FALSE]
+  tibble::as_tibble(out[, c(
+    "original_field_name",
+    "choice_value",
+    "export_field_name"
+  ), drop = FALSE])
 }
 
 .miss_build_field_plan <- function(form_meta, field_names) {
-  rows <- lapply(seq_len(nrow(form_meta)), function(i) {
-    field <- form_meta$field_name[[i]]
-    exports <- field_names[
-      field_names$original_field_name == field,
-      ,
-      drop = FALSE
-    ]
-
-    tibble::tibble(
-      field_name = field,
-      form = form_meta$form_name[[i]],
-      field_type = form_meta$field_type[[i]],
-      field_label = form_meta$field_label[[i]],
-      branching_logic = .miss_chr(form_meta$branching_logic[[i]]),
-      branch_plan = list(.miss_compile_branch_logic(
-        .miss_chr(form_meta$branching_logic[[i]])
-      )),
-      child_fields = list(as.character(exports$export_field_name)),
-      choice_values = list(as.character(stats::na.omit(exports$choice_value)))
-    )
+  branching_logic <- vapply(
+    form_meta$branching_logic,
+    .miss_chr,
+    character(1)
+  )
+  field_name <- .miss_chr_vec(form_meta$field_name)
+  child_fields <- lapply(field_name, function(field) {
+    as.character(field_names$export_field_name[
+      field_names$original_field_name == field
+    ])
+  })
+  choice_values <- lapply(field_name, function(field) {
+    as.character(stats::na.omit(field_names$choice_value[
+      field_names$original_field_name == field
+    ]))
   })
 
-  dplyr::bind_rows(rows)
+  tibble::tibble(
+    field_name = field_name,
+    form = .miss_chr_vec(form_meta$form_name),
+    field_type = .miss_chr_vec(form_meta$field_type),
+    field_label = .miss_chr_vec(form_meta$field_label),
+    branching_logic = branching_logic,
+    branch_plan = lapply(branching_logic, .miss_compile_branch_logic),
+    child_fields = child_fields,
+    choice_values = choice_values
+  )
 }
 
 .miss_build_form_presence_plan <- function(form_meta, field_names) {
-  rows <- lapply(seq_len(nrow(form_meta)), function(i) {
-    field <- form_meta$field_name[[i]]
-    exports <- field_names[
-      field_names$original_field_name == field,
-      ,
-      drop = FALSE
-    ]
-
-    tibble::tibble(
-      field_name = field,
-      field_type = form_meta$field_type[[i]],
-      child_fields = list(as.character(exports$export_field_name))
-    )
+  field_name <- .miss_chr_vec(form_meta$field_name)
+  child_fields <- lapply(field_name, function(field) {
+    as.character(field_names$export_field_name[
+      field_names$original_field_name == field
+    ])
   })
 
-  dplyr::bind_rows(rows)
+  tibble::tibble(
+    field_name = field_name,
+    field_type = .miss_chr_vec(form_meta$field_type),
+    child_fields = child_fields
+  )
 }
 
 .miss_build_choice_map <- function(meta) {
@@ -139,18 +166,23 @@
     field <- meta$field_name[[i]]
     field_type <- meta$field_type[[i]]
 
-    choices <- .miss_parse_choices(meta$select_choices_or_calculations[[i]])
     if (identical(field_type, "yesno")) {
       choices <- tibble::tibble(code = c("1", "0"), label = c("Yes", "No"))
-    }
-    if (identical(field_type, "truefalse")) {
+    } else if (identical(field_type, "truefalse")) {
       choices <- tibble::tibble(code = c("1", "0"), label = c("True", "False"))
+    } else {
+      choice_text <- meta$select_choices_or_calculations[[i]]
+      if (.miss_is_blank_scalar(choice_text)) {
+        return(NULL)
+      }
+      choices <- .miss_parse_choices(choice_text)
     }
     if (nrow(choices) == 0) {
       return(NULL)
     }
 
-    dplyr::mutate(choices, field_name = field, .before = 1)
+    choices$field_name <- field
+    choices[, c("field_name", "code", "label"), drop = FALSE]
   })
 
   out <- dplyr::bind_rows(rows)
@@ -202,14 +234,19 @@
   }
 
   fields <- project$system_fields
-  row_base <- tibble::tibble(
+  row_base <- data.frame(
     record_id = .miss_chr_vec(records[[project$id_col]]),
     redcap_event_name = .miss_col_vec(records, fields$event_col),
     redcap_repeat_instrument = .miss_col_vec(
       records,
       fields$repeat_instrument_col
     ),
-    redcap_repeat_instance = .miss_col_vec(records, fields$repeat_instance_col)
+    redcap_repeat_instance = .miss_col_vec(
+      records,
+      fields$repeat_instance_col
+    ),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
   )
 
   branch_cache <- .miss_new_branch_cache(
@@ -217,7 +254,7 @@
     lookup_records = lookup_records,
     project = project
   )
-  pieces <- lapply(seq_len(nrow(field_plan)), function(field_i) {
+  assessments <- lapply(seq_len(nrow(field_plan)), function(field_i) {
     logic <- field_plan$branching_logic[[field_i]]
     branch_satisfied <- .miss_branch_satisfied(
       logic = logic,
@@ -231,7 +268,8 @@
     )
 
     keep <- which(branch_satisfied)
-    piece <- NULL
+    passed <- logical()
+    value_summary <- character()
     if (length(keep) > 0) {
       child_fields <- field_plan$child_fields[[field_i]]
       present <- .miss_field_present(
@@ -241,40 +279,73 @@
         child_fields = child_fields,
         choice_map = choice_map
       )
-
-      n_keep <- length(keep)
-      piece <- dplyr::bind_cols(
-        row_base[keep, , drop = FALSE],
-        tibble::tibble(form = rep(form, n_keep)),
-        .redcapmissing_validation_metadata(
-          "field-complete",
-          n_keep,
-          repeat_instance = row_base$redcap_repeat_instance[keep]
-        ),
-        tibble::tibble(
-          validation_passed = present$field_complete[keep],
-          field_name = rep(field_plan$field_name[[field_i]], n_keep),
-          field_label = rep(field_plan$field_label[[field_i]], n_keep),
-          field_type = rep(field_plan$field_type[[field_i]], n_keep),
-          branching_logic = rep(logic, n_keep),
-          branch_satisfied = rep(TRUE, n_keep),
-          value_summary = present$value_summary[keep],
-          export_fields = rep(paste(child_fields, collapse = ", "), n_keep)
-        )
-      )
+      passed <- present$field_complete[keep]
+      value_summary <- present$value_summary[keep]
     }
 
     if (!is.null(progress_callback)) {
       progress_callback(field_i / nrow(field_plan), force = FALSE)
     }
-    piece
+    list(
+      record_row = keep,
+      validation_passed = passed,
+      value_summary = value_summary
+    )
   })
 
-  out <- dplyr::bind_rows(pieces)
-  if (nrow(out) == 0) {
+  assessment_sizes <- vapply(
+    assessments,
+    function(x) length(x$record_row),
+    integer(1)
+  )
+  if (sum(assessment_sizes) == 0) {
     return(.miss_empty_expected())
   }
-  out
+
+  record_row <- unlist(
+    lapply(assessments, `[[`, "record_row"),
+    use.names = FALSE
+  )
+  field_row <- rep.int(seq_len(nrow(field_plan)), assessment_sizes)
+  validation_check <- "field-complete"
+  validation_label <- .redcapmissing_registry_row(
+    validation_check
+  )$validation_label[[1]]
+  export_fields <- vapply(
+    field_plan$child_fields,
+    paste,
+    collapse = ", ",
+    character(1)
+  )
+  n <- length(record_row)
+
+  tibble::tibble(
+    record_id = row_base$record_id[record_row],
+    redcap_event_name = row_base$redcap_event_name[record_row],
+    redcap_repeat_instrument = row_base$redcap_repeat_instrument[record_row],
+    redcap_repeat_instance = row_base$redcap_repeat_instance[record_row],
+    form = rep.int(form, n),
+    validation_level = .redcapmissing_context_validation_level(
+      validation_check = validation_check,
+      repeat_instance = row_base$redcap_repeat_instance[record_row]
+    ),
+    validation_check = rep.int(validation_check, n),
+    validation_label = rep.int(validation_label, n),
+    validation_passed = unlist(
+      lapply(assessments, `[[`, "validation_passed"),
+      use.names = FALSE
+    ),
+    field_name = field_plan$field_name[field_row],
+    field_label = field_plan$field_label[field_row],
+    field_type = field_plan$field_type[field_row],
+    branching_logic = field_plan$branching_logic[field_row],
+    branch_satisfied = rep.int(TRUE, n),
+    value_summary = unlist(
+      lapply(assessments, `[[`, "value_summary"),
+      use.names = FALSE
+    ),
+    export_fields = export_fields[field_row]
+  )
 }
 
 .miss_empty_expected <- function() {

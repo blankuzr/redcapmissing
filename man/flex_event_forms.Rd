@@ -61,8 +61,8 @@ headings omit unnecessary trailing zeros, such as
 \verb{Form >12.5\\\% Missing}.}
 }
 
-\verb{Form Not Started} and the threshold metric display \verb{N/D (\%)} on form and
-\code{All} rows. The \code{All} row sums displayed form opportunities without
+All three form metrics display \verb{N/D (\%)} on form and \code{All} rows. The \code{All}
+row sums displayed form opportunities without
 deduplicating records across forms; event-header cells for these metrics are
 blank.
 
