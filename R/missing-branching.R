@@ -413,6 +413,9 @@
   if (length(x) == 0) {
     return(character())
   }
+  if (is.character(x)) {
+    return(x)
+  }
   if (is.factor(x)) {
     x <- as.character(x)
   }
@@ -423,7 +426,9 @@
     return(vapply(x, .miss_chr, character(1)))
   }
   out <- as.character(x)
-  out[is.na(x)] <- NA_character_
+  if (anyNA(x)) {
+    out[is.na(x)] <- NA_character_
+  }
   out
 }
 

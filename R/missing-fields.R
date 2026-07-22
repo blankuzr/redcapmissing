@@ -146,9 +146,16 @@
   )
 }
 
-.miss_build_form_presence_plan <- function(form_meta, field_names) {
+.miss_build_form_presence_plan <- function(
+  form_meta,
+  field_names = NULL,
+  child_fields_by_root = NULL
+) {
   field_name <- .miss_chr_vec(form_meta$field_name)
   child_fields <- lapply(field_name, function(field) {
+    if (!is.null(child_fields_by_root)) {
+      return(child_fields_by_root[[field]] %||% character())
+    }
     as.character(field_names$export_field_name[
       field_names$original_field_name == field
     ])
@@ -348,8 +355,8 @@
   )
 }
 
-.miss_empty_expected <- function() {
-  tibble::tibble(
+.miss_empty_expected <- local({
+  empty <- tibble::tibble(
     record_id = character(),
     redcap_event_name = character(),
     redcap_repeat_instrument = character(),
@@ -368,7 +375,8 @@
     export_fields = character(),
     validation_context = character()
   )
-}
+  function() empty
+})
 
 .miss_build_form_check_rows <- function(
   records,
@@ -476,7 +484,8 @@
   form_records,
   project,
   form,
-  record_eligibility = NULL
+  record_eligibility = NULL,
+  include_context = TRUE
 ) {
   records <- tibble::as_tibble(records)
   form_records <- tibble::as_tibble(form_records)
@@ -529,7 +538,8 @@
     contexts = expected,
     form = form,
     validation_check = "event-row-started",
-    validation_passed = expected$.event_row_started
+    validation_passed = expected$.event_row_started,
+    include_context = include_context
   )
 }
 
@@ -539,7 +549,8 @@
   project,
   form,
   instances,
-  record_eligibility = NULL
+  record_eligibility = NULL,
+  include_context = TRUE
 ) {
   if (is.null(instances) || !isTRUE(project$form_repeats)) {
     return(.miss_empty_expected())
@@ -578,7 +589,8 @@
     contexts = contexts,
     form = form,
     validation_check = "instance-row-started",
-    validation_passed = contexts$.instance_row_started
+    validation_passed = contexts$.instance_row_started,
+    include_context = include_context
   )
 }
 
@@ -802,7 +814,8 @@
   contexts,
   form,
   validation_check,
-  validation_passed
+  validation_passed,
+  include_context = TRUE
 ) {
   contexts <- tibble::as_tibble(contexts)
   if (nrow(contexts) == 0) {
@@ -810,47 +823,56 @@
   }
 
   n <- nrow(contexts)
-  form_value <- form
-  tibble::tibble(
-    record_id = .miss_chr_vec(contexts$record_id),
-    redcap_event_name = .miss_chr_vec(contexts$redcap_event_name),
-    redcap_repeat_instrument = .miss_chr_vec(contexts$redcap_repeat_instrument),
-    redcap_repeat_instance = .miss_chr_vec(contexts$redcap_repeat_instance),
-    form = rep(form_value, n)
-  ) |>
-    dplyr::bind_cols(
-      .redcapmissing_validation_metadata(
-        validation_check,
-        n,
-        repeat_instance = contexts$redcap_repeat_instance
-      ),
-      tibble::tibble(
-        validation_passed = rep(validation_passed, length.out = n),
-        field_name = rep(NA_character_, n),
-        field_label = rep(NA_character_, n),
-        field_type = rep(NA_character_, n),
-        branching_logic = rep(NA_character_, n),
-        branch_satisfied = rep(NA, n),
-        value_summary = rep(NA_character_, n),
-        export_fields = rep(NA_character_, n)
+  record_id <- .miss_chr_vec(contexts$record_id)
+  event <- .miss_key_part(contexts$redcap_event_name)
+  repeat_instrument <- .miss_key_part(contexts$redcap_repeat_instrument)
+  repeat_instance <- .miss_key_part(contexts$redcap_repeat_instance)
+  validation_metadata <- .redcapmissing_validation_metadata(
+    validation_check,
+    n,
+    repeat_instance = repeat_instance
+  )
+  tibble::new_tibble(list(
+    record_id = record_id,
+    redcap_event_name = event,
+    redcap_repeat_instrument = repeat_instrument,
+    redcap_repeat_instance = repeat_instance,
+    form = rep(form, n),
+    validation_level = validation_metadata$validation_level,
+    validation_check = validation_metadata$validation_check,
+    validation_label = validation_metadata$validation_label,
+    validation_passed = rep(validation_passed, length.out = n),
+    field_name = rep(NA_character_, n),
+    field_label = rep(NA_character_, n),
+    field_type = rep(NA_character_, n),
+    branching_logic = rep(NA_character_, n),
+    branch_satisfied = rep(NA, n),
+    value_summary = rep(NA_character_, n),
+    export_fields = rep(NA_character_, n),
+    validation_context = if (isTRUE(include_context)) {
+      .miss_validation_context_vec(
+        event = event,
+        repeat_instance = repeat_instance
       )
-    )
+    } else {
+      rep(NA_character_, n)
+    }
+  ), nrow = n)
 }
 
-.miss_add_validation_context <- function(rows) {
-  rows <- tibble::as_tibble(rows)
-  rows <- .miss_normalize_validation_context_columns(rows)
-  if (nrow(rows) == 0) {
-    rows$validation_context <- character()
-    return(rows)
+.miss_validation_context_vec <- function(event, repeat_instance) {
+  event <- .miss_key_part(event)
+  repeat_instance <- .miss_key_part(repeat_instance)
+  n <- max(length(event), length(repeat_instance))
+  if (n == 0) {
+    return(character())
   }
-
-  event <- .miss_chr_vec(rows$redcap_event_name)
-  repeat_instance <- .miss_chr_vec(rows$redcap_repeat_instance)
+  event <- rep(event, length.out = n)
+  repeat_instance <- rep(repeat_instance, length.out = n)
   has_event <- !.miss_is_blank_vec(event)
   has_repeat <- !.miss_is_blank_vec(repeat_instance)
 
-  context <- rep("overall", nrow(rows))
+  context <- rep("overall", n)
   context[has_event & !has_repeat] <- paste0(
     "event: ",
     event[has_event & !has_repeat]
@@ -865,8 +887,39 @@
     "; repeat: ",
     repeat_instance[has_event & has_repeat]
   )
+  context
+}
 
-  rows$validation_context <- context
+.miss_add_validation_context <- function(rows) {
+  rows <- tibble::as_tibble(rows)
+  context_cols <- intersect(
+    c(
+      "redcap_event_name",
+      "redcap_repeat_instrument",
+      "redcap_repeat_instance",
+      "form"
+    ),
+    names(rows)
+  )
+  if (
+    "validation_context" %in% names(rows) &&
+      is.character(rows$validation_context) &&
+      !anyNA(rows$validation_context) &&
+      all(vapply(rows[context_cols], is.character, logical(1))) &&
+      !anyNA(rows[context_cols])
+  ) {
+    return(rows)
+  }
+  rows <- .miss_normalize_validation_context_columns(rows)
+  if (nrow(rows) == 0) {
+    rows$validation_context <- character()
+    return(rows)
+  }
+
+  rows$validation_context <- .miss_validation_context_vec(
+    event = rows$redcap_event_name,
+    repeat_instance = rows$redcap_repeat_instance
+  )
   rows
 }
 
@@ -880,7 +933,9 @@
   )
   for (column in intersect(context_cols, names(rows))) {
     rows[[column]] <- .miss_chr_vec(rows[[column]])
-    rows[[column]][is.na(rows[[column]])] <- ""
+    if (anyNA(rows[[column]])) {
+      rows[[column]][is.na(rows[[column]])] <- ""
+    }
   }
   rows
 }
@@ -896,6 +951,9 @@
 }
 
 .miss_record_context_key <- function(records, project) {
+  if (".context_key" %in% names(records)) {
+    return(.miss_chr_vec(records$.context_key))
+  }
   contexts <- .miss_context_from_records(records, project)
   .miss_context_key(
     contexts$record_id,
@@ -931,6 +989,8 @@
 
 .miss_key_part <- function(x) {
   out <- .miss_chr_vec(x)
-  out[is.na(out)] <- ""
+  if (anyNA(out)) {
+    out[is.na(out)] <- ""
+  }
   out
 }

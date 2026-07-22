@@ -179,7 +179,8 @@ The main scoping arguments to `find_missing()` answer different
 questions:
 
 - `events` selects the REDCap events on which a requested form should be
-  assessed.
+  assessed, including events that REDCap may omit entirely from an
+  export because no row was started.
 - `records` restricts record eligibility by raw event name and, when
   needed, by form or repeat instance.
 - `instances` declares expected repeat-instance IDs, including instances

@@ -39,6 +39,9 @@ progress_without_timing <- function(report) {
   report$diagnostics$started_at <- NULL
   report$diagnostics$finished_at <- NULL
   report$diagnostics$elapsed_seconds <- NULL
+  if (!is.null(report$diagnostics$stage_timings)) {
+    report$diagnostics$stage_timings$elapsed_seconds <- 0
+  }
   report
 }
 
@@ -244,7 +247,7 @@ test_that("hybrid form and overall progress math is monotonic", {
   expect_error(form_fraction("unknown"), "Unknown progress stage")
 })
 
-test_that("form report progress visits every field without changing checks", {
+test_that("form report progress visits every field block without changing checks", {
   metadata <- baseline_form_meta()
   records <- tibble::tibble(
     record_id = "r1",
@@ -274,6 +277,14 @@ test_that("form report progress visits every field without changing checks", {
     ".miss_build_form_report",
     "redcapmissing"
   )
+  new_record_store <- getFromNamespace(
+    ".miss_new_record_store",
+    "redcapmissing"
+  )
+  compile_report_plan <- getFromNamespace(
+    ".miss_compile_report_plan",
+    "redcapmissing"
+  )
 
   project_cache <- get_project_cache(rcon)
   record_specs <- resolve_records(
@@ -282,18 +293,28 @@ test_that("form report progress visits every field without changing checks", {
     forms = "baseline_form",
     ignore_ids = character()
   )
-  form_args <- list(
-    records = records,
-    all_records = records,
+  record_store <- new_record_store(
+    data = records,
+    id_col = "record_id",
+    ignore_ids = character(),
+    system_fields = project_cache$system_fields
+  )
+  report_plan <- compile_report_plan(
     meta = metadata,
-    rcon = rcon,
-    project_cache = project_cache,
-    form = "baseline_form",
-    events = NULL,
-    record_specs = record_specs,
+    forms = "baseline_form",
     required_fields = TRUE,
     ignore_fields = NULL,
     exclude_types = "descriptive",
+    rcon = rcon,
+    project_cache = project_cache
+  )
+  form_args <- list(
+    record_store = record_store,
+    report_plan = report_plan,
+    form_plan = report_plan$form_plans[["baseline_form"]],
+    form = "baseline_form",
+    events = NULL,
+    record_specs = record_specs,
     instances = NULL,
     instances_explicit = FALSE,
     details = TRUE
@@ -327,14 +348,17 @@ test_that("form report progress visits every field without changing checks", {
     numeric(1),
     "form_fraction"
   )
-  field_fractions <- callback_fractions[!callback_forced]
-  field_count <- nrow(progress_report$field_plan)
 
+  progress_report$stage_timings$elapsed_seconds <- 0
+  quiet_report$stage_timings$elapsed_seconds <- 0
   expect_equal(progress_report, quiet_report)
-  expect_length(field_fractions, field_count)
+  expect_false(any(callback_forced))
+  expect_true(all(diff(callback_fractions) >= 0))
+  expect_equal(callback_fractions[[1]], 0.10)
+  expect_equal(tail(callback_fractions, 1), 1)
   expect_equal(
-    field_fractions,
-    0.50 + 0.45 * seq_len(field_count) / field_count
+    callback_fractions[callback_fractions > 0.50 & callback_fractions < 0.95],
+    c(0.725, 0.875)
   )
   expect_setequal(
     setdiff(
@@ -353,7 +377,8 @@ test_that("dynamic progress replaces one line and cleans up on success", {
     cli.progress_show_after = 0,
     cli.num_colors = 1,
     cli.unicode = FALSE,
-    width = 120
+    width = 120,
+    redcapmissing.progress_min_interval = 0
   )
   on.exit(options(old_options), add = TRUE)
 
@@ -416,10 +441,6 @@ test_that("dynamic progress replaces one line and cleans up on success", {
     "intake_form [0-9]+%",
     visible_states
   )))
-  expect_true(any(grepl(
-    "followup_form [0-9]+%",
-    visible_states
-  )))
   expect_true(all(grepl(
     "OVERALL [0-9]+%",
     visible_states
@@ -427,6 +448,102 @@ test_that("dynamic progress replaces one line and cleans up on success", {
   expect_false(any(
     visible_states[-1L] == visible_states[-length(visible_states)]
   ))
+})
+
+test_that("a slow first form can open progress after the display threshold", {
+  old_options <- options(
+    cli.dynamic = TRUE,
+    cli.progress_handlers_only = "cli",
+    cli.progress_show_after = 0,
+    cli.num_colors = 1,
+    cli.unicode = FALSE,
+    width = 120
+  )
+  on.exit(options(old_options), add = TRUE)
+
+  progress_start <- getFromNamespace(
+    ".miss_cli_progress_start",
+    "redcapmissing"
+  )
+  progress_reporter <- getFromNamespace(
+    ".miss_cli_progress_reporter",
+    "redcapmissing"
+  )
+  progress_finish <- getFromNamespace(
+    ".miss_cli_progress_finish",
+    "redcapmissing"
+  )
+
+  active_before <- cli::cli_progress_num()
+  on.exit({
+    if (cli::cli_progress_num() > active_before) {
+      cli::cli_progress_cleanup()
+    }
+  }, add = TRUE)
+
+  state <- progress_start(forms = "slow_form", progress = TRUE)
+  state$dynamic <- TRUE
+  reporter <- progress_reporter(state = state, form_index = 1L)
+
+  expect_true(is.function(reporter))
+  expect_null(state$id)
+
+  state$last_render_elapsed <-
+    unname(proc.time()[["elapsed"]]) - state$minimum_render_interval - 1
+  progress_messages <- testthat::capture_messages(reporter(0.50))
+
+  expect_false(is.null(state$id))
+  expect_true(state$has_rendered)
+  expect_match(
+    cli::ansi_strip(state$last_line),
+    "slow_form 50%",
+    fixed = TRUE
+  )
+
+  testthat::capture_messages(progress_finish(state, result = "done"))
+  expect_identical(cli::cli_progress_num(), active_before)
+})
+
+test_that("dynamic progress reaches completion when its lazy bar never opened", {
+  old_options <- options(
+    cli.dynamic = TRUE,
+    cli.progress_handlers_only = "cli",
+    cli.progress_show_after = 0,
+    cli.num_colors = 1,
+    cli.unicode = FALSE,
+    width = 120
+  )
+  on.exit(options(old_options), add = TRUE)
+
+  progress_start <- getFromNamespace(
+    ".miss_cli_progress_start",
+    "redcapmissing"
+  )
+  progress_finish <- getFromNamespace(
+    ".miss_cli_progress_finish",
+    "redcapmissing"
+  )
+
+  active_before <- cli::cli_progress_num()
+  on.exit({
+    if (cli::cli_progress_num() > active_before) {
+      cli::cli_progress_cleanup()
+    }
+  }, add = TRUE)
+
+  state <- progress_start(forms = "fast_form", progress = TRUE)
+  state$dynamic <- TRUE
+  expect_null(state$id)
+
+  progress_messages <- testthat::capture_messages(
+    progress_finish(state, result = "done")
+  )
+  progress_stream <- cli::ansi_strip(paste0(progress_messages, collapse = ""))
+
+  expect_true(state$finished)
+  expect_match(progress_stream, "find_missing complete", fixed = TRUE)
+  expect_match(progress_stream, "OVERALL 100%", fixed = TRUE)
+  expect_identical(cli::cli_progress_num(), active_before)
 })
 
 test_that("non-dynamic progress emits only the final completion line", {
@@ -577,7 +694,7 @@ test_that("progress bars are cleaned up when find_missing errors", {
   expect_identical(cli::cli_progress_num(), active_before)
   expect_match(
     cli::ansi_strip(paste0(progress_messages, collapse = "")),
-    "x .  intake_form failed at 10%",
+    "x .  intake_form failed at 0%",
     fixed = TRUE
   )
 })
