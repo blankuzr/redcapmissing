@@ -39,8 +39,8 @@
 #'     `Form >12.5\% Missing`.}
 #' }
 #'
-#' `Form Not Started` and the threshold metric display `N/D (%)` on form and
-#' `All` rows. The `All` row sums displayed form opportunities without
+#' All three form metrics display `N/D (%)` on form and `All` rows. The `All`
+#' row sums displayed form opportunities without
 #' deduplicating records across forms; event-header cells for these metrics are
 #' blank.
 #'
@@ -925,7 +925,7 @@ flex_event_forms.redcapmissing <- function(
     ),
     repeat_instance = context$redcap_repeat_instance,
     n = if (repeat_context) .redcapmissing_flex_event_forms_format_stats(row_stats) else "",
-    form_incomplete = .redcapmissing_flex_event_forms_format_count(
+    form_incomplete = .redcapmissing_flex_event_forms_format_fraction(
       count = form_incomplete,
       denominator = form_incomplete_denominator
     ),
@@ -1122,14 +1122,6 @@ flex_event_forms.redcapmissing <- function(
   ]
 
   rows[seq_len(min(nrow(rows), 1)), , drop = FALSE]
-}
-
-.redcapmissing_flex_event_forms_format_count <- function(
-  count,
-  denominator
-) {
-  pct <- .redcapmissing_flex_event_forms_pct(count, denominator)
-  as.character(glue::glue("{count} ({pct}%)"))
 }
 
 .redcapmissing_flex_event_forms_format_fraction <- function(
