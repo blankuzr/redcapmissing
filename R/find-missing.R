@@ -94,7 +94,17 @@
 #'     report methods. `spec$record_eligibility` contains every final assessed
 #'     record/event/form/repeat-instance context, including when `records` is
 #'     omitted.}
-#'   \item{`diagnostics`}{Timing and row-count metadata.}
+#'   \item{`diagnostics`}{Timing and row-count metadata, preserving the report
+#'     start/finish, elapsed time, form count, validation-row count, summary-row
+#'     count, and missing-row count. `diagnostics$stage_timings` is a tibble
+#'     with `scope`, `form`, `stage`, and `elapsed_seconds`; report stages
+#'     separate connection metadata/project-context access, plan compilation,
+#'     URL construction, and report assembly, while form stages separate
+#'     context, eligibility, row checks, blankness, form startedness, the four
+#'     field partitions, and form assembly. `diagnostics$form_workload` is a
+#'     per-form tibble with record/context/started-row counts, total and
+#'     assessable field counts, the four field-partition counts, and validation
+#'     rows.}
 #'   \item{`details`}{`NULL` by default. When `details = TRUE`, a list with
 #'     `validation_rows`, `checks`, and `failures` row tables.}
 #' }
@@ -183,6 +193,8 @@ find_missing <- function(
   }
 
   report_started_at <- Sys.time()
+  report_timer <- .miss_new_timer()
+  input_started_at <- .miss_timer_start(report_timer)
   forms <- .miss_resolve_forms(forms)
   event_settings <- .miss_resolve_form_events_arg(
     events = events,
@@ -205,12 +217,25 @@ find_missing <- function(
     add = TRUE
   )
 
+  .miss_timer_record(
+    report_timer,
+    scope = "report",
+    stage = "input",
+    started_at = input_started_at
+  )
+
   # Normalize inputs and derive project context from the redcapAPI connection.
   record_data <- tibble::as_tibble(data)
-  all_records <- record_data
 
+  metadata_started_at <- .miss_timer_start(report_timer)
   meta <- .miss_get_metadata(rcon)
   .miss_check_metadata(meta)
+  .miss_timer_record(
+    report_timer,
+    scope = "report",
+    stage = "metadata_api",
+    started_at = metadata_started_at
+  )
   id_col <- meta$field_name[[1]]
   if (!id_col %in% names(record_data)) {
     stop(
@@ -220,7 +245,14 @@ find_missing <- function(
       call. = FALSE
     )
   }
+  project_started_at <- .miss_timer_start(report_timer)
   project_cache <- .miss_get_project_cache(rcon = rcon)
+  .miss_timer_record(
+    report_timer,
+    scope = "report",
+    stage = "project_context_api",
+    started_at = project_started_at
+  )
 
   ignore_ids <- unique(.miss_chr_vec(ignore_ids %||% character()))
   record_specs <- .miss_resolve_records_arg(
@@ -230,63 +262,84 @@ find_missing <- function(
     ignore_ids = ignore_ids
   )
 
-  # Remove caller-specified records before branch evaluation or validation.
-  if (length(ignore_ids) > 0) {
-    record_data <- record_data[
-      !.miss_chr_vec(record_data[[id_col]]) %in% ignore_ids,
-      ,
-      drop = FALSE
-    ]
-    all_records <- all_records[
-      !.miss_chr_vec(all_records[[id_col]]) %in% ignore_ids,
-      ,
-      drop = FALSE
-    ]
-  }
+  store_started_at <- .miss_timer_start(report_timer)
+  record_store <- .miss_new_record_store(
+    data = record_data,
+    id_col = id_col,
+    ignore_ids = ignore_ids,
+    system_fields = project_cache$system_fields
+  )
   .miss_check_assessable_records(
-    records = record_data,
+    records = record_store$records,
     id_col = id_col,
     record_specs = record_specs
+  )
+  .miss_timer_record(
+    report_timer,
+    scope = "report",
+    stage = "record_store",
+    started_at = store_started_at
+  )
+
+  compile_started_at <- .miss_timer_start(report_timer)
+  report_plan <- .miss_compile_report_plan(
+    meta = meta,
+    forms = forms,
+    required_fields = required_fields,
+    ignore_fields = ignore_fields,
+    exclude_types = exclude_types,
+    rcon = rcon,
+    project_cache = project_cache
+  )
+  .miss_timer_record(
+    report_timer,
+    scope = "report",
+    stage = "plan_compilation",
+    started_at = compile_started_at
   )
 
   form_reports <- vector("list", length(forms))
   names(form_reports) <- forms
+  forms_started_at <- .miss_timer_start(report_timer)
   for (form_i in seq_along(forms)) {
     form <- forms[[form_i]]
     .miss_cli_progress_update(
       state = progress_state,
       form_index = form_i,
       form_fraction = .miss_cli_form_fraction("start"),
-      force = TRUE
+      force = FALSE
     )
     progress_callback <- .miss_cli_progress_reporter(
       state = progress_state,
       form_index = form_i
     )
     form_reports[[form]] <- .miss_build_form_report(
-      records = record_data,
-      all_records = all_records,
-      meta = meta,
-      rcon = rcon,
-      project_cache = project_cache,
+      record_store = record_store,
+      report_plan = report_plan,
+      form_plan = report_plan$form_plans[[form]],
       form = form,
       events = event_settings$values[[form]],
       record_specs = record_specs,
-      required_fields = required_fields,
-      ignore_fields = ignore_fields,
-      exclude_types = exclude_types,
       instances = instance_settings$values[[form]],
       instances_explicit = instance_settings$explicit[[form]],
       details = details,
-      progress_callback = progress_callback
+      progress_callback = progress_callback,
+      defer_assembly = TRUE
     )
   }
+  .miss_timer_record(
+    report_timer,
+    scope = "report",
+    stage = "forms",
+    started_at = forms_started_at
+  )
   .miss_cli_progress_finalize(
     state = progress_state,
     overall_fraction = 0.96,
-    force = TRUE
+    force = FALSE
   )
 
+  preparation_started_at <- .miss_timer_start(report_timer)
   defaulted_instance_forms <- forms[vapply(
     form_reports,
     `[[`,
@@ -326,16 +379,38 @@ find_missing <- function(
     reports = form_reports,
     component = "flex_event_forms_field_counts"
   )
-  summary <- .miss_build_validation_summary(form_reports = form_reports)
+  report_validation_rows <- .miss_bind_report_check_rows(form_reports)
+  summary <- .miss_build_validation_summary(
+    form_reports = form_reports,
+    validation_rows = report_validation_rows
+  )
   form_validation_rows <- .miss_count_form_validation_rows(form_reports)
   validation_row_count <- form_validation_rows
+  raw_missing <- .miss_build_report_missing_rows(
+    form_reports = form_reports,
+    validation_rows = report_validation_rows
+  )
+  .miss_timer_record(
+    report_timer,
+    scope = "report",
+    stage = "result_preparation",
+    started_at = preparation_started_at
+  )
+
+  url_started_at <- .miss_timer_start(report_timer)
   missing <- .miss_add_missing_urls(
-    missing = .miss_build_report_missing_rows(
-      form_reports = form_reports
-    ),
+    missing = raw_missing,
     rcon = rcon,
     project_cache = project_cache
   )
+  .miss_timer_record(
+    report_timer,
+    scope = "report",
+    stage = "url_construction",
+    started_at = url_started_at
+  )
+
+  assembly_started_at <- .miss_timer_start(report_timer)
   ignored_fields <- unique(unlist(.miss_named_report_component(
     form_reports,
     "ignored_fields"
@@ -344,16 +419,12 @@ find_missing <- function(
   .miss_cli_progress_finalize(
     state = progress_state,
     overall_fraction = 0.98,
-    force = TRUE
+    force = FALSE
   )
 
   details_out <- if (isTRUE(details)) {
-    validation_rows <- .miss_bind_report_component(
-      reports = form_reports,
-      component = "validation_rows"
-    )
     .miss_build_report_details(
-      validation_rows = validation_rows
+      validation_rows = report_validation_rows
     )
   } else {
     NULL
@@ -379,7 +450,13 @@ find_missing <- function(
   .miss_cli_progress_finalize(
     state = progress_state,
     overall_fraction = 0.99,
-    force = TRUE
+    force = FALSE
+  )
+  .miss_timer_record(
+    report_timer,
+    scope = "report",
+    stage = "report_assembly",
+    started_at = assembly_started_at
   )
   report_finished_at <- Sys.time()
   diagnostics <- .miss_build_report_diagnostics(
@@ -388,7 +465,15 @@ find_missing <- function(
     form_reports = form_reports,
     validation_row_count = validation_row_count,
     summary = summary,
-    missing = missing
+    missing = missing,
+    stage_timings = dplyr::bind_rows(
+      .miss_timer_rows(report_timer),
+      .miss_bind_report_component(form_reports, "stage_timings")
+    ),
+    form_workload = .miss_bind_report_component(
+      form_reports,
+      "form_workload"
+    )
   )
   out <- list(
     summary = summary,
@@ -404,333 +489,142 @@ find_missing <- function(
 
 # Internal helpers ---------------------------------------------------------
 
-.miss_build_form_report <- function(
-  records,
-  all_records,
-  meta,
-  rcon,
-  project_cache,
-  form,
-  events,
-  record_specs,
-  required_fields,
-  ignore_fields,
-  exclude_types,
-  instances,
-  instances_explicit,
-  details,
-  progress_callback = NULL
-) {
-
-  project <- .miss_get_project(
-    rcon = rcon,
-    meta = meta,
-    form = form,
-    project_cache = project_cache
+.miss_bind_report_check_rows <- function(form_reports) {
+  check_rows <- unlist(
+    lapply(form_reports, `[[`, "check_rows"),
+    recursive = FALSE,
+    use.names = FALSE
   )
-  .miss_check_record_specs_for_form(
-    record_specs = record_specs,
-    project = project,
-    form = form
-  )
-  project <- .miss_resolve_events(
-    project = project,
-    events = events,
-    form = form
-  )
-  resolved_instances <- .miss_resolve_instances(
-    instances = instances,
-    project = project,
-    form = form,
-    explicit = instances_explicit
-  )
-  instances <- resolved_instances$values
-  .miss_cli_report_form_progress(
-    progress_callback,
-    stage = "context",
-    force = TRUE
-  )
-
-  # Whole-form startedness uses every metadata field on the form, regardless of
-  # required/excluded/ignored status. The REDCap record ID is excluded because
-  # it is exported even when the form itself has not been started.
-  form_all_meta <- meta[meta$form_name == form, , drop = FALSE]
-
-  # Build the assessable form metadata after caller-specified exclusions.
-  form_meta <- meta[meta$form_name == form, , drop = FALSE]
-  if (length(exclude_types) > 0) {
-    form_meta <- form_meta[
-      !form_meta$field_type %in% exclude_types,
-      ,
-      drop = FALSE
-    ]
+  check_rows <- unname(check_rows[vapply(check_rows, nrow, integer(1)) > 0L])
+  if (length(check_rows) == 0L) {
+    return(.miss_empty_expected())
   }
-  if (required_fields) {
-    if (!"required_field" %in% names(form_meta)) {
-      stop(
-        "rcon$metadata() must include `required_field` when `required_fields = TRUE`.",
-        call. = FALSE
-      )
-    }
-    form_meta <- form_meta[
-      .miss_required_vec(form_meta$required_field),
-      ,
-      drop = FALSE
-    ]
-  }
-
-  # Map ignored checkbox child columns back to their REDCap root fields.
-  field_names <- .miss_get_field_names(form_meta)
-  ignore_fields <- unique(as.character(ignore_fields %||% character()))
-  ignore_roots <- .miss_get_ignore_roots(
-    form_meta = form_meta,
-    field_names = field_names,
-    ignore_fields = ignore_fields
+  columns <- names(.miss_empty_expected())
+  values <- lapply(columns, function(column) {
+    do.call(c, lapply(check_rows, `[[`, column))
+  })
+  names(values) <- columns
+  tibble::new_tibble(
+    values,
+    nrow = sum(vapply(check_rows, nrow, integer(1)))
   )
-  if (length(ignore_roots) > 0) {
-    form_meta <- form_meta[
-      !form_meta$field_name %in% ignore_roots,
-      ,
-      drop = FALSE
-    ]
-    field_names <- .miss_get_field_names(form_meta)
-  }
-
-  if (nrow(form_meta) == 0) {
-    stop(
-      "No assessable metadata rows were found for form `",
-      form,
-      "`.",
-      call. = FALSE
-    )
-  }
-  .miss_cli_report_form_progress(
-    progress_callback,
-    stage = "metadata",
-    force = TRUE
-  )
-
-  # Keep only rows where the requested form is offered in REDCap.
-  record_eligibility <- .miss_build_record_eligibility(
-    records = records,
-    project = project,
-    form = form,
-    instances = instances,
-    record_specs = record_specs
-  )
-  records <- .miss_filter_form_rows(
-    records = records,
-    form = form,
-    project = project
-  )
-  records <- .miss_filter_record_eligibility_rows(
-    records = records,
-    project = project,
-    record_eligibility = record_eligibility
-  )
-  .miss_cli_report_form_progress(
-    progress_callback,
-    stage = "eligibility",
-    force = TRUE
-  )
-
-  event_checks <- .miss_build_event_check_rows(
-    records = all_records,
-    form_records = records,
-    project = project,
-    form = form,
-    record_eligibility = record_eligibility
-  )
-  event_checks <- .miss_add_validation_context(event_checks)
-  event_row_started_failures <- event_checks[
-    !event_checks$validation_passed,
-    ,
-    drop = FALSE
-  ]
-
-  repeat_checks <- .miss_build_repeat_check_rows(
-    records = all_records,
-    form_records = records,
-    project = project,
-    form = form,
-    instances = instances,
-    record_eligibility = record_eligibility
-  )
-  repeat_checks <- .miss_add_validation_context(repeat_checks)
-  instance_row_started_failures <- repeat_checks[
-    !repeat_checks$validation_passed,
-    ,
-    drop = FALSE
-  ]
-
-  expected_contexts <- .miss_build_expected_contexts(
-    records = all_records,
-    event_checks = event_checks,
-    repeat_checks = repeat_checks,
-    project = project,
-    record_eligibility = record_eligibility
-  )
-  .miss_cli_report_form_progress(
-    progress_callback,
-    stage = "row_checks",
-    force = TRUE
-  )
-
-  form_checks <- .miss_build_form_check_rows(
-    records = records,
-    form_meta = form_all_meta,
-    project = project,
-    form = form,
-    expected_contexts = expected_contexts
-  )
-  form_checks <- .miss_add_validation_context(form_checks)
-  form_started_failures <- form_checks[
-    !form_checks$validation_passed,
-    ,
-    drop = FALSE
-  ]
-
-  # Do not emit field-by-field failures when the whole form is unstarted.
-  records_for_fields <- .miss_drop_unstarted_form_records(
-    records = records,
-    form_started_failures = form_started_failures,
-    project = project
-  )
-  .miss_cli_report_form_progress(
-    progress_callback,
-    stage = "form_checks",
-    force = TRUE
-  )
-
-  # Build the field plan and value-choice map needed for branching evaluation.
-  choice_fields <- unique(c(
-    form_meta$field_name,
-    .miss_extract_logic_fields(form_meta$branching_logic)
-  ))
-  choice_map <- .miss_build_choice_map(meta[
-    meta$field_name %in% choice_fields,
-    ,
-    drop = FALSE
-  ])
-  field_plan <- .miss_build_field_plan(
-    form_meta = form_meta,
-    field_names = field_names
-  )
-  .miss_cli_report_form_progress(
-    progress_callback,
-    stage = "field_checks",
-    field_fraction = 0,
-    force = TRUE
-  )
-
-  field_progress_callback <- if (is.null(progress_callback)) {
-    NULL
-  } else {
-    function(field_fraction, force = FALSE) {
-      .miss_cli_report_form_progress(
-        progress_callback,
-        stage = "field_checks",
-        field_fraction = field_fraction,
-        force = force
-      )
-    }
-  }
-
-  # Create one expected-field row per record/form/field where the branch is open.
-  expected <- .miss_build_expected(
-    records = records_for_fields,
-    lookup_records = all_records,
-    field_plan = field_plan,
-    meta = meta,
-    choice_map = choice_map,
-    project = project,
-    form = form,
-    progress_callback = field_progress_callback
-  )
-  expected <- .miss_add_validation_context(expected)
-  field_complete_failures <- expected[
-    !expected$validation_passed,
-    ,
-    drop = FALSE
-  ]
-  flex_event_forms_field_counts <-
-    .miss_build_flex_event_forms_field_counts(
-      record_eligibility = record_eligibility,
-      field_complete_checks = expected
-    )
-  .miss_cli_report_form_progress(
-    progress_callback,
-    stage = "field_complete",
-    force = TRUE
-  )
-
-  check_rows <- list(
-    event_row_started_checks = event_checks,
-    instance_row_started_checks = repeat_checks,
-    form_started_checks = form_checks,
-    field_complete_checks = expected
-  )
-  row_counts <- vapply(check_rows, nrow, integer(1))
-
-  out <- list(
-    summary = .miss_build_form_validation_summary(
-      c(check_rows, list(form = form))
-    ),
-    missing = .miss_build_form_missing_rows(check_rows),
-    row_counts = row_counts,
-    record_ids = .miss_validation_record_ids(check_rows),
-    events = project$events %||% character(),
-    event_labels = project$event_labels,
-    instances = instances,
-    instances_defaulted = resolved_instances$defaulted,
-    record_eligibility = record_eligibility,
-    flex_event_forms_field_counts = flex_event_forms_field_counts,
-    used_record_spec_keys = unique(record_eligibility$record_spec_key[
-      !.miss_is_blank_vec(record_eligibility$record_spec_key)
-    ]),
-    ignored_fields = ignore_roots,
-    project = project,
-    form = form,
-    form_label = project$form_label,
-    id_col = project$id_col,
-    system_fields = project$system_fields
-  )
-
-  if (isTRUE(details)) {
-    validation_rows <- dplyr::bind_rows(check_rows)
-    validation_rows <- .miss_add_validation_context(validation_rows)
-    out <- c(out, list(
-      validation_rows = validation_rows,
-    event_row_started_checks = event_checks,
-    event_row_started_failures = event_row_started_failures,
-    instance_row_started_checks = repeat_checks,
-    instance_row_started_failures = instance_row_started_failures,
-    form_started_checks = form_checks,
-    form_started_failures = form_started_failures,
-    field_complete_checks = expected,
-    field_complete_failures = field_complete_failures,
-      field_plan = field_plan
-    ))
-  }
-
-  .miss_cli_report_form_progress(
-    progress_callback,
-    stage = "complete",
-    force = TRUE
-  )
-
-  out
 }
 
-.miss_build_validation_summary <- function(form_reports) {
-  summary_rows <- lapply(form_reports, `[[`, "summary")
+.miss_build_validation_summary <- function(
+  form_reports,
+  validation_rows = NULL
+) {
+  if (
+    is.null(validation_rows) ||
+      !all(vapply(form_reports, function(x) !is.null(x$check_rows), logical(1)))
+  ) {
+    out <- dplyr::bind_rows(lapply(form_reports, `[[`, "summary"))
+    if (nrow(out) == 0) {
+      return(.miss_empty_validation_summary())
+    }
+    return(out)
+  }
 
-  out <- dplyr::bind_rows(summary_rows)
+  registry <- .redcapmissing_registry_data()
+  zero_rows <- list()
+  zero_i <- 0L
+  for (form_report in form_reports) {
+    counts <- form_report$row_counts
+    event_zero <- counts[["event_row_started_checks"]] == 0L
+    instance_zero <- counts[["instance_row_started_checks"]] == 0L
+    no_row_gates <- event_zero && instance_zero
+    zero_checks <- c(
+      if (event_zero && instance_zero) "event-row-started",
+      if (counts[["form_started_checks"]] == 0L && no_row_gates) {
+        "form-started"
+      },
+      if (counts[["field_complete_checks"]] == 0L && no_row_gates) {
+        "field-complete"
+      }
+    )
+    if (length(zero_checks) > 0L) {
+      zero_i <- zero_i + 1L
+      zero_rows[[zero_i]] <- .miss_zero_validation_summaries(
+        validation_checks = zero_checks,
+        form = form_report$form,
+        registry = registry
+      )
+    }
+  }
+
+  out <- dplyr::bind_rows(
+    .miss_summarise_validation_rows_multi(validation_rows, registry),
+    zero_rows
+  )
   if (nrow(out) == 0) {
     return(.miss_empty_validation_summary())
   }
+  form_order <- match(out$form, names(form_reports))
+  check_order <- match(out$validation_check, registry$validation_check)
+  tibble::as_tibble(out[order(
+    form_order,
+    check_order,
+    seq_len(nrow(out))
+  ), , drop = FALSE])
+}
 
-  out
+.miss_summarise_validation_rows_multi <- function(rows, registry) {
+  if (nrow(rows) == 0) {
+    return(.miss_empty_validation_summary())
+  }
+  rows <- .miss_normalize_validation_context_columns(rows)
+  event <- .miss_chr_vec(rows$redcap_event_name)
+  form <- .miss_chr_vec(rows$form)
+  repeat_instrument <- .miss_chr_vec(rows$redcap_repeat_instrument)
+  repeat_instance <- .miss_chr_vec(rows$redcap_repeat_instance)
+  validation_check <- .miss_chr_vec(rows$validation_check)
+  context_key <- paste(
+    .miss_key_part(event),
+    .miss_key_part(form),
+    .miss_key_part(repeat_instrument),
+    .miss_key_part(repeat_instance),
+    .miss_key_part(validation_check),
+    sep = "\r"
+  )
+  unique_key <- unique(context_key)
+  group_id <- match(context_key, unique_key)
+  context_rows <- match(unique_key, context_key)
+  assessed <- tabulate(group_id, nbins = length(unique_key))
+  passed <- tabulate(
+    group_id[rows$validation_passed %in% TRUE],
+    nbins = length(unique_key)
+  )
+  failed <- assessed - passed
+  output_check <- validation_check[context_rows]
+  output_event <- event[context_rows]
+  output_form <- form[context_rows]
+  output_repeat_instrument <- repeat_instrument[context_rows]
+  output_repeat_instance <- repeat_instance[context_rows]
+
+  tibble::tibble(
+    redcap_event_name = output_event,
+    form = output_form,
+    redcap_repeat_instrument = output_repeat_instrument,
+    redcap_repeat_instance = output_repeat_instance,
+    validation_level = .redcapmissing_context_validation_level(
+      validation_check = output_check,
+      repeat_instance = output_repeat_instance
+    ),
+    validation_check = output_check,
+    validation_label = registry$validation_label[
+      match(output_check, registry$validation_check)
+    ],
+    validation_context = .miss_validation_context_vec(
+      event = output_event,
+      repeat_instance = output_repeat_instance
+    ),
+    validation_step = .miss_step_id(output_form, output_check),
+    assessed = assessed,
+    passed = passed,
+    failed = failed,
+    pass_rate = ifelse(assessed > 0, passed / assessed, 0),
+    fail_rate = ifelse(assessed > 0, failed / assessed, 0)
+  )
 }
 
 .miss_build_form_validation_summary <- function(form_report) {
@@ -755,7 +649,8 @@ find_missing <- function(
       rows = rows,
       validation_check = check$validation_check,
       form = form_report$form,
-      keep_zero = keep_zero
+      keep_zero = keep_zero,
+      validation_label = check$validation_label
     )
   }
 
@@ -770,7 +665,8 @@ find_missing <- function(
   rows,
   validation_check,
   form,
-  keep_zero = FALSE
+  keep_zero = FALSE,
+  validation_label = NULL
 ) {
   if (nrow(rows) == 0) {
     if (!isTRUE(keep_zero)) {
@@ -782,58 +678,87 @@ find_missing <- function(
     ))
   }
 
-  rows <- .miss_add_validation_context(rows)
-  rows$form <- .miss_chr_vec(rows$form)
-  rows$validation_check <- .miss_chr_vec(rows$validation_check)
-  rows$redcap_event_name <- .miss_chr_vec(rows$redcap_event_name)
-  rows$redcap_repeat_instrument <- .miss_chr_vec(rows$redcap_repeat_instrument)
-  rows$redcap_repeat_instance <- .miss_chr_vec(rows$redcap_repeat_instance)
-  rows$validation_context <- .miss_chr_vec(rows$validation_context)
-
-  context_cols <- c(
-    "redcap_event_name",
-    "form",
-    "redcap_repeat_instrument",
-    "redcap_repeat_instance",
-    "validation_context"
-  )
-  contexts <- rows[, context_cols, drop = FALSE]
+  rows <- .miss_normalize_validation_context_columns(rows)
+  event <- .miss_chr_vec(rows$redcap_event_name)
+  form_value <- .miss_chr_vec(rows$form)
+  repeat_instrument <- .miss_chr_vec(rows$redcap_repeat_instrument)
+  repeat_instance <- .miss_chr_vec(rows$redcap_repeat_instance)
+  one_context <- all(event == event[[1]]) &&
+    all(form_value == form_value[[1]]) &&
+    all(repeat_instrument == repeat_instrument[[1]]) &&
+    all(repeat_instance == repeat_instance[[1]])
+  if (isTRUE(one_context)) {
+    if (is.null(validation_label)) {
+      validation_label <- .redcapmissing_registry_row(
+        validation_check
+      )$validation_label[[1]]
+    }
+    assessed <- nrow(rows)
+    passed <- sum(rows$validation_passed %in% TRUE)
+    failed <- assessed - passed
+    return(tibble::tibble(
+      redcap_event_name = event[[1]],
+      form = form_value[[1]],
+      redcap_repeat_instrument = repeat_instrument[[1]],
+      redcap_repeat_instance = repeat_instance[[1]],
+      validation_level = .redcapmissing_context_validation_level(
+        validation_check = validation_check,
+        repeat_instance = repeat_instance[[1]]
+      ),
+      validation_check = validation_check,
+      validation_label = validation_label,
+      validation_context = .miss_validation_context_vec(
+        event = event[[1]],
+        repeat_instance = repeat_instance[[1]]
+      ),
+      validation_step = .miss_step_id(form_value[[1]], validation_check),
+      assessed = as.integer(assessed),
+      passed = as.integer(passed),
+      failed = as.integer(failed),
+      pass_rate = passed / assessed,
+      fail_rate = failed / assessed
+    ))
+  }
   context_key <- paste(
-    .miss_key_part(contexts$redcap_event_name),
-    .miss_key_part(contexts$form),
-    .miss_key_part(contexts$redcap_repeat_instrument),
-    .miss_key_part(contexts$redcap_repeat_instance),
-    .miss_key_part(contexts$validation_context),
+    .miss_key_part(event),
+    .miss_key_part(repeat_instrument),
+    .miss_key_part(repeat_instance),
     sep = "\r"
   )
   unique_key <- unique(context_key)
   group_id <- match(context_key, unique_key)
-  contexts <- contexts[match(unique_key, context_key), , drop = FALSE]
+  context_rows <- match(unique_key, context_key)
 
   assessed <- tabulate(group_id, nbins = length(unique_key))
-  passed <- as.integer(rowsum(
-    as.integer(rows$validation_passed %in% TRUE),
-    group_id,
-    reorder = FALSE
-  )[, 1])
+  passed <- tabulate(
+    group_id[rows$validation_passed %in% TRUE],
+    nbins = length(unique_key)
+  )
   failed <- assessed - passed
   pass_rate <- ifelse(assessed > 0, passed / assessed, 0)
   fail_rate <- ifelse(assessed > 0, failed / assessed, 0)
-  registry_row <- .redcapmissing_registry_row(validation_check)
+  if (is.null(validation_label)) {
+    validation_label <- .redcapmissing_registry_row(
+      validation_check
+    )$validation_label[[1]]
+  }
 
   tibble::tibble(
-    redcap_event_name = contexts$redcap_event_name,
-    form = contexts$form,
-    redcap_repeat_instrument = contexts$redcap_repeat_instrument,
-    redcap_repeat_instance = contexts$redcap_repeat_instance,
+    redcap_event_name = event[context_rows],
+    form = form_value[context_rows],
+    redcap_repeat_instrument = repeat_instrument[context_rows],
+    redcap_repeat_instance = repeat_instance[context_rows],
     validation_level = .redcapmissing_context_validation_level(
       validation_check = validation_check,
-      repeat_instance = contexts$redcap_repeat_instance
+      repeat_instance = repeat_instance[context_rows]
     ),
     validation_check = validation_check,
-    validation_label = registry_row$validation_label,
-    validation_context = contexts$validation_context,
-    validation_step = .miss_step_id(contexts$form, validation_check),
+    validation_label = validation_label,
+    validation_context = .miss_validation_context_vec(
+      event = event[context_rows],
+      repeat_instance = repeat_instance[context_rows]
+    ),
+    validation_step = .miss_step_id(form_value[context_rows], validation_check),
     assessed = assessed,
     passed = passed,
     failed = failed,
@@ -842,8 +767,8 @@ find_missing <- function(
   )
 }
 
-.miss_empty_validation_summary <- function() {
-  tibble::tibble(
+.miss_empty_validation_summary <- local({
+  empty <- tibble::tibble(
     redcap_event_name = character(),
     form = character(),
     redcap_repeat_instrument = character(),
@@ -859,7 +784,8 @@ find_missing <- function(
     pass_rate = numeric(),
     fail_rate = numeric()
   )
-}
+  function() empty
+})
 
 .miss_zero_validation_summary <- function(validation_check, form) {
   registry_row <- .redcapmissing_registry_row(validation_check)
@@ -889,25 +815,16 @@ find_missing <- function(
 }
 
 .miss_build_form_missing_rows <- function(check_rows) {
-  pieces <- vector("list", length(check_rows))
-  offset <- 0L
-  for (i in seq_along(check_rows)) {
-    rows <- check_rows[[i]]
-    pieces[[i]] <- .miss_build_component_missing_rows(
-      rows,
-      validation_row_offset = offset
-    )
-    offset <- offset + nrow(rows)
-  }
-
-  out <- dplyr::bind_rows(pieces)
-  if (nrow(out) == 0) {
-    return(.miss_empty_missing_rows())
-  }
-  out
+  .miss_build_component_missing_rows(dplyr::bind_rows(check_rows))
 }
 
-.miss_build_report_missing_rows <- function(form_reports) {
+.miss_build_report_missing_rows <- function(
+  form_reports,
+  validation_rows = NULL
+) {
+  if (!is.null(validation_rows)) {
+    return(.miss_build_component_missing_rows(validation_rows))
+  }
   pieces <- vector("list", length(form_reports))
   offset <- 0L
   for (i in seq_along(form_reports)) {
@@ -924,12 +841,17 @@ find_missing <- function(
 }
 
 .miss_validation_record_ids <- function(check_rows) {
-  rows <- dplyr::bind_rows(check_rows)
-  if (nrow(rows) == 0 || !"record_id" %in% names(rows)) {
+  record_ids <- unlist(lapply(check_rows, function(rows) {
+    if (nrow(rows) == 0 || !"record_id" %in% names(rows)) {
+      return(character())
+    }
+    .miss_chr_vec(rows$record_id)
+  }), use.names = FALSE)
+  if (length(record_ids) == 0) {
     return(character())
   }
 
-  record_ids <- unique(.miss_chr_vec(rows$record_id))
+  record_ids <- unique(record_ids)
   record_ids[!.miss_is_blank_vec(record_ids)]
 }
 
@@ -937,22 +859,18 @@ find_missing <- function(
   validation_rows,
   validation_row_offset = 0L
 ) {
-  validation_rows <- .miss_add_validation_context(validation_rows)
   if (nrow(validation_rows) == 0) {
     return(.miss_empty_missing_rows())
   }
 
-  validation_rows$validation_row_id <-
-    validation_row_offset + seq_len(nrow(validation_rows))
-  out <- validation_rows[
-    !(validation_rows$validation_passed %in% TRUE),
-    ,
-    drop = FALSE
-  ]
+  failed_rows <- which(!(validation_rows$validation_passed %in% TRUE))
+  out <- validation_rows[failed_rows, , drop = FALSE]
   if (nrow(out) == 0) {
     return(.miss_empty_missing_rows())
   }
 
+  out <- .miss_add_validation_context(out)
+  out$validation_row_id <- validation_row_offset + failed_rows
   out$validation_step <- .miss_step_id(out$form, out$validation_check)
   .miss_select_missing_rows(out)
 }
@@ -986,12 +904,11 @@ find_missing <- function(
     "export_fields"
   )
 
-  rows |>
-    dplyr::select(dplyr::all_of(select_cols))
+  rows[, select_cols, drop = FALSE]
 }
 
-.miss_empty_missing_rows <- function() {
-  tibble::tibble(
+.miss_empty_missing_rows <- local({
+  empty <- tibble::tibble(
     validation_step = character(),
     validation_row_id = integer(),
     record_id = character(),
@@ -1011,7 +928,8 @@ find_missing <- function(
     export_fields = character(),
     url = character()
   )
-}
+  function() empty
+})
 
 .miss_add_missing_urls <- function(missing, rcon, project_cache) {
   if (nrow(missing) == 0) {
@@ -1223,20 +1141,21 @@ find_missing <- function(
   )
   unique_key <- unique(context_key)
   group_id <- match(context_key, unique_key)
-  first_row <- match(unique_key, context_key)
-  counts <- field_complete_checks[first_row, context_columns, drop = FALSE]
-  counts$field_assessed <- tabulate(group_id, nbins = length(unique_key))
-  counts$field_failed <- as.integer(rowsum(
-    as.integer(!(field_complete_checks$validation_passed %in% TRUE)),
-    group_id,
-    reorder = FALSE
-  )[, 1])
-  counts <- tibble::as_tibble(counts)
-  out <- dplyr::left_join(out, counts, by = context_columns)
-  out$field_assessed[is.na(out$field_assessed)] <- 0L
-  out$field_failed[is.na(out$field_failed)] <- 0L
-  out$field_assessed <- as.integer(out$field_assessed)
-  out$field_failed <- as.integer(out$field_failed)
+  assessed <- tabulate(group_id, nbins = length(unique_key))
+  failed <- tabulate(
+    group_id[!(field_complete_checks$validation_passed %in% TRUE)],
+    nbins = length(unique_key)
+  )
+  out_key <- do.call(
+    paste,
+    c(lapply(out[, context_columns, drop = FALSE], .miss_key_part), list(sep = "\r"))
+  )
+  count_match <- match(out_key, unique_key)
+  out$field_assessed <- rep.int(0L, nrow(out))
+  out$field_failed <- rep.int(0L, nrow(out))
+  matched <- !is.na(count_match)
+  out$field_assessed[matched] <- assessed[count_match[matched]]
+  out$field_failed[matched] <- failed[count_match[matched]]
   out
 }
 
@@ -1437,7 +1356,9 @@ find_missing <- function(
   form_reports,
   validation_row_count,
   summary,
-  missing
+  missing,
+  stage_timings,
+  form_workload
 ) {
   list(
     started_at = started_at,
@@ -1448,8 +1369,43 @@ find_missing <- function(
     forms_processed = length(form_reports),
     validation_rows = validation_row_count,
     summary_rows = nrow(summary),
-    missing_rows = nrow(missing)
+    missing_rows = nrow(missing),
+    stage_timings = tibble::as_tibble(stage_timings),
+    form_workload = tibble::as_tibble(form_workload)
   )
+}
+
+.miss_zero_validation_summaries <- function(
+  validation_checks,
+  form,
+  registry = .redcapmissing_registry_data()
+) {
+  validation_checks <- .miss_chr_vec(validation_checks)
+  n <- length(validation_checks)
+  if (n == 0L) {
+    return(.miss_empty_validation_summary())
+  }
+  tibble::new_tibble(list(
+    redcap_event_name = rep("", n),
+    form = rep(form, n),
+    redcap_repeat_instrument = rep("", n),
+    redcap_repeat_instance = rep("", n),
+    validation_level = .redcapmissing_context_validation_level(
+      validation_check = validation_checks,
+      repeat_instance = rep("", n)
+    ),
+    validation_check = validation_checks,
+    validation_label = registry$validation_label[
+      match(validation_checks, registry$validation_check)
+    ],
+    validation_context = rep("overall", n),
+    validation_step = .miss_step_id(form, validation_checks),
+    assessed = rep(0L, n),
+    passed = rep(0L, n),
+    failed = rep(0L, n),
+    pass_rate = rep(0, n),
+    fail_rate = rep(0, n)
+  ), nrow = n)
 }
 
 .miss_keep_zero_validation_step <- function(validation_check, form_report) {
@@ -1845,8 +1801,8 @@ find_missing <- function(
   )
 }
 
-.miss_empty_record_specs <- function() {
-  tibble::tibble(
+.miss_empty_record_specs <- local({
+  empty <- tibble::tibble(
     spec_key = character(),
     redcap_event_name = character(),
     form = character(),
@@ -1854,7 +1810,8 @@ find_missing <- function(
     record_id = character(),
     eligibility_source = character()
   )
-}
+  function() empty
+})
 
 .miss_record_spec_key <- function(record_specs) {
   paste(
@@ -1931,6 +1888,19 @@ find_missing <- function(
   )
   if (nrow(contexts) == 0) {
     return(.miss_empty_record_eligibility())
+  }
+
+  if (nrow(contexts) == 1 && nrow(record_specs) == 0) {
+    out <- .miss_context_record_eligibility(
+      context = contexts,
+      record_ids = contexts$default_record_ids[[1]],
+      source = "data",
+      record_spec_key = ""
+    )
+    if (nrow(out) == 0) {
+      return(.miss_empty_record_eligibility())
+    }
+    return(tibble::as_tibble(out[order(out$record_id), , drop = FALSE]))
   }
 
   pieces <- lapply(seq_len(nrow(contexts)), function(i) {
@@ -2201,18 +2171,19 @@ find_missing <- function(
   )
 }
 
-.miss_empty_record_eligibility_contexts <- function() {
-  tibble::tibble(
+.miss_empty_record_eligibility_contexts <- local({
+  empty <- tibble::tibble(
     redcap_event_name = character(),
     form = character(),
     redcap_repeat_instrument = character(),
     redcap_repeat_instance = character(),
     default_record_ids = list()
   )
-}
+  function() empty
+})
 
-.miss_empty_record_eligibility <- function() {
-  tibble::tibble(
+.miss_empty_record_eligibility <- local({
+  empty <- tibble::tibble(
     record_id = character(),
     redcap_event_name = character(),
     form = character(),
@@ -2221,7 +2192,8 @@ find_missing <- function(
     eligibility_source = character(),
     record_spec_key = character()
   )
-}
+  function() empty
+})
 
 .miss_unused_record_specs <- function(record_specs, used_record_spec_keys) {
   if (nrow(record_specs) == 0) {
@@ -2362,19 +2334,32 @@ find_missing <- function(
   state$finished <- FALSE
   state$id <- NULL
   state$last_line <- NULL
+  state$has_rendered <- FALSE
+  state$last_render_elapsed <- unname(proc.time()[["elapsed"]])
+  state$minimum_render_interval <- suppressWarnings(as.numeric(
+    getOption("redcapmissing.progress_min_interval", 2)
+  ))
+  if (
+    length(state$minimum_render_interval) != 1L ||
+      is.na(state$minimum_render_interval) ||
+      state$minimum_render_interval < 0
+  ) {
+    state$minimum_render_interval <- 2
+  }
   state$envir <- parent.frame()
-
-  if (!state$enabled || !state$dynamic) {
-    return(state)
+  state$theme <- if (state$enabled && !state$dynamic) {
+    .miss_cli_progress_theme()
+  } else {
+    NULL
   }
 
-  initial_line <- .miss_cli_progress_line(
-    forms = state$forms,
-    form_index = state$form_index,
-    form_fraction = state$form_fraction,
-    overall_fraction = state$overall_fraction,
-    phase = "form"
-  )
+  state
+}
+
+.miss_cli_progress_open <- function(state, line) {
+  if (!isTRUE(state$dynamic) || !is.null(state$id)) {
+    return(invisible(state$id))
+  }
   state$id <- tryCatch(
     cli::cli_progress_bar(
       name = "find_missing",
@@ -2386,7 +2371,7 @@ find_missing <- function(
       clear = FALSE,
       current = FALSE,
       auto_terminate = FALSE,
-      extra = list(line = initial_line),
+      extra = list(line = line),
       .auto_close = FALSE,
       .envir = state$envir
     ),
@@ -2395,12 +2380,15 @@ find_missing <- function(
       NULL
     }
   )
-  .miss_cli_progress_render(state, initial_line, force = TRUE)
-  state
+  invisible(state$id)
 }
 
 .miss_cli_progress_reporter <- function(state, form_index) {
-  if (!is.environment(state) || !isTRUE(state$enabled)) {
+  if (
+    !is.environment(state) ||
+      !isTRUE(state$enabled) ||
+      !isTRUE(state$dynamic)
+  ) {
     return(NULL)
   }
 
@@ -2443,13 +2431,30 @@ find_missing <- function(
       form_count = form_count
     )
   )
+  if (!isTRUE(state$dynamic)) {
+    return(invisible(NULL))
+  }
+  render_elapsed <- unname(proc.time()[["elapsed"]])
+  if (
+    !isTRUE(force) &&
+      is.finite(state$last_render_elapsed) &&
+      render_elapsed - state$last_render_elapsed < state$minimum_render_interval
+  ) {
+    return(invisible(NULL))
+  }
+  state$theme <- state$theme %||% .miss_cli_progress_theme()
   line <- .miss_cli_progress_line(
     forms = state$forms,
     form_index = state$form_index,
     form_fraction = state$form_fraction,
     overall_fraction = state$overall_fraction,
-    phase = "form"
+    phase = "form",
+    theme = state$theme
   )
+  .miss_cli_progress_open(state, line)
+  if (is.null(state$id)) {
+    return(invisible(NULL))
+  }
   .miss_cli_progress_render(state, line, force = force)
 }
 
@@ -2469,13 +2474,30 @@ find_missing <- function(
     state$overall_fraction,
     .miss_cli_clamp_fraction(overall_fraction)
   )
+  if (!isTRUE(state$dynamic)) {
+    return(invisible(NULL))
+  }
+  render_elapsed <- unname(proc.time()[["elapsed"]])
+  if (
+    !isTRUE(force) &&
+      is.finite(state$last_render_elapsed) &&
+      render_elapsed - state$last_render_elapsed < state$minimum_render_interval
+  ) {
+    return(invisible(NULL))
+  }
+  state$theme <- state$theme %||% .miss_cli_progress_theme()
   line <- .miss_cli_progress_line(
     forms = state$forms,
     form_index = state$form_index,
     form_fraction = state$form_fraction,
     overall_fraction = state$overall_fraction,
-    phase = "finalizing"
+    phase = "finalizing",
+    theme = state$theme
   )
+  .miss_cli_progress_open(state, line)
+  if (is.null(state$id)) {
+    return(invisible(NULL))
+  }
   .miss_cli_progress_render(state, line, force = force)
 }
 
@@ -2502,33 +2524,52 @@ find_missing <- function(
     result
   }
   state$phase <- line_phase
+  state$theme <- state$theme %||% .miss_cli_progress_theme()
   line <- .miss_cli_progress_line(
     forms = state$forms,
     form_index = state$form_index,
     form_fraction = state$form_fraction,
     overall_fraction = state$overall_fraction,
-    phase = line_phase
+    phase = line_phase,
+    theme = state$theme
   )
 
-  if (isTRUE(state$dynamic) && !is.null(state$id)) {
-    invisible(try(
-      cli::cli_progress_update(
-        id = state$id,
-        set = .miss_percent(state$overall_fraction),
-        extra = list(line = line),
-        force = FALSE,
-        .envir = state$envir
-      ),
-      silent = TRUE
-    ))
-    invisible(try(
-      cli::cli_progress_done(
-        id = state$id,
-        result = result,
-        .envir = state$envir
-      ),
-      silent = TRUE
-    ))
+  opened_at_finish <- isTRUE(state$dynamic) && is.null(state$id)
+  if (
+    isTRUE(state$dynamic) &&
+      is.null(state$id)
+  ) {
+    .miss_cli_progress_open(state, line)
+  }
+  if (isTRUE(state$dynamic)) {
+    if (!is.null(state$id)) {
+      if (
+        isTRUE(opened_at_finish) ||
+          isTRUE(state$has_rendered) ||
+          identical(result, "failed")
+      ) {
+        invisible(try(
+          cli::cli_progress_update(
+            id = state$id,
+            set = .miss_percent(state$overall_fraction),
+            extra = list(line = line),
+            force = isTRUE(opened_at_finish) || identical(result, "failed"),
+            .envir = state$envir
+          ),
+          silent = TRUE
+        ))
+      }
+      invisible(try(
+        cli::cli_progress_done(
+          id = state$id,
+          result = result,
+          .envir = state$envir
+        ),
+        silent = TRUE
+      ))
+    } else if (identical(result, "failed")) {
+      invisible(try(cli::cat_line(line), silent = TRUE))
+    }
   } else {
     invisible(try(cli::cat_line(line), silent = TRUE))
   }
@@ -2546,6 +2587,16 @@ find_missing <- function(
     return(invisible(NULL))
   }
 
+  render_elapsed <- unname(proc.time()[["elapsed"]])
+  minimum_interval <- state$minimum_render_interval %||% 2
+  if (
+    !isTRUE(force) &&
+      is.finite(state$last_render_elapsed) &&
+      render_elapsed - state$last_render_elapsed < minimum_interval
+  ) {
+    return(invisible(NULL))
+  }
+
   invisible(try(
     cli::cli_progress_update(
       id = state$id,
@@ -2557,6 +2608,8 @@ find_missing <- function(
     silent = TRUE
   ))
   state$last_line <- line
+  state$last_render_elapsed <- render_elapsed
+  state$has_rendered <- TRUE
   invisible(NULL)
 }
 
@@ -2572,7 +2625,8 @@ find_missing <- function(
     "failed",
     "finalizing_failed"
   ),
-  width = cli::console_width()
+  width = cli::console_width(),
+  theme = NULL
 ) {
   phase <- match.arg(phase)
   forms <- .miss_chr_vec(forms)
@@ -2581,12 +2635,13 @@ find_missing <- function(
   form_fraction <- .miss_cli_clamp_fraction(form_fraction)
   overall_fraction <- .miss_cli_clamp_fraction(overall_fraction)
   width <- .miss_cli_progress_width(width)
-  symbols <- .miss_cli_progress_symbols()
-  completed_style <- .miss_cli_progress_style("completed")
-  active_style <- .miss_cli_progress_style("active")
-  overall_style <- .miss_cli_progress_style("overall")
-  pending_style <- .miss_cli_progress_style("pending")
-  failed_style <- .miss_cli_progress_style("failed")
+  theme <- theme %||% .miss_cli_progress_theme()
+  symbols <- theme$symbols
+  completed_style <- theme$styles$completed
+  active_style <- theme$styles$active
+  overall_style <- theme$styles$overall
+  pending_style <- theme$styles$pending
+  failed_style <- theme$styles$failed
   overall_text <- overall_style(cli::style_bold(paste0(
     "OVERALL ",
     .miss_percent(overall_fraction),
@@ -2672,7 +2727,8 @@ find_missing <- function(
     completed_count = completed_count,
     active_status = active_status,
     pending_count = pending_count,
-    compact = use_compact_constellation
+    compact = use_compact_constellation,
+    theme = theme
   )
   prefix <- if (width >= 54L) cli::style_bold("find_missing") else ""
   prefix_spacing <- if (nzchar(cli::ansi_strip(prefix))) "  " else ""
@@ -2693,7 +2749,8 @@ find_missing <- function(
         completed_count = completed_count,
         active_status = "failed",
         pending_count = 0L,
-        compact = TRUE
+        compact = TRUE,
+        theme = theme
       ),
       "  ",
       failed_style(cli::style_bold("report failed")),
@@ -2733,7 +2790,8 @@ find_missing <- function(
         completed_count = completed_count,
         active_status = "none",
         pending_count = 0L,
-        compact = TRUE
+        compact = TRUE,
+        theme = theme
       ),
       "  ",
       active_style(cli::style_bold("forms 100%")),
@@ -2797,7 +2855,8 @@ find_missing <- function(
       completed_count = completed_count,
       active_status = active_status,
       pending_count = pending_count,
-      compact = TRUE
+      compact = TRUE,
+      theme = theme
     )
     line <- build_line("", constellation, form_suffix)
   }
@@ -2825,16 +2884,18 @@ find_missing <- function(
   completed_count,
   active_status = c("active", "failed", "none"),
   pending_count,
-  compact = FALSE
+  compact = FALSE,
+  theme = NULL
 ) {
   active_status <- match.arg(active_status)
   completed_count <- max(0L, as.integer(completed_count))
   pending_count <- max(0L, as.integer(pending_count))
-  symbols <- .miss_cli_progress_symbols()
-  completed_style <- .miss_cli_progress_style("completed")
-  active_style <- .miss_cli_progress_style("active")
-  pending_style <- .miss_cli_progress_style("pending")
-  failed_style <- .miss_cli_progress_style("failed")
+  theme <- theme %||% .miss_cli_progress_theme()
+  symbols <- theme$symbols
+  completed_style <- theme$styles$completed
+  active_style <- theme$styles$active
+  pending_style <- theme$styles$pending
+  failed_style <- theme$styles$failed
 
   if (isTRUE(compact)) {
     pieces <- character()
@@ -2902,6 +2963,16 @@ find_missing <- function(
     overall = "#3B82F6",
     pending = "#64748B",
     failed = "#EF4444"
+  )
+}
+
+.miss_cli_progress_theme <- function() {
+  palette <- .miss_cli_progress_palette()
+  styles <- lapply(names(palette), .miss_cli_progress_style)
+  names(styles) <- names(palette)
+  list(
+    symbols = .miss_cli_progress_symbols(),
+    styles = styles
   )
 }
 

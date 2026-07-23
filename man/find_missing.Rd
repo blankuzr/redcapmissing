@@ -102,7 +102,17 @@ A list with class \code{"redcapmissing"} containing:
 report methods. \code{spec$record_eligibility} contains every final assessed
 record/event/form/repeat-instance context, including when \code{records} is
 omitted.}
-\item{\code{diagnostics}}{Timing and row-count metadata.}
+\item{\code{diagnostics}}{Timing and row-count metadata, preserving the report
+start/finish, elapsed time, form count, validation-row count, summary-row
+count, and missing-row count. \code{diagnostics$stage_timings} is a tibble
+with \code{scope}, \code{form}, \code{stage}, and \code{elapsed_seconds}; report stages
+separate connection metadata/project-context access, plan compilation,
+URL construction, and report assembly, while form stages separate
+context, eligibility, row checks, blankness, form startedness, the four
+field partitions, and form assembly. \code{diagnostics$form_workload} is a
+per-form tibble with record/context/started-row counts, total and
+assessable field counts, the four field-partition counts, and validation
+rows.}
 \item{\code{details}}{\code{NULL} by default. When \code{details = TRUE}, a list with
 \code{validation_rows}, \code{checks}, and \code{failures} row tables.}
 }

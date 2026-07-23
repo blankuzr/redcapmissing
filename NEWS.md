@@ -1,3 +1,29 @@
+# redcapmissing 6.0.2
+
+## 2026-07-22
+
+- Removed field-count-dependent CLI progress overhead from `find_missing()` by
+  reusing one formatting theme per run, including constellation symbols and
+  styles, and skipping intermediate line assembly
+  in terminals that only display the final completion line. The progress-aware
+  benchmark now runs the 150-record, 10-form workload near the same speed as
+  `progress = FALSE` while preserving the existing progress display.
+- Added `REDCAPMISSING_BENCH_PROGRESS` to the package benchmark script so
+  progress-enabled and quiet runs can be measured explicitly.
+- Reworked `find_missing()` field evaluation around one report-level compiled
+  plan, row-indexed record views, and shared per-form blankness matrices.
+  Ordinary non-branched fields are evaluated as a vectorized block, while
+  branching fields and checkboxes use specialized paths only where needed.
+- Added `diagnostics$stage_timings` and `diagnostics$form_workload` so report
+  and per-form processing stages can be compared alongside the amount and mix
+  of field work performed.
+- Expanded synthetic performance coverage to include unequal form sizes,
+  branching logic, checkboxes, omitted event rows, and repeating forms while
+  retaining regression evidence that each REDCap connection surface is queried
+  at most once per report.
+- Clarified that `events` can request assessment of events REDCap omitted from
+  an export because no row was started.
+
 # redcapmissing 6.0.1
 
 ## 2026-07-22

@@ -70,8 +70,8 @@ print.redcapmissing_registry <- function(x, ...) {
 
 # Internal helpers ---------------------------------------------------------
 
-.redcapmissing_registry_data <- function() {
-  tibble::tibble(
+.redcapmissing_registry_data <- local({
+  data <- tibble::tibble(
     validation_order = 1:4,
     downstream_order = 1:4,
     validation_level = rep("event:form / event:form:instance", 4),
@@ -119,7 +119,8 @@ print.redcapmissing_registry <- function(x, ...) {
     ),
     gates_downstream = rep(TRUE, 4)
   )
-}
+  function() data
+})
 
 .redcapmissing_new_registry <- function(x) {
   class(x) <- c("redcapmissing_registry", class(x))
@@ -154,34 +155,43 @@ print.redcapmissing_registry <- function(x, ...) {
   n,
   repeat_instance = NULL
 ) {
-  check <- .redcapmissing_registry_row(validation_check)
-  tibble::tibble(
+  registry <- .redcapmissing_registry_data()
+  check_i <- match(validation_check, registry$validation_check)
+  if (length(check_i) != 1L || is.na(check_i)) {
+    stop(
+      "Unknown validation check `",
+      validation_check,
+      "`.",
+      call. = FALSE
+    )
+  }
+  check <- registry$validation_check[[check_i]]
+  label <- registry$validation_label[[check_i]]
+  tibble::new_tibble(list(
     validation_level = .redcapmissing_context_validation_level(
-      validation_check = rep(check$validation_check, n),
+      validation_check = rep(check, n),
       repeat_instance = repeat_instance %||% rep("", n)
     ),
-    validation_check = rep(check$validation_check, n),
-    validation_label = rep(check$validation_label, n)
-  )
+    validation_check = rep(check, n),
+    validation_label = rep(label, n)
+  ), nrow = n)
 }
 
 .redcapmissing_context_validation_level <- function(
   validation_check,
   repeat_instance = NULL
 ) {
-  validation_check <- .miss_chr_vec(validation_check)
   repeat_instance <- .miss_chr_vec(repeat_instance %||% character())
   n <- max(length(validation_check), length(repeat_instance))
   if (n == 0) {
     return(character())
   }
-
-  validation_check <- rep(validation_check, length.out = n)
-  repeat_instance <- rep(repeat_instance, length.out = n)
-
   level <- rep("event:form", n)
-  has_repeat <- !.miss_is_blank_vec(repeat_instance)
-  level[has_repeat] <- "event:form:instance"
+  if (length(repeat_instance) > 0) {
+    repeat_instance <- rep(repeat_instance, length.out = n)
+    has_repeat <- !.miss_is_blank_vec(repeat_instance)
+    level[has_repeat] <- "event:form:instance"
+  }
   level
 }
 
