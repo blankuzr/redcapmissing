@@ -3,7 +3,8 @@
 ## 2026-07-22
 
 - Removed field-count-dependent CLI progress overhead from `find_missing()` by
-  reusing one formatting theme per run and skipping intermediate line assembly
+  reusing one formatting theme per run, including constellation symbols and
+  styles, and skipping intermediate line assembly
   in terminals that only display the final completion line. The progress-aware
   benchmark now runs the 150-record, 10-form workload near the same speed as
   `progress = FALSE` while preserving the existing progress display.

@@ -2727,7 +2727,8 @@ find_missing <- function(
     completed_count = completed_count,
     active_status = active_status,
     pending_count = pending_count,
-    compact = use_compact_constellation
+    compact = use_compact_constellation,
+    theme = theme
   )
   prefix <- if (width >= 54L) cli::style_bold("find_missing") else ""
   prefix_spacing <- if (nzchar(cli::ansi_strip(prefix))) "  " else ""
@@ -2748,7 +2749,8 @@ find_missing <- function(
         completed_count = completed_count,
         active_status = "failed",
         pending_count = 0L,
-        compact = TRUE
+        compact = TRUE,
+        theme = theme
       ),
       "  ",
       failed_style(cli::style_bold("report failed")),
@@ -2788,7 +2790,8 @@ find_missing <- function(
         completed_count = completed_count,
         active_status = "none",
         pending_count = 0L,
-        compact = TRUE
+        compact = TRUE,
+        theme = theme
       ),
       "  ",
       active_style(cli::style_bold("forms 100%")),
@@ -2852,7 +2855,8 @@ find_missing <- function(
       completed_count = completed_count,
       active_status = active_status,
       pending_count = pending_count,
-      compact = TRUE
+      compact = TRUE,
+      theme = theme
     )
     line <- build_line("", constellation, form_suffix)
   }
@@ -2880,16 +2884,18 @@ find_missing <- function(
   completed_count,
   active_status = c("active", "failed", "none"),
   pending_count,
-  compact = FALSE
+  compact = FALSE,
+  theme = NULL
 ) {
   active_status <- match.arg(active_status)
   completed_count <- max(0L, as.integer(completed_count))
   pending_count <- max(0L, as.integer(pending_count))
-  symbols <- .miss_cli_progress_symbols()
-  completed_style <- .miss_cli_progress_style("completed")
-  active_style <- .miss_cli_progress_style("active")
-  pending_style <- .miss_cli_progress_style("pending")
-  failed_style <- .miss_cli_progress_style("failed")
+  theme <- theme %||% .miss_cli_progress_theme()
+  symbols <- theme$symbols
+  completed_style <- theme$styles$completed
+  active_style <- theme$styles$active
+  pending_style <- theme$styles$pending
+  failed_style <- theme$styles$failed
 
   if (isTRUE(compact)) {
     pieces <- character()

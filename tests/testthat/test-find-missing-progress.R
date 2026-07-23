@@ -170,6 +170,50 @@ test_that("progress formatter uses the Native Cool constellation", {
   expect_match(cli::ansi_strip(narrow_lines[[1]]), "O33%", fixed = TRUE)
 })
 
+test_that("progress formatter reuses its theme in every constellation path", {
+  progress_line <- getFromNamespace(
+    ".miss_cli_progress_line",
+    "redcapmissing"
+  )
+  progress_theme <- getFromNamespace(
+    ".miss_cli_progress_theme",
+    "redcapmissing"
+  )
+  theme <- progress_theme()
+
+  testthat::local_mocked_bindings(
+    .miss_cli_progress_symbols = function(...) {
+      stop("symbols were rebuilt", call. = FALSE)
+    },
+    .miss_cli_progress_style = function(...) {
+      stop("styles were rebuilt", call. = FALSE)
+    },
+    .package = "redcapmissing"
+  )
+
+  lines <- lapply(
+    list(
+      list(phase = "form", width = 120),
+      list(phase = "form", width = 40),
+      list(phase = "finalizing", width = 120),
+      list(phase = "finalizing_failed", width = 120)
+    ),
+    function(case) {
+      progress_line(
+        forms = paste0("form_", seq_len(10)),
+        form_index = 5,
+        form_fraction = 0.60,
+        overall_fraction = 0.50,
+        phase = case$phase,
+        width = case$width,
+        theme = theme
+      )
+    }
+  )
+
+  expect_true(all(nzchar(vapply(lines, cli::ansi_strip, character(1)))))
+})
+
 test_that("hybrid form and overall progress math is monotonic", {
   form_fraction <- getFromNamespace(
     ".miss_cli_form_fraction",
