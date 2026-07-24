@@ -131,6 +131,14 @@ Checkbox fields are treated as one REDCap root field. A checkbox root is
 answered when at least one exported child column (\code{field___choice}) is
 selected; unselected siblings are not separately flagged.
 
+A valid requested form remains in the report when \code{required_fields},
+\code{exclude_types}, and \code{ignore_fields} leave no fields to assess.
+\code{form-started} is still evaluated from the form's data-capturing metadata,
+and each event/repeat context that reaches field assessment receives an
+explicit \code{field-complete} summary with zero assessed, passed, and failed
+fields. Contexts stopped by an upstream row-started or \code{form-started} gate
+have no downstream \code{field-complete} summary.
+
 The checks are assessed in registry order. Failed checks remove the
 record/event/repeat/form context from downstream assessment. The function
 stops if no record IDs remain after filtering, except that explicit \code{records}

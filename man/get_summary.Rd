@@ -55,6 +55,12 @@ denominators, and duplicate values are treated as a set. Event and form
 values are validated against the configured report scope; validation checks
 are validated against \code{\link[=registry]{registry()}}. Valid filters with no matching rows
 return a zero-row tibble with the documented schema.
+
+When field selection leaves a requested form with no fields to assess,
+\code{field-complete} has an explicit zero-assessed summary for each
+event/repeat context that reached field assessment. A configured context
+stopped by an upstream row-started or \code{form-started} gate has no downstream
+summary row.
 }
 \examples{
 \dontrun{

@@ -1,3 +1,13 @@
+# redcapmissing 6.0.3
+
+## 2026-07-24
+
+- Kept valid requested forms in `find_missing()` reports when required-field,
+  type-exclusion, and ignored-field filtering leaves no fields to assess.
+  These forms retain form-started results and now contribute explicit
+  zero-assessed field-complete summaries for each event/repeat context that
+  reaches field assessment, while upstream-gated contexts remain absent.
+
 # redcapmissing 6.0.2
 
 ## 2026-07-22

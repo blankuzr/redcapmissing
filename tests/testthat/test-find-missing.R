@@ -186,6 +186,300 @@ test_that("find_missing supports a selected form containing only checkboxes", {
   expect_true(field_checks$validation_passed)
 })
 
+test_that("valid forms with no assessable fields remain in multi-form reports", {
+  metadata <- dplyr::bind_rows(
+    meta_row("record_id", "assessed_form", required = "y"),
+    meta_row("required_value", "assessed_form", required = "y"),
+    meta_row("optional_value", "optional_form")
+  )
+  report <- find_missing(
+    data = tibble::tibble(
+      record_id = "r1",
+      required_value = "entered",
+      optional_value = "entered"
+    ),
+    rcon = fake_rcon(metadata),
+    forms = c("optional_form", "assessed_form"),
+    details = TRUE,
+    progress = FALSE
+  )
+  optional_summary <- get_summary(report, forms = "optional_form")
+  optional_cache <- report$spec$.flex_event_forms_field_counts[
+    report$spec$.flex_event_forms_field_counts$form == "optional_form",
+    ,
+    drop = FALSE
+  ]
+  optional_workload <- report$diagnostics$form_workload[
+    report$diagnostics$form_workload$form == "optional_form",
+    ,
+    drop = FALSE
+  ]
+  field_checks <- report$details$checks[["field-complete"]]
+
+  expect_identical(
+    report$spec$forms,
+    c("optional_form", "assessed_form")
+  )
+  expect_equal(
+    optional_summary$assessed[
+      match(
+        c("form-started", "field-complete"),
+        optional_summary$validation_check
+      )
+    ],
+    c(1L, 0L)
+  )
+  expect_equal(
+    sum(optional_summary$validation_check == "field-complete"),
+    1L
+  )
+  expect_false(any(field_checks$form == "optional_form"))
+  expect_equal(optional_cache$field_assessed, 0L)
+  expect_equal(optional_cache$field_failed, 0L)
+  expect_equal(optional_workload$assessable_fields, 0L)
+  expect_true(any(
+    field_checks$form == "assessed_form" &
+      field_checks$validation_check == "field-complete"
+  ))
+})
+
+test_that("a valid form remains when field filters remove every field", {
+  metadata <- dplyr::bind_rows(
+    meta_row("record_id", "identifier_form", required = "y"),
+    meta_row("required_value", "filtered_form", required = "y")
+  )
+  report <- find_missing(
+    data = tibble::tibble(
+      record_id = "r1",
+      required_value = "entered"
+    ),
+    rcon = fake_rcon(metadata),
+    forms = "filtered_form",
+    ignore_fields = "required_value",
+    progress = FALSE
+  )
+  summary <- get_summary(report)
+  cache <- report$spec$.flex_event_forms_field_counts
+
+  expect_equal(
+    summary$assessed[
+      match(c("form-started", "field-complete"), summary$validation_check)
+    ],
+    c(1L, 0L)
+  )
+  expect_equal(cache$field_assessed, 0L)
+  expect_equal(cache$field_failed, 0L)
+  expect_identical(report$spec$ignored_fields, "required_value")
+})
+
+test_that("empty field plans retain only reached longitudinal contexts", {
+  metadata <- dplyr::bind_rows(
+    meta_row("record_id", "identifier_form", required = "y"),
+    meta_row("optional_value", "optional_form")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1, 1),
+    unique_event_name = c(
+      "baseline_event",
+      "followup_event",
+      "closeout_event"
+    ),
+    form = rep("optional_form", 3)
+  )
+  args <- list(
+    data = tibble::tibble(
+      record_id = c("r1", "r1"),
+      redcap_event_name = c("baseline_event", "followup_event"),
+      optional_value = c("entered", "")
+    ),
+    rcon = fake_rcon(metadata, mapping = mapping),
+    forms = "optional_form",
+    progress = FALSE
+  )
+  compact <- do.call(find_missing, c(args, list(details = FALSE)))
+  detailed <- do.call(find_missing, c(args, list(details = TRUE)))
+  field_summary <- get_summary(
+    detailed,
+    validation_check = "field-complete"
+  )
+  stored_field_summary <- detailed$summary[
+    detailed$summary$validation_check == "field-complete",
+    ,
+    drop = FALSE
+  ]
+
+  expect_equal(compact$summary, detailed$summary, ignore_attr = TRUE)
+  expect_equal(compact$missing, detailed$missing, ignore_attr = TRUE)
+  expect_identical(field_summary$redcap_event_name, "baseline_event")
+  expect_identical(field_summary$form, "optional_form")
+  expect_identical(field_summary$redcap_repeat_instrument, "")
+  expect_identical(field_summary$redcap_repeat_instance, "")
+  expect_identical(field_summary$validation_level, "event:form")
+  expect_identical(field_summary$assessed, 0L)
+  expect_identical(field_summary$passed, 0L)
+  expect_identical(field_summary$failed, 0L)
+  expect_identical(field_summary$pass_rate, 0)
+  expect_identical(field_summary$fail_rate, 0)
+  expect_identical(
+    stored_field_summary$validation_context,
+    "event: baseline_event"
+  )
+  expect_identical(
+    stored_field_summary$validation_step,
+    "optional_form_field-complete"
+  )
+  expect_equal(
+    nrow(get_summary(
+      detailed,
+      validation_check = "field-complete",
+      events = "baseline_event",
+      forms = "optional_form"
+    )),
+    1L
+  )
+  expect_equal(
+    nrow(get_summary(
+      detailed,
+      validation_check = "field-complete",
+      events = c("followup_event", "closeout_event")
+    )),
+    0L
+  )
+  expect_equal(
+    nrow(get_missing(detailed, validation_check = "field-complete")),
+    0L
+  )
+  expect_equal(
+    nrow(detailed$details$checks[["field-complete"]]),
+    0L
+  )
+  expect_equal(
+    detailed$diagnostics$validation_rows,
+    nrow(detailed$details$validation_rows)
+  )
+  expect_equal(
+    detailed$diagnostics$summary_rows,
+    nrow(detailed$summary)
+  )
+})
+
+test_that("empty field plans retain only reached repeat instances", {
+  metadata <- dplyr::bind_rows(
+    meta_row("record_id", "screen_form", required = "y"),
+    meta_row("optional_value", "repeat_form")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1),
+    unique_event_name = c("baseline_event", "baseline_event"),
+    form = c("screen_form", "repeat_form")
+  )
+  repeat_instrument_event <- tibble::tibble(
+    event_name = "baseline_event",
+    form_name = "repeat_form",
+    custom_form_label = ""
+  )
+  report <- find_missing(
+    data = tibble::tibble(
+      record_id = "r1",
+      redcap_event_name = "baseline_event",
+      redcap_repeat_instrument = "repeat_form",
+      redcap_repeat_instance = "1",
+      optional_value = "entered"
+    ),
+    rcon = fake_rcon(
+      metadata,
+      mapping = mapping,
+      repeat_instrument_event = repeat_instrument_event
+    ),
+    forms = "repeat_form",
+    instances = 2L,
+    details = TRUE,
+    progress = FALSE
+  )
+  field_summary <- get_summary(
+    report,
+    validation_check = "field-complete"
+  )
+  stored_field_summary <- report$summary[
+    report$summary$validation_check == "field-complete",
+    ,
+    drop = FALSE
+  ]
+
+  expect_identical(field_summary$redcap_event_name, "baseline_event")
+  expect_identical(field_summary$form, "repeat_form")
+  expect_identical(
+    field_summary$redcap_repeat_instrument,
+    "repeat_form"
+  )
+  expect_identical(field_summary$redcap_repeat_instance, "1")
+  expect_identical(
+    field_summary$validation_level,
+    "event:form:instance"
+  )
+  expect_identical(field_summary$assessed, 0L)
+  expect_identical(field_summary$passed, 0L)
+  expect_identical(field_summary$failed, 0L)
+  expect_identical(field_summary$pass_rate, 0)
+  expect_identical(field_summary$fail_rate, 0)
+  expect_identical(
+    stored_field_summary$validation_context,
+    "event: baseline_event; repeat: 1"
+  )
+  expect_equal(
+    nrow(get_summary(
+      report,
+      validation_check = "field-complete",
+      events = "baseline_event",
+      forms = "repeat_form"
+    )),
+    1L
+  )
+  expect_false(any(field_summary$redcap_repeat_instance == "2"))
+  expect_equal(
+    nrow(get_missing(report, validation_check = "field-complete")),
+    0L
+  )
+  expect_equal(nrow(report$details$checks[["field-complete"]]), 0L)
+})
+
+test_that("branch-closed nonempty field plans do not gain context summaries", {
+  metadata <- dplyr::bind_rows(
+    meta_row("record_id", "identifier_form", required = "y"),
+    meta_row("branch_flag", "branched_form", field_type = "yesno"),
+    meta_row(
+      "conditional_value",
+      "branched_form",
+      branching = "[branch_flag] = '1'",
+      required = "y"
+    )
+  )
+  mapping <- tibble::tibble(
+    arm_num = 1,
+    unique_event_name = "baseline_event",
+    form = "branched_form"
+  )
+  report <- find_missing(
+    data = tibble::tibble(
+      record_id = "r1",
+      redcap_event_name = "baseline_event",
+      branch_flag = "0",
+      conditional_value = ""
+    ),
+    rcon = fake_rcon(metadata, mapping = mapping),
+    forms = "branched_form",
+    details = TRUE,
+    progress = FALSE
+  )
+
+  expect_identical(report$diagnostics$form_workload$assessable_fields, 1L)
+  expect_equal(
+    nrow(get_summary(report, validation_check = "field-complete")),
+    0L
+  )
+  expect_equal(nrow(report$details$checks[["field-complete"]]), 0L)
+})
+
 test_that("find_missing does not multiply connection queries across forms", {
   calls <- new.env(parent = emptyenv())
   method_names <- c(
@@ -1777,6 +2071,15 @@ test_that("invalid forms, events, records, and instances fail clearly", {
       forms = character()
     ),
     "at least one"
+  )
+  expect_error(
+    find_missing(
+      data = records,
+      rcon = fake_rcon(baseline_form_meta()),
+      forms = "unknown_form"
+    ),
+    "exactly one row for form `unknown_form`",
+    fixed = TRUE
   )
   expect_error(
     find_missing(
