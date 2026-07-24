@@ -131,6 +131,85 @@ flex_event_forms_no_assessed_fields_report <- function() {
   )
 }
 
+flex_event_forms_longitudinal_empty_field_report <- function() {
+  metadata <- dplyr::bind_rows(
+    meta_row("record_id", "identifier_form", required = "y"),
+    meta_row("optional_value", "optional_form")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1, 1),
+    unique_event_name = c(
+      "baseline_event",
+      "followup_event",
+      "closeout_event"
+    ),
+    form = rep("optional_form", 3)
+  )
+  events <- tibble::tibble(
+    arm_num = rep(1, 3),
+    unique_event_name = c(
+      "baseline_event",
+      "followup_event",
+      "closeout_event"
+    ),
+    event_name = c("Baseline", "Follow-up", "Closeout"),
+    custom_event_label = rep("", 3)
+  )
+
+  find_missing(
+    data = tibble::tibble(
+      record_id = c("r1", "r1"),
+      redcap_event_name = c("baseline_event", "followup_event"),
+      optional_value = c("entered", "")
+    ),
+    rcon = fake_rcon(metadata, events = events, mapping = mapping),
+    forms = "optional_form",
+    progress = FALSE
+  )
+}
+
+flex_event_forms_repeat_empty_field_report <- function() {
+  metadata <- dplyr::bind_rows(
+    meta_row("record_id", "screen_form", required = "y"),
+    meta_row("optional_value", "repeat_form")
+  )
+  mapping <- tibble::tibble(
+    arm_num = c(1, 1),
+    unique_event_name = c("baseline_event", "baseline_event"),
+    form = c("screen_form", "repeat_form")
+  )
+  events <- tibble::tibble(
+    arm_num = 1,
+    unique_event_name = "baseline_event",
+    event_name = "Baseline",
+    custom_event_label = ""
+  )
+  repeat_instrument_event <- tibble::tibble(
+    event_name = "baseline_event",
+    form_name = "repeat_form",
+    custom_form_label = ""
+  )
+
+  find_missing(
+    data = tibble::tibble(
+      record_id = "r1",
+      redcap_event_name = "baseline_event",
+      redcap_repeat_instrument = "repeat_form",
+      redcap_repeat_instance = "1",
+      optional_value = "entered"
+    ),
+    rcon = fake_rcon(
+      metadata,
+      events = events,
+      mapping = mapping,
+      repeat_instrument_event = repeat_instrument_event
+    ),
+    forms = "repeat_form",
+    instances = 2L,
+    progress = FALSE
+  )
+}
+
 flex_event_forms_missing_event_report <- function() {
   status_meta <- dplyr::bind_rows(
     meta_row("record_id", "status_form", field_label = "Record ID", required = "y"),
@@ -1078,6 +1157,71 @@ test_that("flex_event_forms retains forms with no assessable fields", {
   expect_equal(optional_row$`Form Incomplete`, "0/1 (0%)")
   expect_equal(optional_row$`Form Not Started`, "0/1 (0%)")
   expect_equal(optional_row$`Form >10% Missing`, "0/1 (0%)")
+})
+
+test_that("zero summaries do not change longitudinal or repeat metrics", {
+  skip_flex_event_forms_packages()
+
+  longitudinal <- flex_event_forms_longitudinal_empty_field_report()
+  longitudinal_body <- tibble::as_tibble(
+    flex_event_forms(longitudinal)$body$dataset
+  )
+  baseline_row <- longitudinal_body[
+    longitudinal_body$Form == "optional_form label" &
+      dplyr::lag(longitudinal_body$Event, default = "") == "Baseline",
+    ,
+    drop = FALSE
+  ]
+  followup_row <- longitudinal_body[
+    longitudinal_body$Form == "optional_form label" &
+      dplyr::lag(longitudinal_body$Event, default = "") == "Follow-up",
+    ,
+    drop = FALSE
+  ]
+  closeout_row <- longitudinal_body[
+    longitudinal_body$Form == "optional_form label" &
+      dplyr::lag(longitudinal_body$Event, default = "") == "Closeout",
+    ,
+    drop = FALSE
+  ]
+
+  expect_equal(longitudinal_body$`Form Incomplete`[[1]], "2/3 (66.7%)")
+  expect_equal(longitudinal_body$`Form Not Started`[[1]], "2/3 (66.7%)")
+  expect_equal(longitudinal_body$`Form >10% Missing`[[1]], "2/3 (66.7%)")
+  expect_equal(baseline_row$`Form Incomplete`, "0/1 (0%)")
+  expect_equal(baseline_row$`Form Not Started`, "0/1 (0%)")
+  expect_equal(baseline_row$`Form >10% Missing`, "0/1 (0%)")
+  expect_equal(followup_row$`Form Incomplete`, "1/1 (100%)")
+  expect_equal(followup_row$`Form Not Started`, "1/1 (100%)")
+  expect_equal(followup_row$`Form >10% Missing`, "1/1 (100%)")
+  expect_equal(closeout_row$`Form Incomplete`, "1/1 (100%)")
+  expect_equal(closeout_row$`Form Not Started`, "1/1 (100%)")
+  expect_equal(closeout_row$`Form >10% Missing`, "1/1 (100%)")
+
+  repeat_report <- flex_event_forms_repeat_empty_field_report()
+  repeat_body <- tibble::as_tibble(
+    flex_event_forms(repeat_report)$body$dataset
+  )
+  instance_one <- repeat_body[
+    repeat_body$`Repeat Instance` == "1",
+    ,
+    drop = FALSE
+  ]
+  instance_two <- repeat_body[
+    repeat_body$`Repeat Instance` == "2",
+    ,
+    drop = FALSE
+  ]
+
+  expect_equal(repeat_body$`Form Incomplete`[[1]], "1/2 (50%)")
+  expect_equal(repeat_body$`Form Not Started`[[1]], "1/2 (50%)")
+  expect_equal(repeat_body$`Form >10% Missing`[[1]], "1/2 (50%)")
+  expect_equal(instance_one$`Form Incomplete`, "0/1 (0%)")
+  expect_equal(instance_one$`Form Not Started`, "0/1 (0%)")
+  expect_equal(instance_one$`Form >10% Missing`, "0/1 (0%)")
+  expect_equal(instance_two$`Form Incomplete`, "1/1 (100%)")
+  expect_equal(instance_two$`Form Not Started`, "1/1 (100%)")
+  expect_equal(instance_two$`Form >10% Missing`, "1/1 (100%)")
 })
 
 test_that("threshold 1 counts started forms with all assessed fields missing", {

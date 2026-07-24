@@ -1288,6 +1288,27 @@
         .miss_report_context_key(form_started_failures)
     )
   }
+  zero_field_complete_contexts <- tibble::tibble(
+    redcap_event_name = character(),
+    form = character(),
+    redcap_repeat_instrument = character(),
+    redcap_repeat_instance = character()
+  )
+  if (
+    nrow(form_plan$field_plan) == 0L &&
+      length(started_positions) > 0L
+  ) {
+    started_contexts <- .miss_context_from_records(
+      form_records[started_positions, , drop = FALSE],
+      project
+    )
+    zero_field_complete_contexts <- unique(tibble::tibble(
+      redcap_event_name = started_contexts$redcap_event_name,
+      form = rep(form, nrow(started_contexts)),
+      redcap_repeat_instrument = started_contexts$redcap_repeat_instrument,
+      redcap_repeat_instance = started_contexts$redcap_repeat_instance
+    ))
+  }
   .miss_timer_record(timer, "form", "form_started", stage_started_at, form)
   .miss_cli_report_form_progress(
     progress_callback,
@@ -1362,7 +1383,13 @@
     summary = if (isTRUE(defer_assembly)) {
       .miss_empty_validation_summary()
     } else {
-      .miss_build_form_validation_summary(c(check_rows, list(form = form)))
+      .miss_build_form_validation_summary(c(
+        check_rows,
+        list(
+          form = form,
+          zero_field_complete_contexts = zero_field_complete_contexts
+        )
+      ))
     },
     missing = if (isTRUE(defer_assembly)) {
       .miss_empty_missing_rows()
@@ -1380,6 +1407,7 @@
     instances_defaulted = resolved_instances$defaulted,
     record_eligibility = record_eligibility,
     flex_event_forms_field_counts = flex_event_forms_field_counts,
+    zero_field_complete_contexts = zero_field_complete_contexts,
     used_record_spec_keys = unique(record_eligibility$record_spec_key[
       !.miss_is_blank_vec(record_eligibility$record_spec_key)
     ]),

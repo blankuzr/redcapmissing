@@ -13,6 +13,12 @@
 #' are validated against [registry()]. Valid filters with no matching rows
 #' return a zero-row tibble with the documented schema.
 #'
+#' When field selection leaves a requested form with no fields to assess,
+#' `field-complete` has an explicit zero-assessed summary for each
+#' event/repeat context that reached field assessment. A configured context
+#' stopped by an upstream row-started or `form-started` gate has no downstream
+#' summary row.
+#'
 #' @param report A `redcapmissing` object created by [find_missing()].
 #' @param validation_check `NULL`, or a non-empty character vector containing
 #'   raw, canonical validation-check codes from [registry()]. `NULL` keeps all

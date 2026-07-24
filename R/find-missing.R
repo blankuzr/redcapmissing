@@ -17,7 +17,10 @@
 #' A valid requested form remains in the report when `required_fields`,
 #' `exclude_types`, and `ignore_fields` leave no fields to assess.
 #' `form-started` is still evaluated from the form's data-capturing metadata,
-#' while `field-complete` contributes no assessments for that form.
+#' and each event/repeat context that reaches field assessment receives an
+#' explicit `field-complete` summary with zero assessed, passed, and failed
+#' fields. Contexts stopped by an upstream row-started or `form-started` gate
+#' have no downstream `field-complete` summary.
 #'
 #' The checks are assessed in registry order. Failed checks remove the
 #' record/event/repeat/form context from downstream assessment. The function
@@ -555,6 +558,18 @@ find_missing <- function(
         registry = registry
       )
     }
+    if (
+      !isTRUE(no_row_gates) &&
+        !is.null(form_report$zero_field_complete_contexts) &&
+        nrow(form_report$zero_field_complete_contexts) > 0L
+    ) {
+      zero_i <- zero_i + 1L
+      zero_rows[[zero_i]] <- .miss_zero_validation_context_summaries(
+        contexts = form_report$zero_field_complete_contexts,
+        validation_check = "field-complete",
+        registry = registry
+      )
+    }
   }
 
   out <- dplyr::bind_rows(
@@ -660,6 +675,20 @@ find_missing <- function(
   }
 
   out <- dplyr::bind_rows(summary_rows)
+  if (
+    .miss_form_report_has_row_context_gates(form_report) &&
+      !is.null(form_report$zero_field_complete_contexts) &&
+      nrow(form_report$zero_field_complete_contexts) > 0L
+  ) {
+    out <- dplyr::bind_rows(
+      out,
+      .miss_zero_validation_context_summaries(
+        contexts = form_report$zero_field_complete_contexts,
+        validation_check = "field-complete",
+        registry = registry
+      )
+    )
+  }
   if (nrow(out) == 0) {
     return(.miss_empty_validation_summary())
   }
@@ -1405,6 +1434,51 @@ find_missing <- function(
     ],
     validation_context = rep("overall", n),
     validation_step = .miss_step_id(form, validation_checks),
+    assessed = rep(0L, n),
+    passed = rep(0L, n),
+    failed = rep(0L, n),
+    pass_rate = rep(0, n),
+    fail_rate = rep(0, n)
+  ), nrow = n)
+}
+
+.miss_zero_validation_context_summaries <- function(
+  contexts,
+  validation_check,
+  registry = .redcapmissing_registry_data()
+) {
+  contexts <- .miss_normalize_validation_context_columns(contexts)
+  context_columns <- c(
+    "redcap_event_name",
+    "form",
+    "redcap_repeat_instrument",
+    "redcap_repeat_instance"
+  )
+  contexts <- unique(contexts[, context_columns, drop = FALSE])
+  n <- nrow(contexts)
+  if (n == 0L) {
+    return(.miss_empty_validation_summary())
+  }
+
+  validation_check <- rep(validation_check, n)
+  tibble::new_tibble(list(
+    redcap_event_name = contexts$redcap_event_name,
+    form = contexts$form,
+    redcap_repeat_instrument = contexts$redcap_repeat_instrument,
+    redcap_repeat_instance = contexts$redcap_repeat_instance,
+    validation_level = .redcapmissing_context_validation_level(
+      validation_check = validation_check,
+      repeat_instance = contexts$redcap_repeat_instance
+    ),
+    validation_check = validation_check,
+    validation_label = registry$validation_label[
+      match(validation_check, registry$validation_check)
+    ],
+    validation_context = .miss_validation_context_vec(
+      event = contexts$redcap_event_name,
+      repeat_instance = contexts$redcap_repeat_instance
+    ),
+    validation_step = .miss_step_id(contexts$form, validation_check),
     assessed = rep(0L, n),
     passed = rep(0L, n),
     failed = rep(0L, n),
