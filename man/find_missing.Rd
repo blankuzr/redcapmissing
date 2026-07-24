@@ -16,7 +16,9 @@ find_missing(
   exclude_types = "descriptive",
   instances = NULL,
   details = FALSE,
-  progress = interactive()
+  progress = interactive(),
+  verified = NULL,
+  verified_user = NULL
 )
 }
 \arguments{
@@ -92,6 +94,26 @@ row-level tables are stored under \code{report$details}. Defaults to \code{FALSE
 \item{progress}{Logical scalar. When \code{TRUE}, displays processing progress by
 form; percentages do not represent data completeness. Defaults to
 \code{interactive()}.}
+
+\item{verified}{\code{NULL}, or a data frame of REDCap data-quality issues to
+cross-reference. A non-empty data frame must contain character columns
+\code{project_id}, \code{record}, \code{event_id}, \code{field_name}, \code{repeat_instrument},
+\code{instance}, \code{current_query_status}, and \code{username}; extra columns are
+ignored, and \code{event_name} is neither required nor used. A zero-row
+logical-column template returned by
+\code{\link[redcapAPI:exportDataQuality]{redcapAPI::exportDataQuality()}} is also accepted. Every non-empty row is
+validated against the cached project ID, metadata, events, form-event
+mapping, and repeat structure before any user or status filtering. Use
+\code{NA_character_} for event or repeat values that do not apply. Defaults to
+\code{NULL}.}
+
+\item{verified_user}{\code{NULL}, or one non-blank character username paired with
+\code{verified}. Matching is exact and case-sensitive. Only rows for this user
+whose \code{current_query_status} is exactly \code{"VERIFIED"} can override an
+otherwise-failing, already-assessed \code{field-complete} check at the exact
+record, event, repeat instrument, instance, and field context. If no input
+rows match the username, the function warns and proceeds unchanged.
+Defaults to \code{NULL}.}
 }
 \value{
 A list with class \code{"redcapmissing"} containing:
@@ -112,7 +134,10 @@ context, eligibility, row checks, blankness, form startedness, the four
 field partitions, and form assembly. \code{diagnostics$form_workload} is a
 per-form tibble with record/context/started-row counts, total and
 assessable field counts, the four field-partition counts, and validation
-rows.}
+rows. \code{diagnostics$verification} contains only the stable verification
+fields \code{enabled}, \code{verified_user}, \code{input_rows}, \code{user_rows},
+\code{verified_rows}, and \code{overrides_applied}; the supplied data are not
+retained.}
 \item{\code{details}}{\code{NULL} by default. When \code{details = TRUE}, a list with
 \code{validation_rows}, \code{checks}, and \code{failures} row tables.}
 }
@@ -148,6 +173,13 @@ contexts can fail a row-started check.
 Set \code{details = TRUE} to retain row-level check tables for troubleshooting.
 See \code{vignette("redcapmissing", package = "redcapmissing")} for synthetic
 event, record-eligibility, and repeat-instance workflows.
+
+When \code{verified} is supplied, every non-empty input row is validated before
+username or query-status filtering. Project mismatches, unknown or ambiguous
+fields/events, forms not offered at the mapped event, non-canonical
+instances, and invalid regular/repeating context combinations are errors.
+Matching rows never create an assessment or bypass upstream gates; they can
+only change an exact, otherwise-failing \code{field-complete} result to a pass.
 }
 \examples{
 \dontrun{
@@ -184,10 +216,20 @@ repeat_missing <- find_missing(
   forms = "repeat_form",
   instances = 2L
 )
+
+quality_issues <- redcapAPI::exportDataQuality(rcon)
+verified_report <- find_missing(
+  data = records,
+  rcon = rcon,
+  forms = "baseline_form",
+  verified = quality_issues,
+  verified_user = "reviewer_username"
+)
 }
 
 }
 \seealso{
 \code{\link[=get_summary]{get_summary()}}, \code{\link[=get_missing]{get_missing()}}, \code{\link[=flexify]{flexify()}}, \code{\link[=registry]{registry()}},
-\code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}
+\code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}},
+\code{\link[redcapAPI:exportDataQuality]{redcapAPI::exportDataQuality()}}
 }

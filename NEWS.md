@@ -1,3 +1,16 @@
+# redcapmissing 6.1.0
+
+## 2026-07-24
+
+- Added optional, fail-closed `verified` and `verified_user` inputs to
+  `find_missing()`. Validated REDCap data-quality rows with exact status
+  `"VERIFIED"` can now convert only the matching, otherwise-failing
+  field-complete checks to passes without bypassing upstream eligibility,
+  startedness, branching, field-selection, or requested-scope rules.
+- Added `diagnostics$verification` counts for the supplied, user-matched,
+  verified, and applied exception rows without retaining the supplied
+  data-quality data.
+
 # redcapmissing 6.0.3
 
 ## 2026-07-24

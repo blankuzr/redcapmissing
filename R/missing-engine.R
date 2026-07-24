@@ -1133,6 +1133,7 @@
   instances,
   instances_explicit,
   details,
+  verified_keys = character(),
   progress_callback = NULL,
   defer_assembly = FALSE
 ) {
@@ -1348,6 +1349,11 @@
     progress_callback = field_progress_callback,
     timer = timer
   )
+  verification_result <- .miss_apply_verified_field_checks(
+    expected_result = expected_result,
+    verified_keys = verified_keys
+  )
+  expected_result <- verification_result$expected_result
   expected <- expected_result$rows
   if (isTRUE(details)) {
     expected <- .miss_add_validation_context(expected)
@@ -1407,6 +1413,8 @@
     instances_defaulted = resolved_instances$defaulted,
     record_eligibility = record_eligibility,
     flex_event_forms_field_counts = flex_event_forms_field_counts,
+    verification_overrides_applied =
+      verification_result$overrides_applied,
     zero_field_complete_contexts = zero_field_complete_contexts,
     used_record_spec_keys = unique(record_eligibility$record_spec_key[
       !.miss_is_blank_vec(record_eligibility$record_spec_key)
