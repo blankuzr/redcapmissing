@@ -51,6 +51,31 @@ records <- redcapAPI::exportRecordsTyped(
 )
 ```
 
+To honor field-level issues that a specific REDCap user has already
+verified, pass the data-quality export and that exact username together:
+
+``` r
+quality_issues <- redcapAPI::exportDataQuality(rcon)
+
+report <- find_missing(
+  data = records,
+  rcon = rcon,
+  forms = "baseline_form",
+  verified = quality_issues,
+  verified_user = "reviewer_username"
+)
+```
+
+`find_missing()` validates every supplied issue against the same
+project's cached fields, events, form-event mapping, and repeat
+structure before filtering. It then uses exact, case-sensitive username
+and `"VERIFIED"` status matches to pass only an already-assessed,
+otherwise-failing `field-complete` row at the same
+record/event/repeat/field context. It does not bypass startedness,
+branching, field selection, or report scope. Review counts in
+`report$diagnostics$verification`; the supplied issue data are not
+retained.
+
 ## First report
 
 This synthetic example runs without REDCap credentials. The

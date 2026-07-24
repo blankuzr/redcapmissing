@@ -32,6 +32,13 @@
 #' See `vignette("redcapmissing", package = "redcapmissing")` for synthetic
 #' event, record-eligibility, and repeat-instance workflows.
 #'
+#' When `verified` is supplied, every non-empty input row is validated before
+#' username or query-status filtering. Project mismatches, unknown or ambiguous
+#' fields/events, forms not offered at the mapped event, non-canonical
+#' instances, and invalid regular/repeating context combinations are errors.
+#' Matching rows never create an assessment or bypass upstream gates; they can
+#' only change an exact, otherwise-failing `field-complete` result to a pass.
+#'
 #' @param data A data frame or tibble of REDCap records, usually produced by
 #'   `redcapAPI::exportRecordsTyped()`. For longitudinal projects, this should
 #'   include the REDCap system column `redcap_event_name`. For repeating
@@ -93,6 +100,24 @@
 #' @param progress Logical scalar. When `TRUE`, displays processing progress by
 #'   form; percentages do not represent data completeness. Defaults to
 #'   `interactive()`.
+#' @param verified `NULL`, or a data frame of REDCap data-quality issues to
+#'   cross-reference. A non-empty data frame must contain character columns
+#'   `project_id`, `record`, `event_id`, `field_name`, `repeat_instrument`,
+#'   `instance`, `current_query_status`, and `username`; extra columns are
+#'   ignored, and `event_name` is neither required nor used. A zero-row
+#'   logical-column template returned by
+#'   [redcapAPI::exportDataQuality()] is also accepted. Every non-empty row is
+#'   validated against the cached project ID, metadata, events, form-event
+#'   mapping, and repeat structure before any user or status filtering. Use
+#'   `NA_character_` for event or repeat values that do not apply. Defaults to
+#'   `NULL`.
+#' @param verified_user `NULL`, or one non-blank character username paired with
+#'   `verified`. Matching is exact and case-sensitive. Only rows for this user
+#'   whose `current_query_status` is exactly `"VERIFIED"` can override an
+#'   otherwise-failing, already-assessed `field-complete` check at the exact
+#'   record, event, repeat instrument, instance, and field context. If no input
+#'   rows match the username, the function warns and proceeds unchanged.
+#'   Defaults to `NULL`.
 #'
 #' @return A list with class `"redcapmissing"` containing:
 #' \describe{
@@ -112,13 +137,17 @@
 #'     field partitions, and form assembly. `diagnostics$form_workload` is a
 #'     per-form tibble with record/context/started-row counts, total and
 #'     assessable field counts, the four field-partition counts, and validation
-#'     rows.}
+#'     rows. `diagnostics$verification` contains only the stable verification
+#'     fields `enabled`, `verified_user`, `input_rows`, `user_rows`,
+#'     `verified_rows`, and `overrides_applied`; the supplied data are not
+#'     retained.}
 #'   \item{`details`}{`NULL` by default. When `details = TRUE`, a list with
 #'     `validation_rows`, `checks`, and `failures` row tables.}
 #' }
 #'
 #' @seealso [get_summary()], [get_missing()], [flexify()], [registry()],
-#'   [redcapAPI::redcapConnection()], [redcapAPI::exportRecordsTyped()]
+#'   [redcapAPI::redcapConnection()], [redcapAPI::exportRecordsTyped()],
+#'   [redcapAPI::exportDataQuality()]
 #' @examples
 #' \dontrun{
 #' rcon <- redcapAPI::redcapConnection(
@@ -154,6 +183,15 @@
 #'   forms = "repeat_form",
 #'   instances = 2L
 #' )
+#'
+#' quality_issues <- redcapAPI::exportDataQuality(rcon)
+#' verified_report <- find_missing(
+#'   data = records,
+#'   rcon = rcon,
+#'   forms = "baseline_form",
+#'   verified = quality_issues,
+#'   verified_user = "reviewer_username"
+#' )
 #' }
 #'
 #' @export
@@ -169,7 +207,9 @@ find_missing <- function(
   exclude_types = "descriptive",
   instances = NULL,
   details = FALSE,
-  progress = interactive()
+  progress = interactive(),
+  verified = NULL,
+  verified_user = NULL
 ) {
   call_arg_names <- names(as.list(sys.call()))[-1]
   if ("form" %in% call_arg_names) {
@@ -199,6 +239,10 @@ find_missing <- function(
   ) {
     stop("`progress` must be TRUE or FALSE.", call. = FALSE)
   }
+  .miss_check_verified_arguments(
+    verified = verified,
+    verified_user = verified_user
+  )
 
   report_started_at <- Sys.time()
   report_timer <- .miss_new_timer()
@@ -260,6 +304,12 @@ find_missing <- function(
     scope = "report",
     stage = "project_context_api",
     started_at = project_started_at
+  )
+  verification <- .miss_prepare_verified(
+    verified = verified,
+    verified_user = verified_user,
+    meta = meta,
+    project_cache = project_cache
   )
 
   ignore_ids <- unique(.miss_chr_vec(ignore_ids %||% character()))
@@ -331,6 +381,7 @@ find_missing <- function(
       instances = instance_settings$values[[form]],
       instances_explicit = instance_settings$explicit[[form]],
       details = details,
+      verified_keys = verification$keys,
       progress_callback = progress_callback,
       defer_assembly = TRUE
     )
@@ -467,6 +518,12 @@ find_missing <- function(
     started_at = assembly_started_at
   )
   report_finished_at <- Sys.time()
+  verification$diagnostics$overrides_applied <- as.integer(sum(vapply(
+    form_reports,
+    `[[`,
+    integer(1),
+    "verification_overrides_applied"
+  )))
   diagnostics <- .miss_build_report_diagnostics(
     started_at = report_started_at,
     finished_at = report_finished_at,
@@ -481,7 +538,8 @@ find_missing <- function(
     form_workload = .miss_bind_report_component(
       form_reports,
       "form_workload"
-    )
+    ),
+    verification = verification$diagnostics
   )
   out <- list(
     summary = summary,
@@ -1392,7 +1450,8 @@ find_missing <- function(
   summary,
   missing,
   stage_timings,
-  form_workload
+  form_workload,
+  verification = .miss_verification_diagnostics()
 ) {
   list(
     started_at = started_at,
@@ -1405,7 +1464,8 @@ find_missing <- function(
     summary_rows = nrow(summary),
     missing_rows = nrow(missing),
     stage_timings = tibble::as_tibble(stage_timings),
-    form_workload = tibble::as_tibble(form_workload)
+    form_workload = tibble::as_tibble(form_workload),
+    verification = verification
   )
 }
 

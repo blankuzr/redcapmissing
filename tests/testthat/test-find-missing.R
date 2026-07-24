@@ -96,7 +96,9 @@ test_that("public report API exposes canonical validation surfaces", {
       "exclude_types",
       "instances",
       "details",
-      "progress"
+      "progress",
+      "verified",
+      "verified_user"
     )
   )
   expect_true("find_missing" %in% getNamespaceExports("redcapmissing"))
