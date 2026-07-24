@@ -186,6 +186,88 @@ test_that("find_missing supports a selected form containing only checkboxes", {
   expect_true(field_checks$validation_passed)
 })
 
+test_that("valid forms with no assessable fields remain in multi-form reports", {
+  metadata <- dplyr::bind_rows(
+    meta_row("record_id", "assessed_form", required = "y"),
+    meta_row("required_value", "assessed_form", required = "y"),
+    meta_row("optional_value", "optional_form")
+  )
+  report <- find_missing(
+    data = tibble::tibble(
+      record_id = "r1",
+      required_value = "entered",
+      optional_value = "entered"
+    ),
+    rcon = fake_rcon(metadata),
+    forms = c("optional_form", "assessed_form"),
+    details = TRUE,
+    progress = FALSE
+  )
+  optional_summary <- get_summary(report, forms = "optional_form")
+  optional_cache <- report$spec$.flex_event_forms_field_counts[
+    report$spec$.flex_event_forms_field_counts$form == "optional_form",
+    ,
+    drop = FALSE
+  ]
+  optional_workload <- report$diagnostics$form_workload[
+    report$diagnostics$form_workload$form == "optional_form",
+    ,
+    drop = FALSE
+  ]
+  field_checks <- report$details$checks[["field-complete"]]
+
+  expect_identical(
+    report$spec$forms,
+    c("optional_form", "assessed_form")
+  )
+  expect_equal(
+    optional_summary$assessed[
+      match(
+        c("form-started", "field-complete"),
+        optional_summary$validation_check
+      )
+    ],
+    c(1L, 0L)
+  )
+  expect_false(any(field_checks$form == "optional_form"))
+  expect_equal(optional_cache$field_assessed, 0L)
+  expect_equal(optional_cache$field_failed, 0L)
+  expect_equal(optional_workload$assessable_fields, 0L)
+  expect_true(any(
+    field_checks$form == "assessed_form" &
+      field_checks$validation_check == "field-complete"
+  ))
+})
+
+test_that("a valid form remains when field filters remove every field", {
+  metadata <- dplyr::bind_rows(
+    meta_row("record_id", "identifier_form", required = "y"),
+    meta_row("required_value", "filtered_form", required = "y")
+  )
+  report <- find_missing(
+    data = tibble::tibble(
+      record_id = "r1",
+      required_value = "entered"
+    ),
+    rcon = fake_rcon(metadata),
+    forms = "filtered_form",
+    ignore_fields = "required_value",
+    progress = FALSE
+  )
+  summary <- get_summary(report)
+  cache <- report$spec$.flex_event_forms_field_counts
+
+  expect_equal(
+    summary$assessed[
+      match(c("form-started", "field-complete"), summary$validation_check)
+    ],
+    c(1L, 0L)
+  )
+  expect_equal(cache$field_assessed, 0L)
+  expect_equal(cache$field_failed, 0L)
+  expect_identical(report$spec$ignored_fields, "required_value")
+})
+
 test_that("find_missing does not multiply connection queries across forms", {
   calls <- new.env(parent = emptyenv())
   method_names <- c(
@@ -1777,6 +1859,15 @@ test_that("invalid forms, events, records, and instances fail clearly", {
       forms = character()
     ),
     "at least one"
+  )
+  expect_error(
+    find_missing(
+      data = records,
+      rcon = fake_rcon(baseline_form_meta()),
+      forms = "unknown_form"
+    ),
+    "exactly one row for form `unknown_form`",
+    fixed = TRUE
   )
   expect_error(
     find_missing(

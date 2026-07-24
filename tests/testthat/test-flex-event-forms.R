@@ -1053,6 +1053,33 @@ test_that("flex_event_forms counts a failed form-started gate once", {
   expect_equal(one_body$`Form = 100% Missing`[[1]], "1/1 (100%)")
 })
 
+test_that("flex_event_forms retains forms with no assessable fields", {
+  skip_flex_event_forms_packages()
+
+  metadata <- dplyr::bind_rows(
+    meta_row("record_id", "assessed_form", required = "y"),
+    meta_row("required_value", "assessed_form", required = "y"),
+    meta_row("optional_value", "optional_form")
+  )
+  report <- find_missing(
+    data = tibble::tibble(
+      record_id = "r1",
+      required_value = "entered",
+      optional_value = "entered"
+    ),
+    rcon = fake_rcon(metadata),
+    forms = c("optional_form", "assessed_form"),
+    progress = FALSE
+  )
+  body <- tibble::as_tibble(flex_event_forms(report)$body$dataset)
+  optional_row <- body[body$Form == "optional_form label", , drop = FALSE]
+
+  expect_equal(nrow(optional_row), 1L)
+  expect_equal(optional_row$`Form Incomplete`, "0/1 (0%)")
+  expect_equal(optional_row$`Form Not Started`, "0/1 (0%)")
+  expect_equal(optional_row$`Form >10% Missing`, "0/1 (0%)")
+})
+
 test_that("threshold 1 counts started forms with all assessed fields missing", {
   skip_flex_event_forms_packages()
 

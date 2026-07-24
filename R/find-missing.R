@@ -14,6 +14,11 @@
 #' answered when at least one exported child column (`field___choice`) is
 #' selected; unselected siblings are not separately flagged.
 #'
+#' A valid requested form remains in the report when `required_fields`,
+#' `exclude_types`, and `ignore_fields` leave no fields to assess.
+#' `form-started` is still evaluated from the form's data-capturing metadata,
+#' while `field-complete` contributes no assessments for that form.
+#'
 #' The checks are assessed in registry order. Failed checks remove the
 #' record/event/repeat/form context from downstream assessment. The function
 #' stops if no record IDs remain after filtering, except that explicit `records`

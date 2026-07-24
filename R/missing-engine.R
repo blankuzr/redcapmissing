@@ -315,15 +315,6 @@
         drop = FALSE
       ]
     }
-    if (nrow(form_meta) == 0) {
-      stop(
-        "No assessable metadata rows were found for form `",
-        form,
-        "`.",
-        call. = FALSE
-      )
-    }
-
     assessable_logic <- c(
       assessable_logic,
       .miss_chr_vec(form_meta$branching_logic)

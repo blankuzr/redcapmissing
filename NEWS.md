@@ -1,3 +1,12 @@
+# redcapmissing 6.0.3
+
+## 2026-07-24
+
+- Kept valid requested forms in `find_missing()` reports when required-field,
+  type-exclusion, and ignored-field filtering leaves no fields to assess.
+  These forms retain form-started results and contribute no field-complete
+  assessments instead of stopping a multi-form report.
+
 # redcapmissing 6.0.2
 
 ## 2026-07-22
