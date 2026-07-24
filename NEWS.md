@@ -1,3 +1,13 @@
+# redcapmissing 6.1.1
+
+## 2026-07-24
+
+- Fixed `find_missing()` validation of `redcapAPI::exportDataQuality()` results
+  for regular, non-repeating contexts. An entirely missing
+  `repeat_instrument` column is accepted regardless of its R storage type, and
+  upstream `instance` placeholders are ignored when the cached REDCap structure
+  confirms that the field is not in a repeating instrument or event.
+
 # redcapmissing 6.1.0
 
 ## 2026-07-24
