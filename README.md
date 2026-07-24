@@ -74,7 +74,11 @@ otherwise-failing `field-complete` row at the same
 record/event/repeat/field context. It does not bypass startedness,
 branching, field selection, or report scope. Review counts in
 `report$diagnostics$verification`; the supplied issue data are not
-retained.
+retained. For regular contexts, an entirely missing `repeat_instrument`
+column may use the logical `NA` representation returned by
+`exportDataQuality()`, and any upstream `instance` placeholder is
+ignored. True repeating events and instruments still require their
+instance.
 
 ## First report
 

@@ -196,7 +196,7 @@ test_that("verified arguments are paired and fail closed on their input contract
     fixed = TRUE
   )
 
-  for (column in names(issue)) {
+  for (column in setdiff(names(issue), "repeat_instrument")) {
     invalid <- issue
     invalid[[column]] <- factor(invalid[[column]])
     expect_error(
@@ -207,8 +207,135 @@ test_that("verified arguments are paired and fail closed on their input contract
     )
   }
 
+  invalid_repeat <- issue
+  invalid_repeat$repeat_instrument <- 1L
+  expect_error(
+    verified_find_classic(invalid_repeat),
+    "must be character",
+    fixed = TRUE
+  )
+
   issue$ignored_extra <- 1L
   expect_s3_class(verified_find_classic(issue), "redcapmissing")
+})
+
+test_that("regular exportDataQuality repeat placeholders are normalized", {
+  missing_repeat_values <- list(
+    logical = NA,
+    integer = NA_integer_,
+    double = NA_real_,
+    complex = NA_complex_,
+    factor = factor(NA_character_),
+    date = as.Date(NA)
+  )
+
+  for (missing_repeat in missing_repeat_values) {
+    issue <- verified_issue(instance = "1")
+    issue$repeat_instrument <- missing_repeat
+    report <- verified_find_classic(issue, details = TRUE)
+    field_check <- report$details$checks[["field-complete"]]
+    field_check <- field_check[
+      field_check$record_id == "r1" &
+        field_check$field_name == "required_note",
+      ,
+      drop = FALSE
+    ]
+
+    expect_true(field_check$validation_passed)
+    expect_identical(
+      report$diagnostics$verification$overrides_applied,
+      1L,
+      info = typeof(missing_repeat)
+    )
+  }
+
+  longitudinal <- verified_longitudinal_fixture()
+  longitudinal_metadata <- dplyr::bind_rows(
+    longitudinal$metadata,
+    meta_row("baseline_started", "baseline_form")
+  )
+  longitudinal_rcon <- fake_rcon(
+    metadata = longitudinal_metadata,
+    events = longitudinal$events,
+    mapping = longitudinal$mapping,
+    repeat_instrument_event = longitudinal$repeat_structure,
+    project_information = tibble::tibble(
+      project_id = 42L,
+      is_longitudinal = 1L
+    )
+  )
+  data <- tibble::tibble(
+    record_id = "r1",
+    redcap_event_name = "baseline_arm_1",
+    required_note = "",
+    baseline_started = "yes"
+  )
+  issue <- verified_issue(event_id = "101", instance = "not-a-repeat-instance")
+  issue$repeat_instrument <- NA
+  report <- find_missing(
+    data,
+    longitudinal_rcon,
+    "baseline_form",
+    progress = FALSE,
+    verified = issue,
+    verified_user = "alice"
+  )
+
+  expect_identical(report$diagnostics$verification$overrides_applied, 1L)
+})
+
+test_that("regular placeholders and true repeat instances normalize per row", {
+  fixture <- verified_longitudinal_fixture("instrument")
+  metadata <- dplyr::bind_rows(
+    fixture$metadata,
+    meta_row("baseline_started", "baseline_form")
+  )
+  rcon <- fake_rcon(
+    metadata = metadata,
+    events = fixture$events,
+    mapping = fixture$mapping,
+    repeat_instrument_event = fixture$repeat_structure,
+    project_information = tibble::tibble(
+      project_id = 42L,
+      is_longitudinal = 1L
+    )
+  )
+  data <- tibble::tibble(
+    record_id = c("r1", "r1"),
+    redcap_event_name = c("baseline_arm_1", "followup_arm_1"),
+    redcap_repeat_instrument = c("", "repeat_form"),
+    redcap_repeat_instance = c("", "1"),
+    required_note = c("", NA_character_),
+    baseline_started = c("yes", NA_character_),
+    repeat_note = c(NA_character_, ""),
+    repeat_started = c(NA_character_, "yes")
+  )
+  issues <- dplyr::bind_rows(
+    verified_issue(event_id = "101", instance = "1"),
+    verified_issue(
+      field_name = "repeat_note",
+      event_id = "102",
+      repeat_instrument = "repeat_form",
+      instance = "1"
+    )
+  )
+
+  report <- find_missing(
+    data,
+    rcon,
+    forms = c("baseline_form", "repeat_form"),
+    instances = 1L,
+    progress = FALSE,
+    verified = issues,
+    verified_user = "alice"
+  )
+
+  expect_identical(report$diagnostics$verification$verified_rows, 2L)
+  expect_identical(report$diagnostics$verification$overrides_applied, 2L)
+  expect_false(any(
+    report$missing$record_id == "r1" &
+      report$missing$field_name %in% c("required_note", "repeat_note")
+  ))
 })
 
 test_that("zero-row exportDataQuality templates warn and leave results unchanged", {
@@ -359,20 +486,6 @@ test_that("all verified rows are validated before username and status filtering"
     "Blank `verified$repeat_instrument`",
     fixed = TRUE
   )
-  invalid <- issue
-  invalid$instance <- "01"
-  expect_error(
-    verified_find_classic(invalid),
-    "canonical positive integer",
-    fixed = TRUE
-  )
-  invalid <- issue
-  invalid$instance <- "1"
-  expect_error(
-    verified_find_classic(invalid),
-    "Invalid verified repeat context",
-    fixed = TRUE
-  )
 })
 
 test_that("longitudinal event and form mappings are validated uniquely", {
@@ -510,6 +623,22 @@ test_that("regular, repeating-instrument, and repeating-event contexts validate"
     fixed = TRUE
   )
 
+  invalid_instrument_instance <- instrument_issue
+  invalid_instrument_instance$instance <- "01"
+  expect_error(
+    find_missing(
+      instrument_data,
+      instrument$rcon,
+      "repeat_form",
+      instances = 1L,
+      progress = FALSE,
+      verified = invalid_instrument_instance,
+      verified_user = "alice"
+    ),
+    "canonical positive integer",
+    fixed = TRUE
+  )
+
   repeating_event <- verified_longitudinal_fixture("event")
   event_data <- tibble::tibble(
     record_id = "r1",
@@ -551,6 +680,22 @@ test_that("regular, repeating-instrument, and repeating-event contexts validate"
       verified_user = "alice"
     ),
     "Invalid verified repeat context",
+    fixed = TRUE
+  )
+
+  invalid_event_instance <- event_issue
+  invalid_event_instance$instance <- "not-an-instance"
+  expect_error(
+    find_missing(
+      event_data,
+      repeating_event$rcon,
+      "repeat_form",
+      instances = 1L,
+      progress = FALSE,
+      verified = invalid_event_instance,
+      verified_user = "alice"
+    ),
+    "canonical positive integer",
     fixed = TRUE
   )
 })

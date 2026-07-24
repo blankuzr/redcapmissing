@@ -90,11 +90,18 @@
   }
 
   required_data <- verified[, required, drop = FALSE]
+  input_rows <- nrow(required_data)
   character_columns <- vapply(required_data, is.character, logical(1))
+  repeat_is_all_missing <- input_rows > 0L &&
+    length(required_data$repeat_instrument) == input_rows &&
+    all(is.na(required_data$repeat_instrument))
+  valid_columns <- character_columns
+  valid_columns[["repeat_instrument"]] <-
+    character_columns[["repeat_instrument"]] || repeat_is_all_missing
   logical_template <- nrow(required_data) == 0L &&
     all(vapply(required_data, is.logical, logical(1)))
-  if (!all(character_columns) && !logical_template) {
-    invalid_columns <- names(character_columns)[!character_columns]
+  if (!all(valid_columns) && !logical_template) {
+    invalid_columns <- names(valid_columns)[!valid_columns]
     stop(
       "`verified` column(s) must be character: ",
       paste(invalid_columns, collapse = ", "),
@@ -102,8 +109,10 @@
       call. = FALSE
     )
   }
+  if (repeat_is_all_missing) {
+    required_data$repeat_instrument <- rep(NA_character_, input_rows)
+  }
 
-  input_rows <- nrow(required_data)
   if (input_rows == 0L) {
     warning(
       "No rows in `verified` match `verified_user` \"",
@@ -208,7 +217,7 @@
     rep("", input_rows)
   }
 
-  .miss_check_verified_repeat_contexts(
+  repeat_context <- .miss_normalize_verified_repeat_contexts(
     repeat_instrument = required_data$repeat_instrument,
     instance = required_data$instance,
     event_name = event_names,
@@ -234,8 +243,8 @@
   keys <- unique(.miss_verified_key(
     record_id = required_data$record[verified_match],
     event = event_names[verified_match],
-    repeat_instrument = required_data$repeat_instrument[verified_match],
-    repeat_instance = required_data$instance[verified_match],
+    repeat_instrument = repeat_context$repeat_instrument[verified_match],
+    repeat_instance = repeat_context$instance[verified_match],
     field_name = required_data$field_name[verified_match]
   ))
 
@@ -332,7 +341,7 @@
   event_names
 }
 
-.miss_check_verified_repeat_contexts <- function(
+.miss_normalize_verified_repeat_contexts <- function(
   repeat_instrument,
   instance,
   event_name,
@@ -341,25 +350,15 @@
 ) {
   blank_repeat <- !is.na(repeat_instrument) &
     !nzchar(trimws(repeat_instrument))
-  blank_instance <- !is.na(instance) & !nzchar(trimws(instance))
-  if (any(blank_repeat | blank_instance)) {
+  if (any(blank_repeat)) {
     stop(
-      "Blank `verified$repeat_instrument` or `verified$instance` values are ",
-      "invalid; use `NA_character_` when not applicable.",
+      "Blank `verified$repeat_instrument` values are invalid; use a missing ",
+      "value when not applicable.",
       call. = FALSE
     )
   }
 
   has_repeat <- !is.na(repeat_instrument)
-  has_instance <- !is.na(instance)
-  if (any(has_instance & !grepl("^[1-9][0-9]*$", instance))) {
-    stop(
-      "`verified$instance` must be `NA_character_` or a canonical positive ",
-      "integer string.",
-      call. = FALSE
-    )
-  }
-
   repeat_event <- .miss_key_part(repeat_structure$event_name)
   repeat_form <- .miss_chr_vec(repeat_structure$form_name)
   row_event <- .miss_key_part(event_name)
@@ -386,11 +385,10 @@
     logical(1)
   )
 
-  repeating_instrument_context <- has_repeat & has_instance &
+  repeating_instrument_context <- has_repeat &
     repeat_instrument == row_form & form_repeat & !event_repeat
-  repeating_event_context <- !has_repeat & has_instance & event_repeat
-  regular_context <- !has_repeat & !has_instance &
-    !form_repeat & !event_repeat
+  repeating_event_context <- !has_repeat & event_repeat & !form_repeat
+  regular_context <- !has_repeat & !form_repeat & !event_repeat
   valid_context <- repeating_instrument_context |
     repeating_event_context |
     regular_context
@@ -405,7 +403,25 @@
     )
   }
 
-  invisible(NULL)
+  requires_instance <- repeating_instrument_context | repeating_event_context
+  valid_instance <- !is.na(instance) &
+    nzchar(trimws(instance)) &
+    grepl("^[1-9][0-9]*$", instance)
+  valid_instance[is.na(valid_instance)] <- FALSE
+  if (any(requires_instance & !valid_instance)) {
+    stop(
+      "`verified$instance` must be a canonical positive integer string for ",
+      "repeating instruments and events.",
+      call. = FALSE
+    )
+  }
+
+  normalized_instance <- instance
+  normalized_instance[regular_context] <- NA_character_
+  list(
+    repeat_instrument = repeat_instrument,
+    instance = normalized_instance
+  )
 }
 
 .miss_verified_key <- function(

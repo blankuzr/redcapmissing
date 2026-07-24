@@ -35,7 +35,11 @@
 #' When `verified` is supplied, every non-empty input row is validated before
 #' username or query-status filtering. Project mismatches, unknown or ambiguous
 #' fields/events, forms not offered at the mapped event, non-canonical
-#' instances, and invalid regular/repeating context combinations are errors.
+#' instances in repeating contexts, and invalid regular/repeating context
+#' combinations are errors. When a field's context is regular and
+#' `repeat_instrument` is missing, an upstream `instance` placeholder is
+#' ignored. Repeating events still require a valid instance even though their
+#' repeat instrument is missing.
 #' Matching rows never create an assessment or bypass upstream gates; they can
 #' only change an exact, otherwise-failing `field-complete` result to a pass.
 #'
@@ -101,16 +105,19 @@
 #'   form; percentages do not represent data completeness. Defaults to
 #'   `interactive()`.
 #' @param verified `NULL`, or a data frame of REDCap data-quality issues to
-#'   cross-reference. A non-empty data frame must contain character columns
-#'   `project_id`, `record`, `event_id`, `field_name`, `repeat_instrument`,
-#'   `instance`, `current_query_status`, and `username`; extra columns are
-#'   ignored, and `event_name` is neither required nor used. A zero-row
-#'   logical-column template returned by
+#'   cross-reference. A non-empty data frame must contain the character columns
+#'   `project_id`, `record`, `event_id`, `field_name`, `instance`,
+#'   `current_query_status`, and `username`, plus `repeat_instrument`.
+#'   `repeat_instrument` must be character when it contains a value, but an
+#'   entirely missing column is accepted regardless of its R storage type and
+#'   normalized internally. Extra columns are ignored, and `event_name` is
+#'   neither required nor used. A zero-row logical-column template returned by
 #'   [redcapAPI::exportDataQuality()] is also accepted. Every non-empty row is
 #'   validated against the cached project ID, metadata, events, form-event
-#'   mapping, and repeat structure before any user or status filtering. Use
-#'   `NA_character_` for event or repeat values that do not apply. Defaults to
-#'   `NULL`.
+#'   mapping, and repeat structure before any user or status filtering.
+#'   `instance` placeholders are ignored for schema-confirmed regular contexts;
+#'   repeating instruments and repeating events require canonical positive
+#'   integer instance strings. Defaults to `NULL`.
 #' @param verified_user `NULL`, or one non-blank character username paired with
 #'   `verified`. Matching is exact and case-sensitive. Only rows for this user
 #'   whose `current_query_status` is exactly `"VERIFIED"` can override an

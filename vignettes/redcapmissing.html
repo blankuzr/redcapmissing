@@ -468,7 +468,12 @@ status matches can pass only an otherwise-failing field check at the
 same record/event/repeat/field context. They do not create checks or
 bypass startedness, branching, field selection, or the requested report
 scope. The diagnostics retain counts, not the supplied data-quality
-rows.</p>
+rows. For a regular context, an entirely missing
+<code>repeat_instrument</code> column may use the logical
+<code>NA</code> representation returned by
+<code>exportDataQuality()</code>, and any upstream <code>instance</code>
+placeholder is ignored. True repeating events and instruments still
+require their instance.</p>
 </div>
 <div id="branching-aware-field-checks" class="section level2">
 <h2>Branching-aware field checks</h2>

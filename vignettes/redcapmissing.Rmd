@@ -133,7 +133,10 @@ case-sensitive username and `"VERIFIED"` status matches can pass only an
 otherwise-failing field check at the same record/event/repeat/field context.
 They do not create checks or bypass startedness, branching, field selection, or
 the requested report scope. The diagnostics retain counts, not the supplied
-data-quality rows.
+data-quality rows. For a regular context, an entirely missing
+`repeat_instrument` column may use the logical `NA` representation returned by
+`exportDataQuality()`, and any upstream `instance` placeholder is ignored.
+True repeating events and instruments still require their instance.
 
 ## Branching-aware field checks
 
