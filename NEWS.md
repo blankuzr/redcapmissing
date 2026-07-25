@@ -1,3 +1,19 @@
+# redcapmissing 6.1.2
+
+## 2026-07-25
+
+- Hardened verified data-quality exceptions by requiring the exported
+  `status_id`, `res_id`, and `ts`, collapsing each issue to its latest
+  resolution by timestamp with a numeric resolution-ID tie-break, and requiring
+  that latest resolution's username and `current_query_status` to match the
+  requested verifier and `"VERIFIED"`. The live issue `query_status` must also
+  remain exactly `"VERIFIED"`; historical resolutions never authorize an
+  exception.
+- Accepted entirely missing `instance` columns regardless of their R storage
+  type. Classic-project exports may now supply one canonical positive internal
+  `event_id`, which is normalized to the package's blank classic event context;
+  malformed or conflicting internal event IDs remain errors.
+
 # redcapmissing 6.1.1
 
 ## 2026-07-24

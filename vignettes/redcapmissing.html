@@ -463,17 +463,24 @@ verified_report &lt;- find_missing(
 verified_report$diagnostics$verification</code></pre>
 <p>Every non-empty issue row is validated against the cached project ID,
 fields, events, form-event mapping, and repeat structure before
-filtering. Exact, case-sensitive username and <code>&quot;VERIFIED&quot;</code>
-status matches can pass only an otherwise-failing field check at the
-same record/event/repeat/field context. They do not create checks or
-bypass startedness, branching, field selection, or the requested report
-scope. The diagnostics retain counts, not the supplied data-quality
-rows. For a regular context, an entirely missing
-<code>repeat_instrument</code> column may use the logical
-<code>NA</code> representation returned by
-<code>exportDataQuality()</code>, and any upstream <code>instance</code>
-placeholder is ignored. True repeating events and instruments still
-require their instance.</p>
+collapsing or filtering. Resolution history is grouped by
+<code>status_id</code>; the greatest <code>ts</code> is latest, with the
+greatest numeric <code>res_id</code> breaking timestamp ties. Only that
+latest resolution can match <code>verified_user</code>, and both its
+<code>current_query_status</code> and the live issue
+<code>query_status</code> must be <code>&quot;VERIFIED&quot;</code>. Historical
+resolutions never authorize an exception. Matching can pass only an
+otherwise-failing field check at the same record/event/repeat/field
+context. It does not create checks or bypass startedness, branching,
+field selection, or the requested report scope. The diagnostics retain
+counts, not the supplied data-quality rows; <code>verified_rows</code>
+counts matching latest resolutions. For a regular context, entirely
+missing <code>repeat_instrument</code> and <code>instance</code> columns
+may use any all-<code>NA</code> storage type returned by
+<code>exportDataQuality()</code>; other upstream <code>instance</code>
+placeholders are ignored. A classic export may carry one positive
+internal event ID, which is normalized to the classic event context.
+True repeating events and instruments still require their instance.</p>
 </div>
 <div id="branching-aware-field-checks" class="section level2">
 <h2>Branching-aware field checks</h2>

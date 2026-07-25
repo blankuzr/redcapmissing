@@ -97,26 +97,35 @@ form; percentages do not represent data completeness. Defaults to
 
 \item{verified}{\code{NULL}, or a data frame of REDCap data-quality issues to
 cross-reference. A non-empty data frame must contain the character columns
-\code{project_id}, \code{record}, \code{event_id}, \code{field_name}, \code{instance},
-\code{current_query_status}, and \code{username}, plus \code{repeat_instrument}.
-\code{repeat_instrument} must be character when it contains a value, but an
-entirely missing column is accepted regardless of its R storage type and
-normalized internally. Extra columns are ignored, and \code{event_name} is
-neither required nor used. A zero-row logical-column template returned by
+\code{status_id}, \code{project_id}, \code{record}, \code{event_id}, \code{field_name},
+\code{repeat_instrument}, \code{instance}, \code{query_status}, \code{res_id}, \code{ts},
+\code{current_query_status}, and \code{username}. \code{repeat_instrument} and \code{instance}
+must be character when they contain a value, but either entirely missing
+column is accepted regardless of its R storage type and normalized
+internally. Extra columns are ignored, and \code{event_name} is neither
+required nor used. A zero-row logical-column template returned by
 \code{\link[redcapAPI:exportDataQuality]{redcapAPI::exportDataQuality()}} is also accepted. Every non-empty row is
 validated against the cached project ID, metadata, events, form-event
-mapping, and repeat structure before any user or status filtering.
-\code{instance} placeholders are ignored for schema-confirmed regular contexts;
-repeating instruments and repeating events require canonical positive
-integer instance strings. Defaults to \code{NULL}.}
+mapping, and repeat structure before resolution collapsing or user/status
+filtering. Each \code{status_id} must be a canonical positive integer string
+identifying one field context and live \code{query_status}. Supplied resolutions
+require a canonical positive \code{res_id} and valid \verb{YYYY-MM-DD HH:MM:SS} \code{ts};
+rows without resolutions must leave all resolution fields missing. Classic
+projects accept missing event IDs or one canonical positive internal event
+ID across the supplied rows. \code{instance} placeholders are ignored for
+schema-confirmed regular contexts; repeating instruments and repeating
+events require canonical positive integer instance strings. Defaults to
+\code{NULL}.}
 
 \item{verified_user}{\code{NULL}, or one non-blank character username paired with
-\code{verified}. Matching is exact and case-sensitive. Only rows for this user
-whose \code{current_query_status} is exactly \code{"VERIFIED"} can override an
+\code{verified}. Matching is exact and case-sensitive. For each \code{status_id}, only
+the latest resolution is considered. Its \code{username} must match this value,
+and both the live issue \code{query_status} and latest resolution
+\code{current_query_status} must be exactly \code{"VERIFIED"} to override an
 otherwise-failing, already-assessed \code{field-complete} check at the exact
-record, event, repeat instrument, instance, and field context. If no input
-rows match the username, the function warns and proceeds unchanged.
-Defaults to \code{NULL}.}
+record, event, repeat instrument, instance, and field context. Historical
+resolutions never authorize an exception. If no input rows match the
+username, the function warns and proceeds unchanged. Defaults to \code{NULL}.}
 }
 \value{
 A list with class \code{"redcapmissing"} containing:
@@ -139,8 +148,9 @@ per-form tibble with record/context/started-row counts, total and
 assessable field counts, the four field-partition counts, and validation
 rows. \code{diagnostics$verification} contains only the stable verification
 fields \code{enabled}, \code{verified_user}, \code{input_rows}, \code{user_rows},
-\code{verified_rows}, and \code{overrides_applied}; the supplied data are not
-retained.}
+\code{verified_rows}, and \code{overrides_applied}; \code{user_rows} counts all supplied
+rows for the user, while \code{verified_rows} counts matching latest
+resolutions after collapsing. The supplied data are not retained.}
 \item{\code{details}}{\code{NULL} by default. When \code{details = TRUE}, a list with
 \code{validation_rows}, \code{checks}, and \code{failures} row tables.}
 }
@@ -178,13 +188,18 @@ See \code{vignette("redcapmissing", package = "redcapmissing")} for synthetic
 event, record-eligibility, and repeat-instance workflows.
 
 When \code{verified} is supplied, every non-empty input row is validated before
-username or query-status filtering. Project mismatches, unknown or ambiguous
-fields/events, forms not offered at the mapped event, non-canonical
-instances in repeating contexts, and invalid regular/repeating context
-combinations are errors. When a field's context is regular and
-\code{repeat_instrument} is missing, an upstream \code{instance} placeholder is
-ignored. Repeating events still require a valid instance even though their
-repeat instrument is missing.
+resolution collapsing or username/status filtering. Resolution histories
+are grouped by \code{status_id}; the greatest \code{ts} is latest, with the greatest
+numeric \code{res_id} breaking timestamp ties. Only that latest resolution can
+authorize an exception. Project mismatches, unknown or ambiguous
+fields/events, forms not offered at the mapped event, non-canonical IDs or
+timestamps, non-canonical instances in repeating contexts, and invalid
+regular/repeating context combinations are errors. A classic project may
+supply either missing event IDs or one canonical positive internal event ID,
+which is normalized to the classic blank event context. When a field's
+context is regular and \code{repeat_instrument} is missing, an upstream \code{instance}
+placeholder is ignored. Repeating events still require a valid instance even
+though their repeat instrument is missing.
 Matching rows never create an assessment or bypass upstream gates; they can
 only change an exact, otherwise-failing \code{field-complete} result to a pass.
 }
