@@ -128,14 +128,20 @@ verified_report$diagnostics$verification
 ```
 
 Every non-empty issue row is validated against the cached project ID, fields,
-events, form-event mapping, and repeat structure before filtering. Exact,
-case-sensitive username and `"VERIFIED"` status matches can pass only an
-otherwise-failing field check at the same record/event/repeat/field context.
-They do not create checks or bypass startedness, branching, field selection, or
+events, form-event mapping, and repeat structure before collapsing or
+filtering. Resolution history is grouped by `status_id`; the greatest `ts` is
+latest, with the greatest numeric `res_id` breaking timestamp ties. Only that
+latest resolution can match `verified_user`, and both its
+`current_query_status` and the live issue `query_status` must be `"VERIFIED"`.
+Historical resolutions never authorize an exception. Matching can pass only an
+otherwise-failing field check at the same record/event/repeat/field context. It
+does not create checks or bypass startedness, branching, field selection, or
 the requested report scope. The diagnostics retain counts, not the supplied
-data-quality rows. For a regular context, an entirely missing
-`repeat_instrument` column may use the logical `NA` representation returned by
-`exportDataQuality()`, and any upstream `instance` placeholder is ignored.
+data-quality rows; `verified_rows` counts matching latest resolutions. For a
+regular context, entirely missing `repeat_instrument` and `instance` columns
+may use any all-`NA` storage type returned by `exportDataQuality()`; other
+upstream `instance` placeholders are ignored. A classic export may carry one
+positive internal event ID, which is normalized to the classic event context.
 True repeating events and instruments still require their instance.
 
 ## Branching-aware field checks

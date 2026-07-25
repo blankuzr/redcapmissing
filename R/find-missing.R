@@ -33,13 +33,18 @@
 #' event, record-eligibility, and repeat-instance workflows.
 #'
 #' When `verified` is supplied, every non-empty input row is validated before
-#' username or query-status filtering. Project mismatches, unknown or ambiguous
-#' fields/events, forms not offered at the mapped event, non-canonical
-#' instances in repeating contexts, and invalid regular/repeating context
-#' combinations are errors. When a field's context is regular and
-#' `repeat_instrument` is missing, an upstream `instance` placeholder is
-#' ignored. Repeating events still require a valid instance even though their
-#' repeat instrument is missing.
+#' resolution collapsing or username/status filtering. Resolution histories
+#' are grouped by `status_id`; the greatest `ts` is latest, with the greatest
+#' numeric `res_id` breaking timestamp ties. Only that latest resolution can
+#' authorize an exception. Project mismatches, unknown or ambiguous
+#' fields/events, forms not offered at the mapped event, non-canonical IDs or
+#' timestamps, non-canonical instances in repeating contexts, and invalid
+#' regular/repeating context combinations are errors. A classic project may
+#' supply either missing event IDs or one canonical positive internal event ID,
+#' which is normalized to the classic blank event context. When a field's
+#' context is regular and `repeat_instrument` is missing, an upstream `instance`
+#' placeholder is ignored. Repeating events still require a valid instance even
+#' though their repeat instrument is missing.
 #' Matching rows never create an assessment or bypass upstream gates; they can
 #' only change an exact, otherwise-failing `field-complete` result to a pass.
 #'
@@ -106,25 +111,34 @@
 #'   `interactive()`.
 #' @param verified `NULL`, or a data frame of REDCap data-quality issues to
 #'   cross-reference. A non-empty data frame must contain the character columns
-#'   `project_id`, `record`, `event_id`, `field_name`, `instance`,
-#'   `current_query_status`, and `username`, plus `repeat_instrument`.
-#'   `repeat_instrument` must be character when it contains a value, but an
-#'   entirely missing column is accepted regardless of its R storage type and
-#'   normalized internally. Extra columns are ignored, and `event_name` is
-#'   neither required nor used. A zero-row logical-column template returned by
+#'   `status_id`, `project_id`, `record`, `event_id`, `field_name`,
+#'   `repeat_instrument`, `instance`, `query_status`, `res_id`, `ts`,
+#'   `current_query_status`, and `username`. `repeat_instrument` and `instance`
+#'   must be character when they contain a value, but either entirely missing
+#'   column is accepted regardless of its R storage type and normalized
+#'   internally. Extra columns are ignored, and `event_name` is neither
+#'   required nor used. A zero-row logical-column template returned by
 #'   [redcapAPI::exportDataQuality()] is also accepted. Every non-empty row is
 #'   validated against the cached project ID, metadata, events, form-event
-#'   mapping, and repeat structure before any user or status filtering.
-#'   `instance` placeholders are ignored for schema-confirmed regular contexts;
-#'   repeating instruments and repeating events require canonical positive
-#'   integer instance strings. Defaults to `NULL`.
+#'   mapping, and repeat structure before resolution collapsing or user/status
+#'   filtering. Each `status_id` must be a canonical positive integer string
+#'   identifying one field context and live `query_status`. Supplied resolutions
+#'   require a canonical positive `res_id` and valid `YYYY-MM-DD HH:MM:SS` `ts`;
+#'   rows without resolutions must leave all resolution fields missing. Classic
+#'   projects accept missing event IDs or one canonical positive internal event
+#'   ID across the supplied rows. `instance` placeholders are ignored for
+#'   schema-confirmed regular contexts; repeating instruments and repeating
+#'   events require canonical positive integer instance strings. Defaults to
+#'   `NULL`.
 #' @param verified_user `NULL`, or one non-blank character username paired with
-#'   `verified`. Matching is exact and case-sensitive. Only rows for this user
-#'   whose `current_query_status` is exactly `"VERIFIED"` can override an
+#'   `verified`. Matching is exact and case-sensitive. For each `status_id`, only
+#'   the latest resolution is considered. Its `username` must match this value,
+#'   and both the live issue `query_status` and latest resolution
+#'   `current_query_status` must be exactly `"VERIFIED"` to override an
 #'   otherwise-failing, already-assessed `field-complete` check at the exact
-#'   record, event, repeat instrument, instance, and field context. If no input
-#'   rows match the username, the function warns and proceeds unchanged.
-#'   Defaults to `NULL`.
+#'   record, event, repeat instrument, instance, and field context. Historical
+#'   resolutions never authorize an exception. If no input rows match the
+#'   username, the function warns and proceeds unchanged. Defaults to `NULL`.
 #'
 #' @return A list with class `"redcapmissing"` containing:
 #' \describe{
@@ -146,8 +160,9 @@
 #'     assessable field counts, the four field-partition counts, and validation
 #'     rows. `diagnostics$verification` contains only the stable verification
 #'     fields `enabled`, `verified_user`, `input_rows`, `user_rows`,
-#'     `verified_rows`, and `overrides_applied`; the supplied data are not
-#'     retained.}
+#'     `verified_rows`, and `overrides_applied`; `user_rows` counts all supplied
+#'     rows for the user, while `verified_rows` counts matching latest
+#'     resolutions after collapsing. The supplied data are not retained.}
 #'   \item{`details`}{`NULL` by default. When `details = TRUE`, a list with
 #'     `validation_rows`, `checks`, and `failures` row tables.}
 #' }

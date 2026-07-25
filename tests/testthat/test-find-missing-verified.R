@@ -101,22 +101,30 @@ verified_longitudinal_fixture <- function(repeat_type = "none") {
 }
 
 verified_issue <- function(
+  status_id = "100",
   field_name = "required_note",
   record = "r1",
   event_id = NA_character_,
   repeat_instrument = NA_character_,
   instance = NA_character_,
+  query_status = "VERIFIED",
   current_query_status = "VERIFIED",
+  res_id = "1",
+  ts = "2026-07-24 10:00:00",
   username = "alice",
   project_id = "42"
 ) {
   data.frame(
+    status_id = status_id,
     project_id = project_id,
     record = record,
     event_id = event_id,
     field_name = field_name,
     repeat_instrument = repeat_instrument,
     instance = instance,
+    query_status = query_status,
+    res_id = res_id,
+    ts = ts,
     current_query_status = current_query_status,
     username = username,
     stringsAsFactors = FALSE
@@ -196,7 +204,17 @@ test_that("verified arguments are paired and fail closed on their input contract
     fixed = TRUE
   )
 
-  for (column in setdiff(names(issue), "repeat_instrument")) {
+  for (column in c("query_status", "res_id", "ts")) {
+    expect_error(
+      verified_find_classic(
+        issue[, setdiff(names(issue), column), drop = FALSE]
+      ),
+      column,
+      fixed = TRUE
+    )
+  }
+
+  for (column in setdiff(names(issue), c("repeat_instrument", "instance"))) {
     invalid <- issue
     invalid[[column]] <- factor(invalid[[column]])
     expect_error(
@@ -215,12 +233,44 @@ test_that("verified arguments are paired and fail closed on their input contract
     fixed = TRUE
   )
 
+  invalid_instance <- issue
+  invalid_instance$instance <- 1L
+  expect_error(
+    verified_find_classic(invalid_instance),
+    "must be character",
+    fixed = TRUE
+  )
+
+  invalid_status_id <- issue
+  invalid_status_id$status_id <- "01"
+  expect_error(
+    verified_find_classic(invalid_status_id),
+    "canonical positive integer",
+    fixed = TRUE
+  )
+
+  invalid_res_id <- issue
+  invalid_res_id$res_id <- "0"
+  expect_error(
+    verified_find_classic(invalid_res_id),
+    "canonical positive integer",
+    fixed = TRUE
+  )
+
+  invalid_timestamp <- issue
+  invalid_timestamp$ts <- "2026-7-24 10:00:00"
+  expect_error(
+    verified_find_classic(invalid_timestamp),
+    "YYYY-MM-DD HH:MM:SS",
+    fixed = TRUE
+  )
+
   issue$ignored_extra <- 1L
   expect_s3_class(verified_find_classic(issue), "redcapmissing")
 })
 
 test_that("regular exportDataQuality repeat placeholders are normalized", {
-  missing_repeat_values <- list(
+  missing_values <- list(
     logical = NA,
     integer = NA_integer_,
     double = NA_real_,
@@ -229,7 +279,7 @@ test_that("regular exportDataQuality repeat placeholders are normalized", {
     date = as.Date(NA)
   )
 
-  for (missing_repeat in missing_repeat_values) {
+  for (missing_repeat in missing_values) {
     issue <- verified_issue(instance = "1")
     issue$repeat_instrument <- missing_repeat
     report <- verified_find_classic(issue, details = TRUE)
@@ -246,6 +296,18 @@ test_that("regular exportDataQuality repeat placeholders are normalized", {
       report$diagnostics$verification$overrides_applied,
       1L,
       info = typeof(missing_repeat)
+    )
+  }
+
+  for (missing_instance in missing_values) {
+    issue <- verified_issue()
+    issue$instance <- missing_instance
+    report <- verified_find_classic(issue)
+
+    expect_identical(
+      report$diagnostics$verification$overrides_applied,
+      1L,
+      info = typeof(missing_instance)
     )
   }
 
@@ -313,9 +375,11 @@ test_that("regular placeholders and true repeat instances normalize per row", {
   issues <- dplyr::bind_rows(
     verified_issue(event_id = "101", instance = "1"),
     verified_issue(
+      status_id = "101",
       field_name = "repeat_note",
       event_id = "102",
       repeat_instrument = "repeat_form",
+      res_id = "2",
       instance = "1"
     )
   )
@@ -473,17 +537,50 @@ test_that("all verified rows are validated before username and status filtering"
     fixed = TRUE
   )
   invalid <- issue
-  invalid$event_id <- "101"
-  expect_error(
-    verified_find_classic(invalid),
-    "must be `NA_character_` for a classic project",
-    fixed = TRUE
-  )
-  invalid <- issue
   invalid$repeat_instrument <- ""
   expect_error(
     verified_find_classic(invalid),
     "Blank `verified$repeat_instrument`",
+    fixed = TRUE
+  )
+})
+
+test_that("classic internal event ids normalize to the single event context", {
+  issue <- verified_issue(event_id = "101")
+  report <- verified_find_classic(issue)
+  expect_identical(report$diagnostics$verification$overrides_applied, 1L)
+
+  mixed <- dplyr::bind_rows(
+    verified_issue(event_id = NA_character_),
+    verified_issue(event_id = "101")
+  )
+  mixed_report <- verified_find_classic(mixed)
+  expect_identical(
+    mixed_report$diagnostics$verification$overrides_applied,
+    1L
+  )
+
+  invalid <- verified_issue(event_id = "")
+  expect_error(
+    verified_find_classic(invalid),
+    "missing or a canonical positive integer",
+    fixed = TRUE
+  )
+
+  invalid <- verified_issue(event_id = "baseline")
+  expect_error(
+    verified_find_classic(invalid),
+    "missing or a canonical positive integer",
+    fixed = TRUE
+  )
+
+  multiple <- dplyr::bind_rows(
+    verified_issue(event_id = "101"),
+    verified_issue(event_id = "102")
+  )
+  expect_error(
+    verified_find_classic(multiple),
+    "at most one unique non-missing internal event ID",
     fixed = TRUE
   )
 })
@@ -740,7 +837,7 @@ test_that("exact verified matches flip only failing assessed field checks", {
       verified_user = "alice",
       input_rows = 2L,
       user_rows = 2L,
-      verified_rows = 2L,
+      verified_rows = 1L,
       overrides_applied = 1L
     )
   )
@@ -773,7 +870,7 @@ test_that("exact verified matches flip only failing assessed field checks", {
   )
 })
 
-test_that("username and VERIFIED status matching are exact and warnings are narrow", {
+test_that("username and live and resolution VERIFIED states match exactly", {
   no_user <- verified_issue(username = "Alice")
   expect_warning(
     report <- verified_find_classic(no_user),
@@ -788,6 +885,150 @@ test_that("username and VERIFIED status matching are exact and warnings are narr
   expect_identical(report$diagnostics$verification$user_rows, 1L)
   expect_identical(report$diagnostics$verification$verified_rows, 0L)
   expect_identical(report$diagnostics$verification$overrides_applied, 0L)
+
+  wrong_live_status <- verified_issue(query_status = "verified")
+  expect_no_warning(report <- verified_find_classic(wrong_live_status))
+  expect_identical(report$diagnostics$verification$user_rows, 1L)
+  expect_identical(report$diagnostics$verification$verified_rows, 0L)
+  expect_identical(report$diagnostics$verification$overrides_applied, 0L)
+
+  stale_history <- dplyr::bind_rows(
+    verified_issue(
+      query_status = "OPEN",
+      res_id = "1",
+      ts = "2026-07-24 10:00:00",
+      current_query_status = "VERIFIED",
+      username = "alice"
+    ),
+    verified_issue(
+      query_status = "OPEN",
+      res_id = "2",
+      ts = "2026-07-24 11:00:00",
+      current_query_status = "OPEN",
+      username = "bob"
+    )
+  )
+  expect_no_warning(report <- verified_find_classic(stale_history))
+  expect_identical(report$diagnostics$verification$user_rows, 1L)
+  expect_identical(report$diagnostics$verification$verified_rows, 0L)
+  expect_identical(report$diagnostics$verification$overrides_applied, 0L)
+  expect_true(any(
+    report$missing$record_id == "r1" &
+      report$missing$field_name == "required_note"
+  ))
+})
+
+test_that("only the latest resolution can provide a verified exception", {
+  history <- dplyr::bind_rows(
+    verified_issue(
+      res_id = "10",
+      ts = "2026-07-24 10:00:00",
+      current_query_status = "VERIFIED",
+      username = "alice"
+    ),
+    verified_issue(
+      res_id = "11",
+      ts = "2026-07-24 11:00:00",
+      current_query_status = "VERIFIED",
+      username = "bob"
+    )
+  )
+
+  expect_no_warning(alice_report <- verified_find_classic(history))
+  expect_identical(
+    alice_report$diagnostics$verification$verified_rows,
+    0L
+  )
+  expect_identical(
+    alice_report$diagnostics$verification$overrides_applied,
+    0L
+  )
+  expect_true(any(
+    alice_report$missing$record_id == "r1" &
+      alice_report$missing$field_name == "required_note"
+  ))
+
+  bob_report <- verified_find_classic(history, verified_user = "bob")
+  expect_identical(bob_report$diagnostics$verification$verified_rows, 1L)
+  expect_identical(bob_report$diagnostics$verification$overrides_applied, 1L)
+
+  reversed_report <- verified_find_classic(history[2:1, , drop = FALSE])
+  expect_identical(
+    reversed_report$diagnostics$verification$overrides_applied,
+    0L
+  )
+
+  latest_open <- dplyr::bind_rows(
+    verified_issue(
+      res_id = "20",
+      ts = "2026-07-24 12:00:00",
+      current_query_status = "VERIFIED"
+    ),
+    verified_issue(
+      res_id = "21",
+      ts = "2026-07-24 13:00:00",
+      current_query_status = "OPEN"
+    )
+  )
+  open_report <- verified_find_classic(latest_open)
+  expect_identical(open_report$diagnostics$verification$verified_rows, 0L)
+  expect_identical(open_report$diagnostics$verification$overrides_applied, 0L)
+
+  timestamp_tie <- dplyr::bind_rows(
+    verified_issue(
+      res_id = "10",
+      ts = "2026-07-24 14:00:00",
+      username = "alice"
+    ),
+    verified_issue(
+      res_id = "9",
+      ts = "2026-07-24 14:00:00",
+      username = "bob"
+    )
+  )
+  tie_report <- verified_find_classic(timestamp_tie)
+  expect_identical(tie_report$diagnostics$verification$verified_rows, 1L)
+  expect_identical(tie_report$diagnostics$verification$overrides_applied, 1L)
+})
+
+test_that("resolution collapsing fails closed on inconsistent issue history", {
+  inconsistent_context <- dplyr::bind_rows(
+    verified_issue(res_id = "1"),
+    verified_issue(field_name = "conditional_note", res_id = "2")
+  )
+  expect_error(
+    verified_find_classic(inconsistent_context),
+    "one field context and one live `query_status`",
+    fixed = TRUE
+  )
+
+  inconsistent_status <- dplyr::bind_rows(
+    verified_issue(res_id = "1", query_status = "OPEN"),
+    verified_issue(res_id = "2", query_status = "VERIFIED")
+  )
+  expect_error(
+    verified_find_classic(inconsistent_status),
+    "one field context and one live `query_status`",
+    fixed = TRUE
+  )
+
+  inconsistent_resolution <- dplyr::bind_rows(
+    verified_issue(res_id = "1", ts = "2026-07-24 10:00:00"),
+    verified_issue(res_id = "1", ts = "2026-07-24 11:00:00")
+  )
+  expect_error(
+    verified_find_classic(inconsistent_resolution),
+    "one consistent resolution row",
+    fixed = TRUE
+  )
+
+  incomplete_resolution <- verified_issue()
+  incomplete_resolution$ts <- NA_character_
+  expect_error(
+    verified_find_classic(incomplete_resolution),
+    "must provide both `verified$res_id` and `verified$ts`",
+    fixed = TRUE
+  )
 })
 
 test_that("verified rows do not synthesize or bypass field assessments", {

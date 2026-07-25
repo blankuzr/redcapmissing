@@ -2,12 +2,16 @@
 
 .miss_verified_columns <- function() {
   c(
+    "status_id",
     "project_id",
     "record",
     "event_id",
     "field_name",
     "repeat_instrument",
     "instance",
+    "query_status",
+    "res_id",
+    "ts",
     "current_query_status",
     "username"
   )
@@ -92,12 +96,15 @@
   required_data <- verified[, required, drop = FALSE]
   input_rows <- nrow(required_data)
   character_columns <- vapply(required_data, is.character, logical(1))
-  repeat_is_all_missing <- input_rows > 0L &&
-    length(required_data$repeat_instrument) == input_rows &&
-    all(is.na(required_data$repeat_instrument))
+  nullable_columns <- c("repeat_instrument", "instance")
+  nullable_is_all_missing <- vapply(
+    required_data[nullable_columns],
+    function(x) input_rows > 0L && all(is.na(x)),
+    logical(1)
+  )
   valid_columns <- character_columns
-  valid_columns[["repeat_instrument"]] <-
-    character_columns[["repeat_instrument"]] || repeat_is_all_missing
+  valid_columns[nullable_columns] <-
+    character_columns[nullable_columns] | nullable_is_all_missing
   logical_template <- nrow(required_data) == 0L &&
     all(vapply(required_data, is.logical, logical(1)))
   if (!all(valid_columns) && !logical_template) {
@@ -109,8 +116,8 @@
       call. = FALSE
     )
   }
-  if (repeat_is_all_missing) {
-    required_data$repeat_instrument <- rep(NA_character_, input_rows)
+  for (column in nullable_columns[nullable_is_all_missing]) {
+    required_data[[column]] <- rep(NA_character_, input_rows)
   }
 
   if (input_rows == 0L) {
@@ -151,6 +158,7 @@
     )
   }
 
+  .miss_check_verified_nonblank(required_data$status_id, "status_id")
   .miss_check_verified_nonblank(required_data$record, "record")
   .miss_check_verified_nonblank(required_data$field_name, "field_name")
 
@@ -208,13 +216,7 @@
       project_cache = project_cache
     )
   } else {
-    if (any(!is.na(required_data$event_id))) {
-      stop(
-        "`verified$event_id` must be `NA_character_` for a classic project.",
-        call. = FALSE
-      )
-    }
-    rep("", input_rows)
+    .miss_verified_classic_events(required_data$event_id)
   }
 
   repeat_context <- .miss_normalize_verified_repeat_contexts(
@@ -223,6 +225,23 @@
     event_name = event_names,
     field_form = field_forms,
     repeat_structure = project_cache$repeat_instrument_event
+  )
+
+  issue_keys <- .miss_verified_key(
+    record_id = required_data$record,
+    event = event_names,
+    repeat_instrument = repeat_context$repeat_instrument,
+    repeat_instance = repeat_context$instance,
+    field_name = required_data$field_name
+  )
+  latest_resolution <- .miss_verified_latest_resolution_rows(
+    status_id = required_data$status_id,
+    res_id = required_data$res_id,
+    timestamp = required_data$ts,
+    query_status = required_data$query_status,
+    current_query_status = required_data$current_query_status,
+    username = required_data$username,
+    issue_key = issue_keys
   )
 
   user_match <- !is.na(required_data$username) &
@@ -236,17 +255,14 @@
       call. = FALSE
     )
   }
-  verified_match <- user_match &
+  verified_match <- latest_resolution &
+    user_match &
+    !is.na(required_data$query_status) &
+    required_data$query_status == "VERIFIED" &
     !is.na(required_data$current_query_status) &
     required_data$current_query_status == "VERIFIED"
 
-  keys <- unique(.miss_verified_key(
-    record_id = required_data$record[verified_match],
-    event = event_names[verified_match],
-    repeat_instrument = repeat_context$repeat_instrument[verified_match],
-    repeat_instance = repeat_context$instance[verified_match],
-    field_name = required_data$field_name[verified_match]
-  ))
+  keys <- unique(issue_keys[verified_match])
 
   list(
     keys = keys,
@@ -258,6 +274,158 @@
       verified_rows = sum(verified_match)
     )
   )
+}
+
+.miss_verified_classic_events <- function(event_id) {
+  supplied <- event_id[!is.na(event_id)]
+  if (length(supplied) == 0L) {
+    return(rep("", length(event_id)))
+  }
+  if (any(!nzchar(trimws(supplied))) ||
+      any(!grepl("^[1-9][0-9]*$", supplied))) {
+    stop(
+      "`verified$event_id` must be missing or a canonical positive integer ",
+      "string for a classic project.",
+      call. = FALSE
+    )
+  }
+  unique_ids <- unique(supplied)
+  if (length(unique_ids) > 1L) {
+    stop(
+      "`verified$event_id` must contain at most one unique non-missing ",
+      "internal event ID for a classic project.",
+      call. = FALSE
+    )
+  }
+
+  rep("", length(event_id))
+}
+
+.miss_verified_latest_resolution_rows <- function(
+  status_id,
+  res_id,
+  timestamp,
+  query_status,
+  current_query_status,
+  username,
+  issue_key
+) {
+  canonical_status_id <- grepl("^[1-9][0-9]*$", status_id)
+  canonical_status_id[is.na(canonical_status_id)] <- FALSE
+  if (any(!canonical_status_id)) {
+    stop(
+      "`verified$status_id` must contain canonical positive integer strings.",
+      call. = FALSE
+    )
+  }
+
+  has_res_id <- !is.na(res_id)
+  has_timestamp <- !is.na(timestamp)
+  has_resolution_value <- has_res_id |
+    has_timestamp |
+    !is.na(current_query_status) |
+    !is.na(username)
+  complete_resolution <- has_res_id & has_timestamp
+  if (any(has_resolution_value & !complete_resolution)) {
+    stop(
+      "Every supplied resolution must provide both `verified$res_id` and ",
+      "`verified$ts`; rows without a resolution must leave all resolution ",
+      "fields missing.",
+      call. = FALSE
+    )
+  }
+
+  resolution_rows <- which(complete_resolution)
+  if (length(resolution_rows) > 0L) {
+    canonical_res_id <- grepl("^[1-9][0-9]*$", res_id[resolution_rows])
+    canonical_res_id[is.na(canonical_res_id)] <- FALSE
+    if (any(!canonical_res_id)) {
+      stop(
+        "`verified$res_id` must contain canonical positive integer strings ",
+        "for supplied resolutions.",
+        call. = FALSE
+      )
+    }
+
+    canonical_timestamp <- grepl(
+      "^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$",
+      timestamp[resolution_rows]
+    )
+    parsed_timestamp <- as.POSIXct(
+      timestamp[resolution_rows],
+      format = "%Y-%m-%d %H:%M:%S",
+      tz = "UTC"
+    )
+    canonical_timestamp <- canonical_timestamp &
+      !is.na(parsed_timestamp) &
+      format(parsed_timestamp, "%Y-%m-%d %H:%M:%S", tz = "UTC") ==
+        timestamp[resolution_rows]
+    canonical_timestamp[is.na(canonical_timestamp)] <- FALSE
+    if (any(!canonical_timestamp)) {
+      stop(
+        "`verified$ts` must use valid REDCap `YYYY-MM-DD HH:MM:SS` ",
+        "timestamp strings for supplied resolutions.",
+        call. = FALSE
+      )
+    }
+  }
+
+  resolution_id_rows <- split(
+    resolution_rows,
+    res_id[resolution_rows],
+    drop = TRUE
+  )
+  inconsistent_resolution <- vapply(
+    resolution_id_rows,
+    function(rows) {
+      any(vapply(
+        list(status_id, timestamp, current_query_status, username),
+        function(x) length(unique(x[rows])) > 1L,
+        logical(1)
+      ))
+    },
+    logical(1)
+  )
+  if (any(inconsistent_resolution)) {
+    stop(
+      "Each `verified$res_id` must identify one consistent resolution row.",
+      call. = FALSE
+    )
+  }
+
+  issue_rows <- split(seq_along(status_id), status_id, drop = TRUE)
+  inconsistent_issue <- vapply(
+    issue_rows,
+    function(rows) {
+      length(unique(issue_key[rows])) > 1L ||
+        length(unique(query_status[rows])) > 1L
+    },
+    logical(1)
+  )
+  if (any(inconsistent_issue)) {
+    stop(
+      "Each `verified$status_id` must map to one field context and one live ",
+      "`query_status`.",
+      call. = FALSE
+    )
+  }
+
+  latest <- rep(FALSE, length(status_id))
+  for (rows in issue_rows) {
+    candidates <- rows[complete_resolution[rows]]
+    if (length(candidates) == 0L) {
+      next
+    }
+    latest_order <- order(
+      timestamp[candidates],
+      nchar(res_id[candidates]),
+      res_id[candidates],
+      decreasing = TRUE
+    )
+    latest[candidates[latest_order[[1L]]]] <- TRUE
+  }
+
+  latest
 }
 
 .miss_check_verified_nonblank <- function(x, column) {

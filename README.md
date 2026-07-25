@@ -68,17 +68,24 @@ report <- find_missing(
 
 `find_missing()` validates every supplied issue against the same
 project's cached fields, events, form-event mapping, and repeat
-structure before filtering. It then uses exact, case-sensitive username
-and `"VERIFIED"` status matches to pass only an already-assessed,
-otherwise-failing `field-complete` row at the same
-record/event/repeat/field context. It does not bypass startedness,
-branching, field selection, or report scope. Review counts in
-`report$diagnostics$verification`; the supplied issue data are not
-retained. For regular contexts, an entirely missing `repeat_instrument`
-column may use the logical `NA` representation returned by
-`exportDataQuality()`, and any upstream `instance` placeholder is
-ignored. True repeating events and instruments still require their
-instance.
+structure before collapsing or filtering. It groups resolution history
+by `status_id`, selects the greatest `ts`, and uses the greatest numeric
+`res_id` to break timestamp ties. Only that latest resolution is
+eligible: its `username` must match `verified_user`, and both the live
+issue `query_status` and latest resolution `current_query_status` must
+be `"VERIFIED"`. Historical resolutions never authorize an exception,
+including after another user performs the latest verification. Matching
+can pass only an already-assessed, otherwise-failing `field-complete`
+row at the same record/event/repeat/field context; it does not bypass
+startedness, branching, field selection, or report scope. Review counts
+are in `report$diagnostics$verification`; `verified_rows` counts
+matching latest resolutions, and the supplied issue data are not
+retained. For regular contexts, entirely missing `repeat_instrument` and
+`instance` columns may use any all-`NA` storage type returned by
+`exportDataQuality()`; other upstream `instance` placeholders are
+ignored. A classic export may carry one positive internal event ID,
+which is normalized to the classic event context. True repeating events
+and instruments still require their instance.
 
 ## First report
 
