@@ -4,81 +4,67 @@
 \alias{get_summary}
 \title{Get validation summaries from a REDCap missingness report}
 \usage{
-get_summary(report, validation_check = NULL, events = NULL, forms = NULL)
+get_summary(report, validation_check = NULL, events = NULL, instruments = NULL)
 }
 \arguments{
-\item{report}{A \code{redcapmissing} object created by \code{\link[=find_missing]{find_missing()}}.}
+\item{report}{A validated \code{redcapmissing} object created by \code{\link[=run_plan]{run_plan()}}.}
 
-\item{validation_check}{\code{NULL}, or a non-empty character vector containing
-raw, canonical validation-check codes from \code{\link[=registry]{registry()}}. \code{NULL} keeps all
-checks.}
+\item{validation_check}{\code{NULL}, or a nonempty character vector containing one
+or more exact canonical codes from \code{\link[=registry]{registry()}}: \code{"event-row-started"},
+\code{"repeat-instance-row-started"}, \code{"instrument-started"}, or
+\code{"field-complete"}.}
 
-\item{events}{\code{NULL}, or a non-empty character vector containing raw REDCap
-\code{redcap_event_name} values configured in the report. \code{NULL} keeps all
-events.}
+\item{events}{\code{NULL}, or a nonempty character vector of exact raw REDCap
+unique event names represented by the plan. Classic-project event context
+is structurally missing and is not selected by a text value.}
 
-\item{forms}{\code{NULL}, or a non-empty character vector containing raw REDCap
-instrument/form names configured in the report. \code{NULL} keeps all forms.}
+\item{instruments}{\code{NULL}, or a nonempty character vector of exact raw REDCap
+instrument names selected by the plan.}
 }
 \value{
-An ordinary tibble with these columns:
-\describe{
-\item{\code{redcap_event_name}}{The raw REDCap event name, or \code{""} when event
-context is not applicable.}
-\item{\code{form}}{The raw REDCap instrument/form name.}
-\item{\code{redcap_repeat_instrument}}{The raw REDCap repeat instrument, or
-\code{""} when repeat-instrument context is not applicable.}
-\item{\code{redcap_repeat_instance}}{The raw REDCap repeat instance, or \code{""}
-when repeat-instance context is not applicable.}
-\item{\code{validation_level}}{The validation context level.}
-\item{\code{validation_check}}{The canonical validation-check code.}
-\item{\code{assessed}}{The integer number of rows assessed.}
-\item{\code{passed}}{The integer number of rows that passed.}
-\item{\code{failed}}{The integer number of rows that failed.}
-\item{\code{pass_rate}}{The numeric pass fraction.}
-\item{\code{fail_rate}}{The numeric failure fraction.}
+A tibble with exactly these columns and storage types:\tabular{ll}{
+   Column \tab Storage and values \cr
+   \code{redcap_event_name} \tab Character raw event name; \code{NA_character_} in classic projects \cr
+   \code{instrument} \tab Character raw instrument name \cr
+   \code{repeat_instrument} \tab Character raw repeating instrument; otherwise \code{NA_character_} \cr
+   \code{repeat_instance} \tab Integer exact instance; otherwise \code{NA_integer_} \cr
+   \code{validation_level} \tab Character: \code{"event:instrument"} or \code{"event:instrument:instance"} \cr
+   \code{validation_check} \tab Character canonical validation-check code \cr
+   \code{status} \tab Character: \code{"assessed"} or \code{"not applicable"} \cr
+   \code{reason} \tab Character; typed missing unless the check is not applicable \cr
+   \code{assessed}, \code{passed}, \code{failed} \tab Integer counts \cr
+   \code{pass_rate}, \code{fail_rate} \tab Double proportions; \code{NA_real_} when nothing was assessed \cr
 }
 
-The tibble carries a \code{redcapmissing_labels} attribute containing named
-\code{events} and \code{forms} character vectors for presentation. Data manipulation
-may drop this optional metadata; raw context values remain in the columns.
+
+The tibble has a \code{redcapmissing_labels} attribute containing named character
+vectors \code{events} and \code{instruments} for presentation. Raw values remain the
+filtering and data contract.
 }
 \description{
-\code{get_summary()} returns the user-facing validation summary from a
-\code{\link[=find_missing]{find_missing()}} report. Each row represents one validation check and REDCap
-context stored in the completed report.
+\code{get_summary()} returns the stored validation summary from a report created by
+\code{\link[=run_plan]{run_plan()}}. Filters subset the completed report; they never rerun checks,
+change applicability, or recalculate denominators.
 }
 \details{
-Filters use raw, case-sensitive values and are combined by intersection.
-They subset the completed report without rerunning validation or recalculating
-denominators, and duplicate values are treated as a set. Event and form
-values are validated against the configured report scope; validation checks
-are validated against \code{\link[=registry]{registry()}}. Valid filters with no matching rows
-return a zero-row tibble with the documented schema.
-
-When field selection leaves a requested form with no fields to assess,
-\code{field-complete} has an explicit zero-assessed summary for each
-event/repeat context that reached field assessment. A configured context
-stopped by an upstream row-started or \code{form-started} gate has no downstream
-summary row.
+Filter matching is case-sensitive. Vectors may not contain missing, blank, or
+whitespace-padded values. Unknown values error. Duplicate filter values are
+normalized to one value.
 }
 \examples{
 \dontrun{
-report <- find_missing(
-  data = records,
-  rcon = rcon,
-  forms = c("baseline_form", "followup_form")
-)
+plan <- plan_from_data(records, rcon, "baseline")
+report <- run_plan(plan, records, rcon)
 
 get_summary(report)
 get_summary(
   report,
   validation_check = "field-complete",
-  forms = "baseline_form"
+  instruments = "baseline"
 )
 }
 
 }
 \seealso{
-\code{\link[=get_missing]{get_missing()}}, \code{\link[=find_missing]{find_missing()}}, \code{\link[=registry]{registry()}}, \code{\link[=flexify]{flexify()}}
+\code{\link[=get_missing]{get_missing()}}, \code{\link[=run_plan]{run_plan()}}, \code{\link[=registry]{registry()}}, \code{\link[=flexify]{flexify()}}
 }

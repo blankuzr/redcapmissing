@@ -2,83 +2,61 @@
 % Please edit documentation in R/get-missing.R
 \name{get_missing}
 \alias{get_missing}
-\title{Get focused missing rows from a REDCap missingness report}
+\title{Get unresolved missing rows from a REDCap missingness report}
 \usage{
-get_missing(report, validation_check = NULL, events = NULL, forms = NULL)
+get_missing(report, validation_check = NULL, events = NULL, instruments = NULL)
 }
 \arguments{
-\item{report}{A \code{redcapmissing} object created by \code{\link[=find_missing]{find_missing()}}.}
+\item{report}{A validated \code{redcapmissing} object created by \code{\link[=run_plan]{run_plan()}}.}
 
-\item{validation_check}{\code{NULL}, or a non-empty character vector containing
-raw, canonical validation-check codes from \code{\link[=registry]{registry()}}. \code{NULL} keeps all
-checks.}
+\item{validation_check}{\code{NULL}, or a nonempty character vector containing one
+or more exact canonical codes from \code{\link[=registry]{registry()}}: \code{"event-row-started"},
+\code{"repeat-instance-row-started"}, \code{"instrument-started"}, or
+\code{"field-complete"}.}
 
-\item{events}{\code{NULL}, or a non-empty character vector containing raw REDCap
-\code{redcap_event_name} values configured in the report. \code{NULL} keeps all
-events.}
+\item{events}{\code{NULL}, or a nonempty character vector of exact raw REDCap
+unique event names represented by the plan. Classic-project event context
+is structurally missing and is not selected by a text value.}
 
-\item{forms}{\code{NULL}, or a non-empty character vector containing raw REDCap
-instrument/form names configured in the report. \code{NULL} keeps all forms.}
+\item{instruments}{\code{NULL}, or a nonempty character vector of exact raw REDCap
+instrument names selected by the plan.}
 }
 \value{
-A tibble containing failed validation rows with these columns:
-\describe{
-\item{\code{record_id}}{The REDCap record identifier.}
-\item{\code{redcap_event_name}}{The raw REDCap event name, or \code{""} when event
-context is not applicable.}
-\item{\code{redcap_repeat_instrument}}{The raw REDCap repeat instrument, or
-\code{""} when repeat-instrument context is not applicable.}
-\item{\code{redcap_repeat_instance}}{The raw REDCap repeat instance, or \code{""}
-when repeat-instance context is not applicable.}
-\item{\code{validation_context}}{The overall, event, or repeat-instance
-context for the failed validation row.}
-\item{\code{form}}{The REDCap instrument/form name.}
-\item{\code{validation_check}}{The canonical validation-check code.}
-\item{\code{field_name}}{The REDCap field name, or \code{NA} when the check is
-not field-specific.}
-\item{\code{field_label}}{The REDCap field label, or \code{NA} when the check is
-not field-specific.}
-\item{\code{field_type}}{The REDCap field type, or \code{NA} when the check is
-not field-specific.}
-\item{\code{branching_logic}}{The field branching logic, or \code{NA} when the
-check is not field-specific.}
-\item{\code{url}}{A raw REDCap Data Entry URL for the failed record/form
-context when available; otherwise \code{NA}.}
+A tibble with exactly these columns and storage types:\tabular{ll}{
+   Column \tab Storage and meaning \cr
+   \code{record_id} \tab Character canonical record ID \cr
+   \code{redcap_event_name} \tab Character raw event name; \code{NA_character_} in classic projects \cr
+   \code{repeat_instrument} \tab Character raw repeating instrument; otherwise \code{NA_character_} \cr
+   \code{repeat_instance} \tab Integer exact instance; otherwise \code{NA_integer_} \cr
+   \code{validation_context} \tab Character display context for the event/repeat location \cr
+   \code{instrument} \tab Character raw instrument name \cr
+   \code{validation_check} \tab Character canonical validation-check code from \code{\link[=registry]{registry()}} \cr
+   \code{field_name}, \code{field_label}, \code{field_type}, \code{branching_logic} \tab Character field context; typed missing for failures not tied to one field \cr
+   \code{url} \tab Character REDCap data-entry URL when it can be constructed; otherwise \code{NA_character_} \cr
 }
 
-All returned columns use character storage. The tibble carries a
-\code{redcapmissing_labels} attribute containing named \code{events} and \code{forms}
-character vectors for presentation. Data manipulation may drop this
-optional metadata; raw context values remain in the columns.
+
+Structural absence is represented by typed missing values, never blank-string
+placeholders. The tibble has a \code{redcapmissing_labels} attribute containing
+named character vectors \code{events} and \code{instruments} for presentation; raw
+values remain the filtering and data contract.
 }
 \description{
-\code{get_missing()} returns the user-facing failed validation rows from a
-\code{\link[=find_missing]{find_missing()}} report. By default, it returns failures from every report
-context and validation check.
-}
-\details{
-Filtering follows \code{\link[=get_summary]{get_summary()}}: raw, case-sensitive filters are combined
-by intersection and only subset the completed report. Event and form values
-are validated against its configured scope, and validation checks against
-\code{\link[=registry]{registry()}}. Valid filters with no failures return a zero-row tibble with
-the documented schema.
-
-Output preserves the failure-row order from the completed report.
+\code{get_missing()} returns effective unresolved failures stored by \code{\link[=run_plan]{run_plan()}}.
+Verification-applied failures are absent. Filters subset the completed report
+without rerunning checks or changing denominators.
 }
 \examples{
 \dontrun{
-report <- find_missing(
-  data = records,
-  rcon = rcon,
-  forms = "baseline_form"
-)
+plan <- plan_from_data(records, rcon, "baseline")
+report <- run_plan(plan, records, rcon)
 
 get_missing(report)
 get_missing(report, validation_check = "field-complete")
-get_missing(report, events = "baseline_event", forms = "baseline_form")
+get_missing(report, instruments = "baseline")
 }
 
 }
 \seealso{
-\code{\link[=get_summary]{get_summary()}}, \code{\link[=find_missing]{find_missing()}}, \code{\link[=registry]{registry()}}, \code{\link[=flexify]{flexify()}}
+\code{\link[=get_summary]{get_summary()}}, \code{\link[=run_plan]{run_plan()}}, \code{\link[=registry]{registry()}}, \code{\link[=flexify]{flexify()}}
 }

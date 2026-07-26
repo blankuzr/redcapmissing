@@ -1,3 +1,30 @@
+# redcapmissing 7.0.0
+
+## 2026-07-25
+
+- Replaced `find_missing()` with a plan-and-run workflow. Use
+  `plan_from_data()` for Assessible targets observed in an export plus sparse
+  `extended_schedule` additions, or `plan_explicit()` for a complete
+  record-level `explicit_schedule`; then evaluate the frozen plan with
+  `run_plan()`.
+- Removed the former `forms`, `events`, `records`, `instances`, and
+  `ignore_ids` scope system without a compatibility wrapper. Public report,
+  accessor, registry, and formatter vocabulary now uses `instrument`
+  consistently, including `flex_event_instruments()`.
+- Added deterministic project-structure fingerprints and strict shared
+  normalization for record, event, repeating-instrument, and repeat-instance
+  identifiers. Plans retain neither source records nor live REDCap
+  connections, and execution rejects malformed or structurally stale plans.
+- Separated physical-row, repeat-row, instrument-started, and field-complete
+  checks. Field policy now affects only field completeness, and a target with
+  no assessible fields is reported as not applicable rather than complete.
+- Replaced the prior data-quality history interface with an exact nine-column
+  verification contract, latest-timestamp selection, effective-failure
+  overrides, and explicit audit counts.
+- Changed the report object to store its plan, target results, summary,
+  unresolved missing rows, verification audit, fixed-stage diagnostics, and
+  optional detailed results.
+
 # redcapmissing 6.1.2
 
 ## 2026-07-25

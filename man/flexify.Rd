@@ -25,7 +25,7 @@ Column names and storage types must remain compatible with either the
 order, but added or renamed columns and combinations of summary-only and
 missing-row-only columns are rejected.
 
-Event, form, and repeat-instrument values use the package-owned display-label
+Event, instrument, and repeat-instrument values use the package-owned display-label
 metadata carried by the accessors. Raw REDCap values are used when that
 metadata is unavailable. Validation checks use the \code{flex_label} values from
 \code{\link[=registry]{registry()}}, rates are displayed as one-decimal percentages, missing values
@@ -42,7 +42,7 @@ This function requires the optional \code{flextable} package.
 \examples{
 \dontshow{if (requireNamespace("flextable", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 summary_rows <- tibble::tibble(
-  form = "baseline_form",
+  instrument = "baseline_instrument",
   validation_check = "field-complete",
   assessed = 10L,
   pass_rate = 0.9
@@ -51,5 +51,5 @@ flexify(summary_rows)
 \dontshow{\}) # examplesIf}
 }
 \seealso{
-\code{\link[=get_summary]{get_summary()}}, \code{\link[=get_missing]{get_missing()}}, \code{\link[=find_missing]{find_missing()}}, \code{\link[=flex_html]{flex_html()}}
+\code{\link[=get_summary]{get_summary()}}, \code{\link[=get_missing]{get_missing()}}, \code{\link[=run_plan]{run_plan()}}, \code{\link[=flex_html]{flex_html()}}
 }

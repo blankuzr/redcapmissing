@@ -1,72 +1,48 @@
-#' Get focused missing rows from a REDCap missingness report
+#' Get unresolved missing rows from a REDCap missingness report
 #'
-#' @description
-#' `get_missing()` returns the user-facing failed validation rows from a
-#' [find_missing()] report. By default, it returns failures from every report
-#' context and validation check.
-#'
-#' @details
-#' Filtering follows [get_summary()]: raw, case-sensitive filters are combined
-#' by intersection and only subset the completed report. Event and form values
-#' are validated against its configured scope, and validation checks against
-#' [registry()]. Valid filters with no failures return a zero-row tibble with
-#' the documented schema.
-#'
-#' Output preserves the failure-row order from the completed report.
+#' `get_missing()` returns effective unresolved failures stored by [run_plan()].
+#' Verification-applied failures are absent. Filters subset the completed report
+#' without rerunning checks or changing denominators.
 #'
 #' @inheritParams get_summary
 #'
-#' @return A tibble containing failed validation rows with these columns:
-#' \describe{
-#'   \item{`record_id`}{The REDCap record identifier.}
-#'   \item{`redcap_event_name`}{The raw REDCap event name, or `""` when event
-#'     context is not applicable.}
-#'   \item{`redcap_repeat_instrument`}{The raw REDCap repeat instrument, or
-#'     `""` when repeat-instrument context is not applicable.}
-#'   \item{`redcap_repeat_instance`}{The raw REDCap repeat instance, or `""`
-#'     when repeat-instance context is not applicable.}
-#'   \item{`validation_context`}{The overall, event, or repeat-instance
-#'     context for the failed validation row.}
-#'   \item{`form`}{The REDCap instrument/form name.}
-#'   \item{`validation_check`}{The canonical validation-check code.}
-#'   \item{`field_name`}{The REDCap field name, or `NA` when the check is
-#'     not field-specific.}
-#'   \item{`field_label`}{The REDCap field label, or `NA` when the check is
-#'     not field-specific.}
-#'   \item{`field_type`}{The REDCap field type, or `NA` when the check is
-#'     not field-specific.}
-#'   \item{`branching_logic`}{The field branching logic, or `NA` when the
-#'     check is not field-specific.}
-#'   \item{`url`}{A raw REDCap Data Entry URL for the failed record/form
-#'     context when available; otherwise `NA`.}
-#' }
+#' @return A tibble with exactly these columns and storage types:
 #'
-#' All returned columns use character storage. The tibble carries a
-#' `redcapmissing_labels` attribute containing named `events` and `forms`
-#' character vectors for presentation. Data manipulation may drop this
-#' optional metadata; raw context values remain in the columns.
+#' | Column | Storage and meaning |
+#' |---|---|
+#' | `record_id` | Character canonical record ID |
+#' | `redcap_event_name` | Character raw event name; `NA_character_` in classic projects |
+#' | `repeat_instrument` | Character raw repeating instrument; otherwise `NA_character_` |
+#' | `repeat_instance` | Integer exact instance; otherwise `NA_integer_` |
+#' | `validation_context` | Character display context for the event/repeat location |
+#' | `instrument` | Character raw instrument name |
+#' | `validation_check` | Character canonical validation-check code from [registry()] |
+#' | `field_name`, `field_label`, `field_type`, `branching_logic` | Character field context; typed missing for failures not tied to one field |
+#' | `url` | Character REDCap data-entry URL when it can be constructed; otherwise `NA_character_` |
+#'
+#' Structural absence is represented by typed missing values, never blank-string
+#' placeholders. The tibble has a `redcapmissing_labels` attribute containing
+#' named character vectors `events` and `instruments` for presentation; raw
+#' values remain the filtering and data contract.
 #'
 #' @examples
 #' \dontrun{
-#' report <- find_missing(
-#'   data = records,
-#'   rcon = rcon,
-#'   forms = "baseline_form"
-#' )
+#' plan <- plan_from_data(records, rcon, "baseline")
+#' report <- run_plan(plan, records, rcon)
 #'
 #' get_missing(report)
 #' get_missing(report, validation_check = "field-complete")
-#' get_missing(report, events = "baseline_event", forms = "baseline_form")
+#' get_missing(report, instruments = "baseline")
 #' }
 #'
-#' @seealso [get_summary()], [find_missing()], [registry()], [flexify()]
+#' @seealso [get_summary()], [run_plan()], [registry()], [flexify()]
 #'
 #' @export
 get_missing <- function(
   report,
   validation_check = NULL,
   events = NULL,
-  forms = NULL
+  instruments = NULL
 ) {
   .redcapmissing_check_report(report, arg = "report")
   .redcapmissing_check_missing_rows(report$missing)
@@ -75,17 +51,13 @@ get_missing <- function(
     report = report,
     validation_check = validation_check,
     events = events,
-    forms = forms
+    instruments = instruments
   )
   missing_rows <- .redcapmissing_filter_accessor_rows(
     rows = report$missing,
     filters = filters
   )
-  out <- tibble::as_tibble(missing_rows[
-    ,
-    .redcapmissing_get_missing_columns(),
-    drop = FALSE
-  ])
+  out <- tibble::as_tibble(missing_rows)
 
   .redcapmissing_attach_labels(out, report)
 }
@@ -96,10 +68,10 @@ get_missing <- function(
   c(
     "record_id",
     "redcap_event_name",
-    "redcap_repeat_instrument",
-    "redcap_repeat_instance",
+    "repeat_instrument",
+    "repeat_instance",
     "validation_context",
-    "form",
+    "instrument",
     "validation_check",
     "field_name",
     "field_label",
@@ -110,14 +82,31 @@ get_missing <- function(
 }
 
 .redcapmissing_get_missing_prototype <- function() {
-  expected <- .miss_empty_missing_rows()
-  expected[, .redcapmissing_get_missing_columns(), drop = FALSE]
+  tibble::tibble(
+    record_id = character(),
+    redcap_event_name = character(),
+    repeat_instrument = character(),
+    repeat_instance = integer(),
+    validation_context = character(),
+    instrument = character(),
+    validation_check = character(),
+    field_name = character(),
+    field_label = character(),
+    field_type = character(),
+    branching_logic = character(),
+    url = character()
+  )
 }
 
 .redcapmissing_check_missing_rows <- function(missing_rows) {
   .redcapmissing_check_report_rows(
     rows = missing_rows,
-    expected = .miss_empty_missing_rows(),
+    expected = .redcapmissing_get_missing_prototype(),
     component = "missing"
   )
+  invalid_checks <- setdiff(unique(missing_rows$validation_check), .redcapmissing_validation_checks())
+  if (length(invalid_checks) > 0L) {
+    stop("`report$missing` contains unknown validation-check codes.", call. = FALSE)
+  }
+  invisible(missing_rows)
 }

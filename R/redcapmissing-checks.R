@@ -2,26 +2,29 @@
 
 .redcapmissing_check_report <- function(x, arg = "x") {
   if (!inherits(x, "redcapmissing")) {
-    stop(
-      "`",
-      arg,
-      "` must be a `redcapmissing` object created by `find_missing()`.",
-      call. = FALSE
+    .rcm_plan_abort(
+      paste0(
+        "`", arg,
+        "` must be a `redcapmissing` object created by `run_plan()`."
+      ),
+      "argument"
     )
   }
-  if (is.null(x$summary)) {
-    stop(
-      "`",
-      arg,
-      "` must contain `summary`.",
-      call. = FALSE
+  expected_names <- c(
+    "plan", "target_results", "summary", "missing", "verification",
+    "diagnostics", "details"
+  )
+  if (!is.list(x) || !identical(names(x), expected_names)) {
+    .rcm_plan_abort(
+      paste0(
+        "`", arg, "` must contain exactly: ",
+        paste(expected_names, collapse = ", "), "."
+      ),
+      "schema"
     )
   }
+  .rcm_validate_plan(x$plan)
   invisible(x)
-}
-
-.redcapmissing_report_spec <- function(x) {
-  x$spec %||% list()
 }
 
 .redcapmissing_check_packages <- function(packages, context) {

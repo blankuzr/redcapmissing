@@ -4,22 +4,51 @@
 \name{redcapmissing-package}
 \alias{redcapmissing}
 \alias{redcapmissing-package}
-\title{redcapmissing: Branching-Aware Missingness Reports for REDCap Exports}
+\title{redcapmissing: Plan-and-Run Completeness Assessment for REDCap Exports}
 \description{
-Build missingness reports for REDCap record exports while respecting
-branching logic, form-event mappings, and repeat contexts. Start with
-\code{\link[=find_missing]{find_missing()}}, inspect results with \code{\link[=get_summary]{get_summary()}} or \code{\link[=get_missing]{get_missing()}},
-and format them with \code{\link[=flexify]{flexify()}} or \code{\link[=flex_event_forms]{flex_event_forms()}}.
+Construct a frozen set of Assessible REDCap targets, then evaluate physical
+rows, instrument start, and branching-aware field completeness against a
+record export. Public API terminology consistently uses \emph{instrument}, matching
+raw REDCap instrument names.
 }
 \details{
-A typical workflow creates a \code{redcapAPI::redcapConnection()}, exports typed
-records with \code{redcapAPI::exportRecordsTyped()}, and passes both objects to
-\code{\link[=find_missing]{find_missing()}}. The package uses \code{redcapAPI} project metadata and REDCap
-blank-value semantics to determine which contexts and fields are expected.
+The workflow deliberately separates target construction from assessment:
+\enumerate{
+\item \code{\link[=plan_from_data]{plan_from_data()}} combines allowable crossings observed in the export
+with an optional sparse extension; or \code{\link[=plan_explicit]{plan_explicit()}} accepts an
+authoritative record-level schedule.
+\item \code{\link[=run_plan]{run_plan()}} evaluates the frozen plan without allowing runtime rows to add
+targets.
+\item \code{\link[=get_summary]{get_summary()}} and \code{\link[=get_missing]{get_missing()}} inspect results, while \code{\link[=flexify]{flexify()}} and
+\code{\link[=flex_event_instruments]{flex_event_instruments()}} format them.
+}
+
+Constructors discover the record-ID field and project structure from \code{rcon}.
+Plans retain canonical target identity and a deterministic SHA-256 structure
+fingerprint, but neither source records nor a live connection. Reports retain
+the plan, target-level results, aggregates, unresolved failures, verification
+audit counts, diagnostics, and optional validation detail; they do not retain
+source data, raw verification rows, tokens, or a live connection.
+
+Structural absence is represented by typed missing values: for example,
+\code{NA_character_} for classic event context and non-repeating instrument context,
+and \code{NA_integer_} for a regular target's repeat instance. Response missingness
+is separate from physical-row presence. See \code{\link[=plan_from_data]{plan_from_data()}} for structural
+normalization and \code{\link[=run_plan]{run_plan()}} for response and verification missingness.
+
+Public validation failures inherit from \code{redcapmissing_error} and use boundary
+subclasses for argument, schema, project, schedule, plan, and verification
+failures. Sparse extensions into arms without observed records use the classed
+\code{redcapmissing_warning_empty_arm_extension} warning.
+
+A typical online workflow uses \code{redcapAPI::redcapConnection()} and a typed
+export from \code{redcapAPI::exportRecordsTyped()}. Keep REDCap API tokens outside
+source, logs, reports, and serialized objects.
 }
 \seealso{
-\code{\link[=find_missing]{find_missing()}}, \code{\link[=get_summary]{get_summary()}}, \code{\link[=get_missing]{get_missing()}}, \code{\link[=flexify]{flexify()}},
-\code{\link[=registry]{registry()}}, \code{\link[=flex_event_forms]{flex_event_forms()}}, \code{\link[=flex_html]{flex_html()}},
+\code{\link[=plan_from_data]{plan_from_data()}}, \code{\link[=plan_explicit]{plan_explicit()}}, \code{\link[=run_plan]{run_plan()}},
+\code{\link[=get_summary]{get_summary()}}, \code{\link[=get_missing]{get_missing()}}, \code{\link[=registry]{registry()}}, \code{\link[=flexify]{flexify()}},
+\code{\link[=flex_event_instruments]{flex_event_instruments()}}, \code{\link[=flex_html]{flex_html()}},
 \code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}
 }
 \author{

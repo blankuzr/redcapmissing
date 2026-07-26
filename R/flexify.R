@@ -10,7 +10,7 @@
 #' order, but added or renamed columns and combinations of summary-only and
 #' missing-row-only columns are rejected.
 #'
-#' Event, form, and repeat-instrument values use the package-owned display-label
+#' Event, instrument, and repeat-instrument values use the package-owned display-label
 #' metadata carried by the accessors. Raw REDCap values are used when that
 #' metadata is unavailable. Validation checks use the `flex_label` values from
 #' [registry()], rates are displayed as one-decimal percentages, missing values
@@ -33,14 +33,14 @@
 #'
 #' @examplesIf requireNamespace("flextable", quietly = TRUE)
 #' summary_rows <- tibble::tibble(
-#'   form = "baseline_form",
+#'   instrument = "baseline_instrument",
 #'   validation_check = "field-complete",
 #'   assessed = 10L,
 #'   pass_rate = 0.9
 #' )
 #' flexify(summary_rows)
 #'
-#' @seealso [get_summary()], [get_missing()], [find_missing()], [flex_html()]
+#' @seealso [get_summary()], [get_missing()], [run_plan()], [flex_html()]
 #'
 #' @export
 flexify <- function(x) {
@@ -172,13 +172,13 @@ flexify <- function(x) {
 }
 
 .redcapmissing_flexify_drop_blank_repeat_columns <- function(x) {
-  repeat_columns <- c("redcap_repeat_instrument", "redcap_repeat_instance")
+  repeat_columns <- c("repeat_instrument", "repeat_instance")
   if (!all(repeat_columns %in% names(x)) || ncol(x) <= length(repeat_columns)) {
     return(x)
   }
 
-  repeat_blank <- all(.miss_is_blank_vec(x$redcap_repeat_instrument)) &&
-    all(.miss_is_blank_vec(x$redcap_repeat_instance))
+  repeat_blank <- all(.miss_is_blank_vec(x$repeat_instrument)) &&
+    all(.miss_is_blank_vec(x$repeat_instance))
   if (!repeat_blank) {
     return(x)
   }
@@ -188,12 +188,12 @@ flexify <- function(x) {
 
 .redcapmissing_flexify_label_values <- function(x, labels) {
   event_labels <- labels$events %||% character()
-  form_labels <- labels$forms %||% character()
+  instrument_labels <- labels$instruments %||% character()
   if (!is.character(event_labels)) {
     event_labels <- character()
   }
-  if (!is.character(form_labels)) {
-    form_labels <- character()
+  if (!is.character(instrument_labels)) {
+    instrument_labels <- character()
   }
 
   if ("redcap_event_name" %in% names(x)) {
@@ -202,13 +202,13 @@ flexify <- function(x) {
       event_labels
     )
   }
-  if ("form" %in% names(x)) {
-    x$form <- .redcapmissing_flex_label_values(x$form, form_labels)
+  if ("instrument" %in% names(x)) {
+    x$instrument <- .redcapmissing_flex_label_values(x$instrument, instrument_labels)
   }
-  if ("redcap_repeat_instrument" %in% names(x)) {
-    x$redcap_repeat_instrument <- .redcapmissing_flex_label_values(
-      x$redcap_repeat_instrument,
-      form_labels
+  if ("repeat_instrument" %in% names(x)) {
+    x$repeat_instrument <- .redcapmissing_flex_label_values(
+      x$repeat_instrument,
+      instrument_labels
     )
   }
   if ("validation_check" %in% names(x)) {
@@ -222,12 +222,14 @@ flexify <- function(x) {
   c(
     record_id = "Record ID",
     redcap_event_name = "Event",
-    form = "Form",
-    redcap_repeat_instrument = "Repeat Instrument",
-    redcap_repeat_instance = "Repeat Instance",
+    instrument = "Instrument",
+    repeat_instrument = "Repeat Instrument",
+    repeat_instance = "Repeat Instance",
     validation_context = "Validation Context",
     validation_level = "Validation Level",
     validation_check = "Validation Check",
+    status = "Status",
+    reason = "Reason",
     field_name = "Field Name",
     field_label = "Field Label",
     field_type = "Field Type",

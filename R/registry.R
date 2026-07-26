@@ -1,38 +1,53 @@
 #' Inspect the redcapmissing validation registry
 #'
-#' @description
-#' `registry()` returns the public validation taxonomy used by
-#' [find_missing()]. The registry is the package source of truth for validation
-#' levels, validation checks, display labels, downstream order, and the internal
-#' R-safe stems used to build report components.
+#' `registry()` returns the public validation taxonomy used by [run_plan()]. It
+#' defines the canonical check codes, display labels, assessment order, and
+#' downstream-gating metadata used by accessors and formatters.
 #'
-#' @return A tibble with class `"redcapmissing_registry"` and one row per
-#'   validation check. The returned columns include:
-#' \describe{
-#'   \item{`validation_order`}{The canonical assessment order.}
-#'   \item{`downstream_order`}{The order used when applying downstream gating.}
-#'   \item{`validation_level`}{The registry validation level:
-#'     `"event:form / event:form:instance"`. Report outputs resolve the
-#'     contextual event/form level to `"event:form"` or
-#'     `"event:form:instance"` from the assessed REDCap context.}
-#'   \item{`validation_check`}{The canonical validation-check code.}
-#'   \item{`validation_label`}{The canonical validation label.}
-#'   \item{`flex_label`}{The flextable display label used by [flexify()].}
-#'   \item{`description`}{A short user-facing description of the check.}
-#'   \item{`r_identifier`, `component_stem`, `step_suffix`}{Internal R-safe
-#'     stems and native validation-step metadata.}
-#'   \item{`gates_downstream`}{Whether a failed check removes that context from
-#'     downstream assessment.}
-#' }
+#' @details
+#' The four canonical validation-check codes, in assessment order, are:
+#'
+#' 1. `"event-row-started"`: a physical row exists for the record and event;
+#' 2. `"repeat-instance-row-started"`: the exact repeating physical row exists;
+#' 3. `"instrument-started"`: an independent data-entry detection field has a
+#'    response; and
+#' 4. `"field-complete"`: every applicable field selected by policy is complete.
+#'
+#' Report rows use validation levels `"event:instrument"` and
+#' `"event:instrument:instance"`, selected from the target's repeat context.
+#' Applicable failed upstream checks gate downstream assessment. See
+#' [run_plan()] for classic/regular not-applicable behavior and the exact field
+#' policy.
+#'
+#' @return A tibble with class `redcapmissing_registry` and one row per
+#'   validation-check and validation-level combination. It contains integer
+#'   `validation_order` and
+#'   `downstream_order`; character `validation_level`, `validation_check`,
+#'   `validation_label`, `flex_label`, `description`, `r_identifier`,
+#'   `component_stem`, and `step_suffix`; and logical `gates_downstream`.
+#'   `validation_check` is the stable public code used by [get_summary()] and
+#'   [get_missing()]; R-safe stems are implementation metadata rather than
+#'   alternate public vocabulary.
 #'
 #' @examples
 #' registry()
+#'
+#' @seealso [run_plan()], [get_summary()], [get_missing()]
 #'
 #' @export
 registry <- function() {
   .redcapmissing_new_registry(.redcapmissing_registry_data())
 }
 
+#' Print the validation registry
+#'
+#' @param x A `redcapmissing_registry` returned by [registry()].
+#' @param ... Additional arguments passed to the fallback tibble print method
+#'   when `x` is malformed.
+#'
+#' @return `x`, invisibly.
+#'
+#' @rdname registry
 #' @export
 print.redcapmissing_registry <- function(x, ...) {
   x <- tibble::as_tibble(x)
@@ -71,53 +86,47 @@ print.redcapmissing_registry <- function(x, ...) {
 # Internal helpers ---------------------------------------------------------
 
 .redcapmissing_registry_data <- local({
+  checks <- c(
+    "event-row-started",
+    "repeat-instance-row-started",
+    "instrument-started",
+    "field-complete"
+  )
   data <- tibble::tibble(
-    validation_order = 1:4,
-    downstream_order = 1:4,
-    validation_level = rep("event:form / event:form:instance", 4),
-    validation_check = c(
-      "event-row-started",
-      "instance-row-started",
-      "form-started",
-      "field-complete"
+    validation_order = rep(1:4, each = 2L),
+    downstream_order = rep(1:4, each = 2L),
+    validation_level = rep(
+      c("event:instrument", "event:instrument:instance"),
+      times = 4L
     ),
-    validation_label = c(
-      "event-row-started",
-      "instance-row-started",
-      "form-started",
-      "field-complete"
-    ),
-    flex_label = c(
+    validation_check = rep(checks, each = 2L),
+    validation_label = rep(checks, each = 2L),
+    flex_label = rep(c(
       "Event row started",
-      "Instance row started",
-      "Form started",
+      "Repeat instance row started",
+      "Instrument started",
       "Field complete"
-    ),
-    description = c(
+    ), each = 2L),
+    description = rep(c(
       "The expected REDCap event row exists in the export.",
       "The expected REDCap repeat instance row exists in the export.",
-      "The exported form context has at least one entered data-capturing field.",
+      "The exported instrument has at least one entered data-capturing field.",
       "field complete"
-    ),
-    r_identifier = c(
+    ), each = 2L),
+    r_identifier = rep(c(
       "event_row_started",
-      "instance_row_started",
-      "form_started",
+      "repeat_instance_row_started",
+      "instrument_started",
       "field_complete"
-    ),
-    component_stem = c(
+    ), each = 2L),
+    component_stem = rep(c(
       "event_row_started",
-      "instance_row_started",
-      "form_started",
+      "repeat_instance_row_started",
+      "instrument_started",
       "field_complete"
-    ),
-    step_suffix = c(
-      "event-row-started",
-      "instance-row-started",
-      "form-started",
-      "field-complete"
-    ),
-    gates_downstream = rep(TRUE, 4)
+    ), each = 2L),
+    step_suffix = rep(checks, each = 2L),
+    gates_downstream = rep(TRUE, 8L)
   )
   function() data
 })
@@ -127,12 +136,17 @@ print.redcapmissing_registry <- function(x, ...) {
   x
 }
 
-.redcapmissing_registry_row <- function(validation_check) {
+.redcapmissing_registry_row <- function(validation_check, validation_level = NULL) {
   registry <- .redcapmissing_registry_data()
   out <- registry[registry$validation_check == validation_check, , drop = FALSE]
-  if (nrow(out) != 1) {
+  if (!is.null(validation_level)) {
+    out <- out[out$validation_level == validation_level, , drop = FALSE]
+  } else if (nrow(out)) {
+    out <- out[1L, , drop = FALSE]
+  }
+  if (nrow(out) != 1L) {
     stop(
-      "Unknown validation check `",
+      "Unknown validation check/level combination `",
       validation_check,
       "`.",
       call. = FALSE
@@ -142,12 +156,12 @@ print.redcapmissing_registry <- function(x, ...) {
 }
 
 .redcapmissing_validation_checks <- function() {
-  .redcapmissing_registry_data()$validation_check
+  unique(.redcapmissing_registry_data()$validation_check)
 }
 
 .redcapmissing_on_route_checks <- function() {
   registry <- .redcapmissing_registry_data()
-  registry$validation_check[registry$gates_downstream]
+  unique(registry$validation_check[registry$gates_downstream])
 }
 
 .redcapmissing_validation_metadata <- function(
@@ -156,6 +170,7 @@ print.redcapmissing_registry <- function(x, ...) {
   repeat_instance = NULL
 ) {
   registry <- .redcapmissing_registry_data()
+  registry <- registry[!duplicated(registry$validation_check), , drop = FALSE]
   check_i <- match(validation_check, registry$validation_check)
   if (length(check_i) != 1L || is.na(check_i)) {
     stop(
@@ -186,17 +201,18 @@ print.redcapmissing_registry <- function(x, ...) {
   if (n == 0) {
     return(character())
   }
-  level <- rep("event:form", n)
+  level <- rep("event:instrument", n)
   if (length(repeat_instance) > 0) {
     repeat_instance <- rep(repeat_instance, length.out = n)
     has_repeat <- !.miss_is_blank_vec(repeat_instance)
-    level[has_repeat] <- "event:form:instance"
+    level[has_repeat] <- "event:instrument:instance"
   }
   level
 }
 
 .redcapmissing_flex_labels <- function(validation_check) {
   registry <- .redcapmissing_registry_data()
+  registry <- registry[!duplicated(registry$validation_check), , drop = FALSE]
   flex_label <- registry$flex_label[
     match(validation_check, registry$validation_check)
   ]
@@ -286,9 +302,9 @@ print.redcapmissing_registry <- function(x, ...) {
 .redcapmissing_registry_level_color <- function(level, value) {
   switch(
     level,
-    "event:form / event:form:instance" = .redcapmissing_registry_style("level")(value),
-    "event:form" = .redcapmissing_registry_style("level")(value),
-    "event:form:instance" = cli::col_magenta(value),
+
+    "event:instrument" = .redcapmissing_registry_style("level")(value),
+    "event:instrument:instance" = cli::col_magenta(value),
     value
   )
 }
@@ -324,8 +340,8 @@ print.redcapmissing_registry <- function(x, ...) {
   switch(
     validation_check,
     "event-row-started" = "event row exists",
-    "instance-row-started" = "repeat row exists",
-    "form-started" = "form has data",
+    "repeat-instance-row-started" = "repeat instance row exists",
+    "instrument-started" = "instrument has data",
     "field-complete" = "field complete",
     validation_check
   )

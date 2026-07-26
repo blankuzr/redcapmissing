@@ -11,7 +11,7 @@
 
 
 
-<title>Getting started with redcapmissing</title>
+<title>Creating and running an assessment plan</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -348,89 +348,30 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">Getting started with redcapmissing</h1>
+<h1 class="title toc-ignore">Creating and running an assessment
+plan</h1>
 
 </div>
 
 
-<p><code>redcapmissing</code> builds branching-aware missingness reports
-for REDCap record exports. In real workflows, callers create a
-<code>redcapAPI::redcapConnection()</code>, export records with
-<code>redcapAPI::exportRecordsTyped()</code>, and pass both objects into
-<code>find_missing()</code>.</p>
-<p>The examples below are synthetic so the vignette can run without live
-REDCap credentials.</p>
-<div id="validation-registry" class="section level2">
-<h2>Validation registry</h2>
-<p>The package validation model is available through
-<code>registry()</code>:</p>
-<pre class="r"><code>registry()
-#&gt; validation registry
-#&gt; 4 checks; 1 levels
-#&gt; +------------------------------------+-----------------------+---------------------------------+
-#&gt; | level                              | check                 | meaning                         |
-#&gt; +------------------------------------+-----------------------+---------------------------------+
-#&gt; | event:form / event:form:instance   | event-row-started     | event row exists                |
-#&gt; | event:form / event:form:instance   | instance-row-started  | repeat row exists               |
-#&gt; | event:form / event:form:instance   | form-started          | form has data                   |
-#&gt; | event:form / event:form:instance   | field-complete        | field complete                  |
-#&gt; +------------------------------------+-----------------------+---------------------------------+</code></pre>
-<p>The four checks run in registry order. Report rows use
-<code>event:form</code> for non-repeating contexts and
-<code>event:form:instance</code> for repeat-instance contexts; any
-failed check removes that context from downstream assessment. See
-<code>?registry</code> for the complete taxonomy and column
-definitions.</p>
-</div>
-<div id="synthetic-redcap-helpers" class="section level2">
-<h2>Synthetic REDCap helpers</h2>
-<pre class="r"><code>meta_row &lt;- function(
-  field_name,
-  form_name,
-  field_type = &quot;text&quot;,
-  field_label = field_name,
-  choices = &quot;&quot;,
-  branching = &quot;&quot;,
-  required = &quot;&quot;
-) {
-  tibble::tibble(
-    field_name = field_name,
-    form_name = form_name,
-    field_type = field_type,
-    field_label = field_label,
-    select_choices_or_calculations = choices,
-    text_validation_type_or_show_slider_number = &quot;&quot;,
-    branching_logic = branching,
-    required_field = required
-  )
-}
-
-fake_rcon &lt;- function(metadata, mapping = NULL, repeat_instrument_event = NULL) {
-  forms &lt;- unique(as.character(metadata$form_name))
-  instruments &lt;- tibble::tibble(
-    instrument_name = forms,
-    instrument_label = paste(forms, &quot;label&quot;)
-  )
-
-  list(
-    metadata = function() metadata,
-    instruments = function() instruments,
-    mapping = function() mapping,
-    mappings = function() mapping,
-    repeatInstrumentEvent = function() repeat_instrument_event
-  )
-}</code></pre>
-</div>
-<div id="real-redcapapi-workflow" class="section level2">
-<h2>Real <code>redcapAPI</code> workflow</h2>
-<p>For real REDCap projects, keep branching-logic fields in REDCap code
-space and leave checkbox and system fields raw:</p>
-<pre class="r"><code>rcon &lt;- redcapAPI::redcapConnection(
-  url = Sys.getenv(&quot;REDCAP_API_URL&quot;),
-  token = Sys.getenv(&quot;REDCAP_API_TOKEN&quot;)
-)
-
-records &lt;- redcapAPI::exportRecordsTyped(
+<p><code>redcapmissing</code> separates two decisions that are easy to
+blur together:</p>
+<ol style="list-style-type: decimal">
+<li>Which record, event, instrument, and exact repeat-instance crossings
+are Assessible?</li>
+<li>For those frozen targets, which physical rows, instruments, and
+fields are complete?</li>
+</ol>
+<p>Construct a <code>redcapmissing_plan</code> with
+<code>plan_from_data()</code> or <code>plan_explicit()</code>, then
+evaluate it with <code>run_plan()</code>.</p>
+<div id="export-records" class="section level2">
+<h2>Export records</h2>
+<p>In a live workflow, create a
+<code>redcapAPI::redcapConnection()</code> and export typed records.
+Keep fields used in branching logic in REDCap code space and keep
+checkbox and REDCap system columns raw.</p>
+<pre class="r"><code>records &lt;- redcapAPI::exportRecordsTyped(
   rcon,
   cast = list(
     radio = redcapAPI::castCode,
@@ -440,366 +381,795 @@ records &lt;- redcapAPI::exportRecordsTyped(
     checkbox = redcapAPI::castRaw,
     system = redcapAPI::castRaw
   )
-)
-
-report &lt;- find_missing(
-  data = records,
-  rcon = rcon,
-  forms = &quot;baseline_form&quot;
 )</code></pre>
-<p>If a REDCap reviewer has already verified field-level data-quality
-issues, cross-reference the data-quality export with that exact
-username:</p>
-<pre class="r"><code>quality_issues &lt;- redcapAPI::exportDataQuality(rcon)
-
-verified_report &lt;- find_missing(
+<p>The project record-ID field is discovered from <code>rcon</code>; it
+need not be named <code>record_id</code> in <code>records</code>.
+Constructors inspect physical rows only. Blank responses do not make an
+exported row unobserved.</p>
+</div>
+<div id="planning-functions-and-arguments" class="section level2">
+<h2>Planning functions and arguments</h2>
+<table>
+<colgroup>
+<col width="18%" />
+<col width="18%" />
+<col width="25%" />
+<col width="18%" />
+<col width="18%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Function</th>
+<th>Argument</th>
+<th align="right">Required</th>
+<th>Accepted values</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Both</td>
+<td><code>data</code></td>
+<td align="right">Yes</td>
+<td>A data frame or tibble containing REDCap rows and the structural
+columns required by the project.</td>
+<td>Supplies observed physical rows; only <code>plan_from_data()</code>
+uses them to establish the extension population.</td>
+</tr>
+<tr class="even">
+<td>Both</td>
+<td><code>rcon</code></td>
+<td align="right">Yes</td>
+<td>A REDCap connection or supported connection-like object exposing all
+project structure surfaces.</td>
+<td>Supplies project identity, metadata, instruments, events, arms,
+mappings, and repeat configuration.</td>
+</tr>
+<tr class="odd">
+<td>Both</td>
+<td><code>instruments</code></td>
+<td align="right">Yes</td>
+<td>A nonempty character vector of unique, nonmissing, nonblank,
+unpadded raw instrument names.</td>
+<td>Selects the instrument domain and determines target ordering.</td>
+</tr>
+<tr class="even">
+<td><code>plan_from_data()</code></td>
+<td><code>extended_schedule</code></td>
+<td align="right">No</td>
+<td><code>NULL</code>, a correctly typed zero-row table, or the exact
+three-column schedule below.</td>
+<td>Adds sparse event/instance expectations without removing observed
+targets.</td>
+</tr>
+<tr class="odd">
+<td><code>plan_explicit()</code></td>
+<td><code>explicit_schedule</code></td>
+<td align="right">Yes</td>
+<td>The exact four-column table below; <code>NULL</code> is invalid and
+a correctly typed zero-row table is valid.</td>
+<td>Completely declares the record/instrument/event/instance targets;
+omitted rows are not assessed.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="observed-planning-with-sparse-extensions" class="section level2">
+<h2>Observed planning with sparse extensions</h2>
+<p><code>plan_from_data()</code> uses this definition:</p>
+<pre class="text"><code>Assessible targets =
+  rcon-allowable crossings
+  INTERSECT
+  (
+    crossings observed in data
+    UNION
+    extended_schedule crossings
+  )</code></pre>
+<pre class="r"><code>observed_plan &lt;- plan_from_data(
   data = records,
   rcon = rcon,
-  forms = &quot;baseline_form&quot;,
-  verified = quality_issues,
-  verified_user = &quot;reviewer_username&quot;
+  instruments = c(&quot;demographics&quot;, &quot;labs&quot;)
+)</code></pre>
+<p><code>instruments</code> is a nonempty vector of unique, unpadded,
+raw REDCap instrument names. <code>extended_schedule = NULL</code> and a
+correctly typed zero-row schedule both mean observed-only planning.</p>
+<p>The extension schema is exact; column order and types are part of the
+contract:</p>
+<table>
+<colgroup>
+<col width="33%" />
+<col width="33%" />
+<col width="33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Column</th>
+<th>Normalized type</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>instrument</code></td>
+<td>Character</td>
+<td>Selected raw instrument name.</td>
+</tr>
+<tr class="even">
+<td><code>redcap_event_name</code></td>
+<td>Character</td>
+<td>Exact raw event; typed <code>NA</code> only for a classic
+project.</td>
+</tr>
+<tr class="odd">
+<td><code>repeat_instance</code></td>
+<td>Integer</td>
+<td>Exact positive instance for a repeating context; otherwise
+<code>NA_integer_</code>.</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>extended_schedule &lt;- data.frame(
+  instrument = c(&quot;labs&quot;, &quot;labs&quot;),
+  redcap_event_name = c(&quot;month_3_arm_1&quot;, &quot;month_3_arm_1&quot;),
+  repeat_instance = c(1L, 2L)
 )
 
-verified_report$diagnostics$verification</code></pre>
-<p>Every non-empty issue row is validated against the cached project ID,
-fields, events, form-event mapping, and repeat structure before
-collapsing or filtering. Resolution history is grouped by
-<code>status_id</code>; the greatest <code>ts</code> is latest, with the
-greatest numeric <code>res_id</code> breaking timestamp ties. Only that
-latest resolution can match <code>verified_user</code>, and both its
-<code>current_query_status</code> and the live issue
-<code>query_status</code> must be <code>&quot;VERIFIED&quot;</code>. Historical
-resolutions never authorize an exception. Matching can pass only an
-otherwise-failing field check at the same record/event/repeat/field
-context. It does not create checks or bypass startedness, branching,
-field selection, or the requested report scope. The diagnostics retain
-counts, not the supplied data-quality rows; <code>verified_rows</code>
-counts matching latest resolutions. For a regular context, entirely
-missing <code>repeat_instrument</code> and <code>instance</code> columns
-may use any all-<code>NA</code> storage type returned by
-<code>exportDataQuality()</code>; other upstream <code>instance</code>
-placeholders are ignored. A classic export may carry one positive
-internal event ID, which is normalized to the classic event context.
-True repeating events and instruments still require their instance.</p>
+extended_plan &lt;- plan_from_data(
+  records,
+  rcon,
+  instruments = c(&quot;demographics&quot;, &quot;labs&quot;),
+  extended_schedule = extended_schedule
+)</code></pre>
+<p>Each extension row adds an exact instrument-event-instance
+expectation for all records observed in the applicable arm. A classic
+extension expands across all observed records. An extension into an arm
+with no observed records warns once and adds no target. Omitted
+extension rows never remove observed targets.</p>
 </div>
-<div id="branching-aware-field-checks" class="section level2">
-<h2>Branching-aware field checks</h2>
-<pre class="r"><code>metadata &lt;- dplyr::bind_rows(
-  meta_row(&quot;record_id&quot;, &quot;baseline_form&quot;, required = &quot;y&quot;),
-  meta_row(&quot;branch_flag&quot;, &quot;baseline_form&quot;, field_type = &quot;yesno&quot;, required = &quot;y&quot;),
-  meta_row(&quot;required_note&quot;, &quot;baseline_form&quot;, required = &quot;y&quot;),
-  meta_row(
-    &quot;conditional_note&quot;,
-    &quot;baseline_form&quot;,
-    branching = &quot;[branch_flag] = &#39;1&#39;&quot;,
-    required = &quot;y&quot;
-  )
-)
-
-records &lt;- tibble::tibble(
-  record_id = c(&quot;r1&quot;, &quot;r2&quot;),
-  branch_flag = c(&quot;1&quot;, &quot;0&quot;),
-  required_note = c(&quot;entered&quot;, &quot;entered&quot;),
-  conditional_note = c(&quot;&quot;, &quot;&quot;)
-)
-
-report &lt;- find_missing(
-  data = records,
-  rcon = fake_rcon(metadata),
-  forms = &quot;baseline_form&quot;
-)
-
-get_missing(
-  report,
-  validation_check = &quot;field-complete&quot;
-)[, c(
-  &quot;record_id&quot;,
-  &quot;validation_context&quot;,
-  &quot;form&quot;,
-  &quot;validation_check&quot;,
-  &quot;field_name&quot;
-)]
-#&gt; # A tibble: 1 × 5
-#&gt;   record_id validation_context form          validation_check field_name
-#&gt;   &lt;chr&gt;     &lt;chr&gt;              &lt;chr&gt;         &lt;chr&gt;            &lt;chr&gt;
-#&gt; 1 r1        overall            baseline_form field-complete   conditional_note</code></pre>
-<p>Record <code>r1</code> is branch-open for
-<code>conditional_note</code>, so the missing value is a
-<code>field-complete</code> failure. Record <code>r2</code> is
-branch-closed, so the field is not in the assessment pool.</p>
-<p>The <code>url</code> column from <code>get_missing(report)</code> is
-a raw REDCap Data Entry URL for each failed record/form context when
-<code>rcon</code> includes the required instance, version, and project
-metadata, plus an event ID for longitudinal projects. It is
-<code>NA</code> for connection-like objects that do not provide that
-metadata, including the synthetic helper used here.</p>
-</div>
-<div id="event-row-gating" class="section level2">
-<h2>Event-row gating</h2>
-<p>REDCap exports may omit entire event rows.
-<code>event-row-started</code> catches that before form and field checks
-run downstream.</p>
-<pre class="r"><code>status_metadata &lt;- dplyr::bind_rows(
-  meta_row(&quot;record_id&quot;, &quot;status_form&quot;, required = &quot;y&quot;),
-  meta_row(&quot;status_started&quot;, &quot;status_form&quot;, required = &quot;y&quot;),
-  meta_row(&quot;status_value&quot;, &quot;status_form&quot;, required = &quot;y&quot;)
-)
-
-mapping &lt;- tibble::tibble(
-  arm_num = c(1, 1, 1),
-  unique_event_name = c(&quot;event_1_arm_1&quot;, &quot;event_2_arm_1&quot;, &quot;event_3_arm_1&quot;),
-  form = c(&quot;status_form&quot;, &quot;status_form&quot;, &quot;status_form&quot;)
-)
-
-event_records &lt;- tibble::tibble(
-  record_id = c(&quot;r1&quot;, &quot;r1&quot;, &quot;r2&quot;, &quot;r2&quot;),
+<div id="authoritative-explicit-planning" class="section level2">
+<h2>Authoritative explicit planning</h2>
+<p><code>plan_explicit()</code> uses a complete record-level
+schedule:</p>
+<pre class="text"><code>Assessible targets =
+  rcon-allowable crossings
+  INTERSECT
+  explicit_schedule crossings</code></pre>
+<p>Its exact schema adds <code>record_id</code> at the beginning:</p>
+<table>
+<colgroup>
+<col width="33%" />
+<col width="33%" />
+<col width="33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Column</th>
+<th>Normalized type</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>record_id</code></td>
+<td>Character</td>
+<td>Exact record to assess; it may be absent from
+<code>data</code>.</td>
+</tr>
+<tr class="even">
+<td><code>instrument</code></td>
+<td>Character</td>
+<td>Selected raw instrument name.</td>
+</tr>
+<tr class="odd">
+<td><code>redcap_event_name</code></td>
+<td>Character</td>
+<td>Exact raw event; typed <code>NA</code> only for a classic
+project.</td>
+</tr>
+<tr class="even">
+<td><code>repeat_instance</code></td>
+<td>Integer</td>
+<td>Exact positive instance for a repeating context; otherwise
+<code>NA_integer_</code>.</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>explicit_schedule &lt;- data.frame(
+  record_id = c(&quot;101&quot;, &quot;101&quot;, &quot;102&quot;),
+  instrument = c(&quot;demographics&quot;, &quot;labs&quot;, &quot;demographics&quot;),
   redcap_event_name = c(
-    &quot;event_1_arm_1&quot;,
-    &quot;event_2_arm_1&quot;,
-    &quot;event_1_arm_1&quot;,
-    &quot;event_2_arm_1&quot;
+    &quot;baseline_arm_1&quot;, &quot;month_3_arm_1&quot;, &quot;baseline_arm_1&quot;
   ),
-  status_started = c(&quot;yes&quot;, &quot;yes&quot;, &quot;yes&quot;, &quot;yes&quot;),
-  status_value = c(&quot;entered&quot;, &quot;&quot;, &quot;entered&quot;, &quot;entered&quot;)
+  repeat_instance = c(NA_integer_, 2L, NA_integer_)
 )
 
-event_report &lt;- find_missing(
-  data = event_records,
-  rcon = fake_rcon(status_metadata, mapping = mapping),
-  forms = &quot;status_form&quot;
-)
-
-get_summary(event_report)[
-  ,
-  c(&quot;validation_level&quot;, &quot;validation_check&quot;, &quot;redcap_event_name&quot;, &quot;assessed&quot;, &quot;failed&quot;)
-]
-#&gt; # A tibble: 7 × 5
-#&gt;   validation_level validation_check  redcap_event_name assessed failed
-#&gt;   &lt;chr&gt;            &lt;chr&gt;             &lt;chr&gt;                &lt;int&gt;  &lt;int&gt;
-#&gt; 1 event:form       event-row-started event_1_arm_1            2      0
-#&gt; 2 event:form       event-row-started event_2_arm_1            2      0
-#&gt; 3 event:form       event-row-started event_3_arm_1            2      2
-#&gt; 4 event:form       form-started      event_1_arm_1            2      0
-#&gt; 5 event:form       form-started      event_2_arm_1            2      0
-#&gt; 6 event:form       field-complete    event_1_arm_1            6      0
-#&gt; 7 event:form       field-complete    event_2_arm_1            6      1</code></pre>
-<p><code>event_3_arm_1</code> fails <code>event-row-started</code>, so
-it is not assessed by <code>form-started</code> or
-<code>field-complete</code>.</p>
+explicit_plan &lt;- plan_explicit(
+  data = records,
+  rcon = rcon,
+  instruments = c(&quot;demographics&quot;, &quot;labs&quot;),
+  explicit_schedule = explicit_schedule
+)</code></pre>
+<p>No row expansion occurs. Each schedule row creates only that exact
+target. Observed crossings absent from the schedule are excluded. A
+full-schema zero-row schedule means assess nothing; <code>NULL</code> is
+invalid. A record absent from <code>data</code> remains a target and can
+fail a physical-row check when the plan runs.</p>
+<p>The key schedule distinction is therefore:</p>
+<table>
+<colgroup>
+<col width="33%" />
+<col width="33%" />
+<col width="33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Absence</th>
+<th><code>extended_schedule</code></th>
+<th><code>explicit_schedule</code></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Instrument/event/instance row omitted</td>
+<td>Make no extension; assess if allowable and observed.</td>
+<td>Do not assess that crossing.</td>
+</tr>
+<tr class="even">
+<td>Crossing absent from planner data</td>
+<td>An extension can add it for observed applicable records.</td>
+<td>Its exact schedule row can add it, including for an absent
+record.</td>
+</tr>
+<tr class="odd">
+<td><code>NULL</code></td>
+<td>Valid observed-only planning.</td>
+<td>Error.</td>
+</tr>
+<tr class="even">
+<td>Correct zero-row table</td>
+<td>Valid observed-only planning.</td>
+<td>Valid plan with zero targets.</td>
+</tr>
+</tbody>
+</table>
 </div>
-<div id="event-specific-record-eligibility" class="section level2">
-<h2>Event-specific record eligibility</h2>
-<p>Use <code>records</code> when records become eligible for validation
-on different REDCap events, forms, or repeat instances at different
-times. The argument is a named list keyed by raw
-<code>redcap_event_name</code>. An event-level vector limits every final
-requested form and selected repeat instance at that event. A nested form
-vector limits one event/form context. A nested instance list limits one
-event/form/repeat-instance context. Omitted event, form, and instance
-entries use the default eligibility implied by <code>data</code>,
-<code>forms</code>, <code>events</code>, <code>instances</code>, and
-<code>ignore_ids</code>. Empty, missing, <code>NULL</code>, and
-blank-only record values are errors. To remove an event from assessment
-entirely, exclude it with <code>events</code> rather than using an empty
-<code>records</code> entry.</p>
-<p>Every report stores <code>spec$record_eligibility</code> with one row
-for each final assessed record/event/form/repeat-instance context, even
-when <code>records</code> is omitted. If filtering leaves no assessable
-record IDs, <code>find_missing()</code> stops. Explicit
-<code>records</code> entries are the exception because they can declare
-expected contexts whose absent data rows should fail a row-started
-check.</p>
-<pre class="r"><code>staged_metadata &lt;- dplyr::bind_rows(
-  meta_row(&quot;record_id&quot;, &quot;demographics&quot;, required = &quot;y&quot;),
-  meta_row(&quot;demographics_started&quot;, &quot;demographics&quot;, required = &quot;y&quot;),
-  meta_row(&quot;demographics_value&quot;, &quot;demographics&quot;, required = &quot;y&quot;),
-  meta_row(&quot;surgery_started&quot;, &quot;surgery&quot;, required = &quot;y&quot;),
-  meta_row(&quot;surgery_value&quot;, &quot;surgery&quot;, required = &quot;y&quot;)
-)
-
-staged_mapping &lt;- tibble::tibble(
-  arm_num = c(1, 1, 1),
-  unique_event_name = c(&quot;event_a&quot;, &quot;event_b&quot;, &quot;event_c&quot;),
-  form = c(&quot;demographics&quot;, &quot;surgery&quot;, &quot;surgery&quot;)
-)
-
-staged_records &lt;- tibble::tibble(
-  record_id = c(&quot;record_a&quot;, &quot;record_a&quot;, &quot;record_b&quot;, &quot;record_b&quot;, &quot;record_b&quot;),
-  redcap_event_name = c(&quot;event_a&quot;, &quot;event_b&quot;, &quot;event_a&quot;, &quot;event_b&quot;, &quot;event_c&quot;),
-  demographics_started = c(&quot;yes&quot;, &quot;&quot;, &quot;yes&quot;, &quot;&quot;, &quot;&quot;),
-  demographics_value = c(&quot;entered&quot;, &quot;&quot;, &quot;entered&quot;, &quot;&quot;, &quot;&quot;),
-  surgery_started = c(&quot;&quot;, &quot;yes&quot;, &quot;&quot;, &quot;yes&quot;, &quot;yes&quot;),
-  surgery_value = c(&quot;&quot;, &quot;entered&quot;, &quot;&quot;, &quot;entered&quot;, &quot;&quot;)
-)
-
-staged_report &lt;- find_missing(
-  data = staged_records,
-  rcon = fake_rcon(staged_metadata, mapping = staged_mapping),
-  forms = c(&quot;surgery&quot;, &quot;demographics&quot;),
-  records = list(
-    event_a = c(&quot;record_a&quot;, &quot;record_b&quot;),
-    event_b = c(&quot;record_a&quot;, &quot;record_b&quot;),
-    event_c = list(
-      surgery = &quot;record_b&quot;
-    )
-  )
-)
-
-staged_report$spec$record_eligibility
-#&gt; # A tibble: 5 × 6
-#&gt;   record_id redcap_event_name form         redcap_repeat_instrument
-#&gt;   &lt;chr&gt;     &lt;chr&gt;             &lt;chr&gt;        &lt;chr&gt;
-#&gt; 1 record_a  event_b           surgery      &quot;&quot;
-#&gt; 2 record_b  event_b           surgery      &quot;&quot;
-#&gt; 3 record_b  event_c           surgery      &quot;&quot;
-#&gt; 4 record_a  event_a           demographics &quot;&quot;
-#&gt; 5 record_b  event_a           demographics &quot;&quot;
-#&gt; # ℹ 2 more variables: redcap_repeat_instance &lt;chr&gt;, eligibility_source &lt;chr&gt;
-
-staged_summary &lt;- get_summary(staged_report)
-staged_summary[
-  staged_summary$validation_check == &quot;event-row-started&quot;,
-  c(&quot;form&quot;, &quot;redcap_event_name&quot;, &quot;assessed&quot;, &quot;failed&quot;)
-]
-#&gt; # A tibble: 3 × 4
-#&gt;   form         redcap_event_name assessed failed
-#&gt;   &lt;chr&gt;        &lt;chr&gt;                &lt;int&gt;  &lt;int&gt;
-#&gt; 1 surgery      event_b                  2      0
-#&gt; 2 surgery      event_c                  1      0
-#&gt; 3 demographics event_a                  2      0</code></pre>
-<p>Record <code>record_a</code> is assessed for <code>surgery</code> on
-<code>event_b</code>, but not on <code>event_c</code>. Record
-<code>record_b</code> is assessed on <code>event_c</code>, where its
-blank surgery value fails downstream field completeness.</p>
-<p>If another requested event offered <code>demographics</code> and was
-not named in <code>records</code>, the <code>records</code> argument
-would not limit that event. The package would consider every applicable
-non-ignored record in <code>data</code> for that event, then use
-<code>event-row-started</code> to decide whether each record actually
-has an event row.</p>
-</div>
-<div id="repeat-expectations" class="section level2">
-<h2>Repeat expectations</h2>
-<p>REDCap does not export nonexistent repeat rows. Use
-<code>instances</code> to declare the repeat instances expected for the
-report.</p>
-<pre class="r"><code>repeat_metadata &lt;- dplyr::bind_rows(
-  meta_row(&quot;record_id&quot;, &quot;screen_form&quot;, required = &quot;y&quot;),
-  meta_row(&quot;screen_started&quot;, &quot;screen_form&quot;, required = &quot;y&quot;),
-  meta_row(&quot;repeat_started&quot;, &quot;repeat_form&quot;, required = &quot;y&quot;),
-  meta_row(&quot;repeat_value&quot;, &quot;repeat_form&quot;, required = &quot;y&quot;)
-)
-
-repeat_mapping &lt;- tibble::tibble(
-  arm_num = c(1, 1),
-  unique_event_name = c(&quot;baseline_event&quot;, &quot;baseline_event&quot;),
-  form = c(&quot;screen_form&quot;, &quot;repeat_form&quot;)
-)
-
-repeat_map &lt;- tibble::tibble(
-  event_name = &quot;baseline_event&quot;,
-  form_name = &quot;repeat_form&quot;,
-  custom_form_label = &quot;&quot;
-)
-
-repeat_records &lt;- tibble::tibble(
-  record_id = c(&quot;r1&quot;, &quot;r2&quot;, &quot;r2&quot;),
-  redcap_event_name = c(&quot;baseline_event&quot;, &quot;baseline_event&quot;, &quot;baseline_event&quot;),
-  redcap_repeat_instrument = c(&quot;repeat_form&quot;, &quot;repeat_form&quot;, &quot;repeat_form&quot;),
-  redcap_repeat_instance = c(&quot;1&quot;, &quot;1&quot;, &quot;2&quot;),
-  repeat_started = c(&quot;yes&quot;, &quot;yes&quot;, &quot;yes&quot;),
-  repeat_value = c(&quot;10&quot;, &quot;20&quot;, &quot;30&quot;)
-)
-
-repeat_report &lt;- find_missing(
-  data = repeat_records,
-  rcon = fake_rcon(
-    repeat_metadata,
-    mapping = repeat_mapping,
-    repeat_instrument_event = repeat_map
-  ),
-  forms = &quot;repeat_form&quot;,
-  instances = 2L
-)
-
-get_missing(
-  repeat_report,
-  validation_check = &quot;instance-row-started&quot;
-)[, c(
-  &quot;record_id&quot;,
-  &quot;redcap_event_name&quot;,
-  &quot;redcap_repeat_instrument&quot;,
-  &quot;redcap_repeat_instance&quot;,
-  &quot;validation_context&quot;,
-  &quot;form&quot;,
-  &quot;validation_check&quot;
-)]
-#&gt; # A tibble: 1 × 7
-#&gt;   record_id redcap_event_name redcap_repeat_instrument redcap_repeat_instance
-#&gt;   &lt;chr&gt;     &lt;chr&gt;             &lt;chr&gt;                    &lt;chr&gt;
-#&gt; 1 r1        baseline_event    repeat_form              2
-#&gt; # ℹ 3 more variables: validation_context &lt;chr&gt;, form &lt;chr&gt;,
-#&gt; #   validation_check &lt;chr&gt;</code></pre>
-<p>The missing instance <code>2</code> for record <code>r1</code> fails
-<code>instance-row-started</code> and is removed from downstream form
-and field assessment.</p>
-</div>
-<div id="mixed-regular-and-repeating-contexts" class="section level2">
-<h2>Mixed regular and repeating contexts</h2>
-<p>Some REDCap projects offer the same form as regular on one event and
-repeating on another. The package activates event/form checks per
-context:</p>
+<div id="classic-longitudinal-and-repeat-contexts" class="section level2">
+<h2>Classic, longitudinal, and repeat contexts</h2>
+<p>In classic projects, <code>redcap_event_name</code> is structurally
+inapplicable and is normalized to <code>NA_character_</code>. Schedule
+event cells may be typed missing or blank; nonblank event names
+error.</p>
+<p>Longitudinal data requires a nonblank raw
+<code>redcap_event_name</code> on every physical row. Extensions expand
+only across records observed in that event’s arm. An explicit record
+observed in one arm cannot be scheduled into a contradictory arm.</p>
+<p>Repeating projects require <code>redcap_repeat_instrument</code> and
+<code>redcap_repeat_instance</code> together in record data. The
+instrument column is:</p>
 <ul>
-<li>regular event contexts use <code>event-row-started</code></li>
-<li>repeating contexts use <code>instance-row-started</code></li>
+<li>the raw instrument name for a repeating-instrument row;</li>
+<li>structurally <code>NA</code> for a regular row; and</li>
+<li>structurally <code>NA</code> for a repeating-event row.</li>
 </ul>
-<p>If <code>events</code> excludes the repeating event,
-<code>instances</code> is ignored for that form. If a requested
-repeating context omits <code>instances</code>, the package assumes
-instance <code>1</code> and warns once.</p>
+<p>The instance is a positive integer for every repeating row and
+structurally <code>NA_integer_</code> for a regular row. An instrument
+can be regular at one event and repeating at another:</p>
+<pre class="r"><code>mixed_schedule &lt;- data.frame(
+  instrument = c(&quot;labs&quot;, &quot;labs&quot;, &quot;labs&quot;),
+  redcap_event_name = c(
+    &quot;baseline_arm_1&quot;, &quot;month_3_arm_1&quot;, &quot;month_3_arm_1&quot;
+  ),
+  repeat_instance = c(NA_integer_, 1L, 2L)
+)</code></pre>
+<p>The first row is the regular baseline target. The next two rows are
+exact month-3 repeat targets; instance <code>2L</code> does not imply
+instance 1.</p>
 </div>
-<div id="inspecting-results" class="section level2">
-<h2>Inspecting results</h2>
-<p>Use <code>get_summary()</code> to review validation counts and rates.
-Use <code>get_missing()</code> to identify the failed record or field
-contexts that need follow-up. Both accessors can focus the report by
-validation check, event, or form.</p>
-<pre class="r"><code>summary_result &lt;- get_summary(report)
-summary_result
-#&gt; # A tibble: 3 × 11
-#&gt;   redcap_event_name form          redcap_repeat_instrum…¹ redcap_repeat_instance
-#&gt;   &lt;chr&gt;             &lt;chr&gt;         &lt;chr&gt;                   &lt;chr&gt;
-#&gt; 1 &quot;&quot;                baseline_form &quot;&quot;                      &quot;&quot;
-#&gt; 2 &quot;&quot;                baseline_form &quot;&quot;                      &quot;&quot;
-#&gt; 3 &quot;&quot;                baseline_form &quot;&quot;                      &quot;&quot;
-#&gt; # ℹ abbreviated name: ¹​redcap_repeat_instrument
-#&gt; # ℹ 7 more variables: validation_level &lt;chr&gt;, validation_check &lt;chr&gt;,
-#&gt; #   assessed &lt;int&gt;, passed &lt;int&gt;, failed &lt;int&gt;, pass_rate &lt;dbl&gt;,
-#&gt; #   fail_rate &lt;dbl&gt;
+<div id="plan-contents" class="section level2">
+<h2>Plan contents</h2>
+<p>Both constructors return the same object with exactly these top-level
+components:</p>
+<pre class="text"><code>schema_version
+construction
+instruments
+assessible_targets
+project
+structure_fingerprint</code></pre>
+<p><code>construction</code> is <code>&quot;from_data&quot;</code> or
+<code>&quot;explicit&quot;</code>. The target table contains canonical
+<code>record_id</code>, <code>instrument</code>,
+<code>redcap_event_name</code>, <code>repeat_instrument</code>,
+<code>repeat_instance</code>, and <code>target_source</code>. Provenance
+is <code>&quot;observed&quot;</code>, <code>&quot;extended&quot;</code>,
+<code>&quot;observed+extended&quot;</code>, or <code>&quot;explicit&quot;</code>.</p>
+<p>Targets are unique and deterministically ordered. The structure
+fingerprint is based on canonicalized project identity, metadata,
+instruments, arms, events, mappings, and repeat configuration. The plan
+retains neither input records nor a live connection.</p>
+</div>
+<div id="running-the-plan" class="section level2">
+<h2>Running the plan</h2>
+<pre class="r"><code>report &lt;- run_plan(
+  plan = extended_plan,
+  data = records,
+  rcon = rcon,
+  required_fields = TRUE,
+  ignore_fields = NULL,
+  exclude_types = &quot;descriptive&quot;,
+  verified = NULL,
+  verified_user = NULL,
+  details = FALSE,
+  progress = interactive()
+)</code></pre>
+<table>
+<colgroup>
+<col width="18%" />
+<col width="25%" />
+<col width="18%" />
+<col width="18%" />
+<col width="18%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Argument</th>
+<th align="right">Required</th>
+<th>Default</th>
+<th>Accepted values</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>plan</code></td>
+<td align="right">Yes</td>
+<td>None</td>
+<td>A validated <code>redcapmissing_plan</code> from
+<code>plan_from_data()</code> or <code>plan_explicit()</code>.</td>
+<td>Supplies frozen Assessible targets, selected instruments,
+provenance, and the project fingerprint.</td>
+</tr>
+<tr class="even">
+<td><code>data</code></td>
+<td align="right">Yes</td>
+<td>None</td>
+<td>A data frame or tibble with structural rows and every
+response/dependency column required by the selected checks.</td>
+<td>Supplies the current REDCap rows and values to evaluate.</td>
+</tr>
+<tr class="odd">
+<td><code>rcon</code></td>
+<td align="right">Yes</td>
+<td>None</td>
+<td>The same unchanged REDCap connection or supported connection-like
+object used to describe the plan’s project.</td>
+<td>Supplies current project identity and structure.</td>
+</tr>
+<tr class="even">
+<td><code>required_fields</code></td>
+<td align="right">No</td>
+<td><code>TRUE</code></td>
+<td>One nonmissing logical value.</td>
+<td>Starts field-complete selection with required-only fields
+(<code>TRUE</code>) or all instrument fields (<code>FALSE</code>).</td>
+</tr>
+<tr class="odd">
+<td><code>ignore_fields</code></td>
+<td align="right">No</td>
+<td><code>NULL</code></td>
+<td><code>NULL</code>, <code>character(0)</code>, or unique nonblank raw
+metadata field names.</td>
+<td>Removes named fields from field-complete assessment.</td>
+</tr>
+<tr class="even">
+<td><code>exclude_types</code></td>
+<td align="right">No</td>
+<td><code>&quot;descriptive&quot;</code></td>
+<td><code>NULL</code>, <code>character(0)</code>, or unique nonblank
+metadata field types.</td>
+<td>Removes field types from field-complete assessment.</td>
+</tr>
+<tr class="odd">
+<td><code>verified</code></td>
+<td align="right">No</td>
+<td><code>NULL</code></td>
+<td><code>NULL</code>, a complete zero-row template, or a data
+frame/tibble with the nine required columns below.</td>
+<td>Supplies field-level verification evidence and must be paired with
+<code>verified_user</code>.</td>
+</tr>
+<tr class="even">
+<td><code>verified_user</code></td>
+<td align="right">No</td>
+<td><code>NULL</code></td>
+<td><code>NULL</code> or one nonblank, unpadded character username.</td>
+<td>Selects the exact case-sensitive reviewer and must be paired with
+<code>verified</code>.</td>
+</tr>
+<tr class="odd">
+<td><code>details</code></td>
+<td align="right">No</td>
+<td><code>FALSE</code></td>
+<td>One nonmissing logical value.</td>
+<td>Retains or omits detailed validation rows without changing
+assessment results.</td>
+</tr>
+<tr class="even">
+<td><code>progress</code></td>
+<td align="right">No</td>
+<td><code>interactive()</code></td>
+<td>One nonmissing logical value.</td>
+<td>Enables or disables twelve-stage progress reporting.</td>
+</tr>
+</tbody>
+</table>
+<p><code>run_plan()</code> accepts a newer record snapshot from the same
+structurally unchanged project. Targets remain frozen: added unplanned
+rows cannot create new targets, and an absent planned row fails its
+applicable gate.</p>
+<p>The runner records these stages in order:</p>
+<table>
+<thead>
+<tr class="header">
+<th align="right">Stage</th>
+<th>Operation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="right">1</td>
+<td>Validate plan, data, and <code>rcon</code>.</td>
+</tr>
+<tr class="even">
+<td align="right">2</td>
+<td>Validate and normalize verification.</td>
+</tr>
+<tr class="odd">
+<td align="right">3</td>
+<td>Resolve instrument-start fields.</td>
+</tr>
+<tr class="even">
+<td align="right">4</td>
+<td>Resolve field-complete fields.</td>
+</tr>
+<tr class="odd">
+<td align="right">5</td>
+<td>Join Assessible targets to physical rows.</td>
+</tr>
+<tr class="even">
+<td align="right">6</td>
+<td>Run <code>event-row-started</code>.</td>
+</tr>
+<tr class="odd">
+<td align="right">7</td>
+<td>Run <code>repeat-instance-row-started</code>.</td>
+</tr>
+<tr class="even">
+<td align="right">8</td>
+<td>Run <code>instrument-started</code>.</td>
+</tr>
+<tr class="odd">
+<td align="right">9</td>
+<td>Run raw <code>field-complete</code>.</td>
+</tr>
+<tr class="even">
+<td align="right">10</td>
+<td>Apply verification.</td>
+</tr>
+<tr class="odd">
+<td align="right">11</td>
+<td>Aggregate effective results.</td>
+</tr>
+<tr class="even">
+<td align="right">12</td>
+<td>Construct the report.</td>
+</tr>
+</tbody>
+</table>
+<p>Every longitudinal target first receives an event gate. Every
+repeating target receives a repeat-instance gate after the event gate.
+Classic event gates and regular repeat gates are not applicable. A
+failed event or repeat gate makes downstream checks not reached. Field
+completeness runs only after the instrument-started check passes.</p>
+<pre class="r"><code>registry()
+#&gt; validation registry
+#&gt; 4 checks; 2 levels
+#&gt; +------------------------------------+-----------------------+---------------------------------+
+#&gt; | level                              | check                 | meaning                         |
+#&gt; +------------------------------------+-----------------------+---------------------------------+
+#&gt; | event:instrument                   | event-row-started     | event row exists                |
+#&gt; | event:instrument:instance          | event-row-started     | event row exists                |
+#&gt; | event:instrument                   | repeat-instance-row-~ | repeat instance row exists      |
+#&gt; | event:instrument:instance          | repeat-instance-row-~ | repeat instance row exists      |
+#&gt; | event:instrument                   | instrument-started    | instrument has data             |
+#&gt; | event:instrument:instance          | instrument-started    | instrument has data             |
+#&gt; | event:instrument                   | field-complete        | field complete                  |
+#&gt; | event:instrument:instance          | field-complete        | field complete                  |
+#&gt; +------------------------------------+-----------------------+---------------------------------+</code></pre>
+<p>Report validation levels are <code>event:instrument</code> and
+<code>event:instrument:instance</code>.</p>
+</div>
+<div id="instrument-started-and-field-policy" class="section level2">
+<h2>Instrument-started and field policy</h2>
+<p>Instrument-started asks whether data entry began. Its stable
+detection set is all data-entry metadata fields on the selected
+instrument except the project record ID and <code>descriptive</code> or
+<code>calc</code> fields. Checkbox roots expand to exported child
+columns. A selected instrument with no usable detection fields
+errors.</p>
+<p>Field-complete asks whether fields selected by policy are complete.
+The exact policy order is:</p>
+<pre class="text"><code>all fields on the selected instrument
+-&gt; required-only filter when required_fields = TRUE
+-&gt; exclude_types removal
+-&gt; ignore_fields removal</code></pre>
+<p><code>ignore_fields</code> uses raw metadata field names, including
+checkbox roots rather than exported checkbox-child names. Unknown,
+duplicate, blank, padded, or irrelevant field names and types error.</p>
+<p>These three arguments affect only field-complete checks. An optional,
+ignored, or excluded-type field may still establish that the instrument
+started. If policy leaves no fields, the field-complete status is
+<code>not applicable</code>, its reason is
+<code>no assessible fields after field policy</code>, and rates are
+<code>NA_real_</code>.</p>
+<p>Branching logic determines whether each selected field applies in its
+exact context. Checkbox roots are complete when at least one exported
+child choice is selected. Missing detection, selected response,
+checkbox-child, or branching dependency columns error before assessment;
+an unexported field is never silently treated as blank.</p>
+</div>
+<div id="verification" class="section level2">
+<h2>Verification</h2>
+<p><code>verified</code> and <code>verified_user</code> must be both
+supplied or both <code>NULL</code>. A supplied verification table
+requires these columns; extra columns are ignored:</p>
+<table>
+<colgroup>
+<col width="25%" />
+<col width="25%" />
+<col width="25%" />
+<col width="25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Column</th>
+<th>Accepted storage and values</th>
+<th>Accepted missing values</th>
+<th>Internal normalization</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>project_id</code></td>
+<td>Nonblank character, integer, or finite whole-number double matching
+the project.</td>
+<td>None.</td>
+<td>Canonical character project ID.</td>
+</tr>
+<tr class="even">
+<td><code>record</code></td>
+<td>Nonblank character, factor, integer, or finite double.</td>
+<td>None.</td>
+<td>Character record ID; factor labels are preserved.</td>
+</tr>
+<tr class="odd">
+<td><code>event_id</code></td>
+<td>Canonical positive integer as character, integer, or whole-number
+double; classic projects also accept an entirely missing logical
+column.</td>
+<td>Typed <code>NA</code>, blank, or whitespace only where the classic
+event dimension is inapplicable.</td>
+<td>Character event ID and mapped raw event name, or
+<code>NA_character_</code> where inapplicable.</td>
+</tr>
+<tr class="even">
+<td><code>field_name</code></td>
+<td>Nonblank, unpadded character raw field name.</td>
+<td>None.</td>
+<td>Character.</td>
+</tr>
+<tr class="odd">
+<td><code>repeat_instrument</code></td>
+<td>Character raw instrument; an entirely missing logical, integer, or
+double column is accepted where inapplicable.</td>
+<td>Typed <code>NA</code>, blank, or whitespace only for regular and
+repeating-event contexts.</td>
+<td>Character instrument or <code>NA_character_</code>.</td>
+</tr>
+<tr class="even">
+<td><code>instance</code></td>
+<td>Canonical positive integer as character, integer, or whole-number
+double; an entirely missing logical column is accepted where
+inapplicable.</td>
+<td>Typed <code>NA</code>, blank, or whitespace only for regular
+contexts.</td>
+<td>Positive integer or <code>NA_integer_</code>.</td>
+</tr>
+<tr class="odd">
+<td><code>ts</code></td>
+<td>Nonmissing <code>POSIXct</code> or documented REDCap/ISO-8601
+character timestamp.</td>
+<td>None.</td>
+<td><code>POSIXct</code> in UTC; timezone-less text is UTC.</td>
+</tr>
+<tr class="even">
+<td><code>current_query_status</code></td>
+<td>Nonblank, unpadded character text.</td>
+<td>None.</td>
+<td>Case-preserved character; only exact <code>&quot;VERIFIED&quot;</code> can
+apply.</td>
+</tr>
+<tr class="odd">
+<td><code>username</code></td>
+<td>Nonblank, unpadded character text.</td>
+<td>None.</td>
+<td>Case-preserved character matched exactly to
+<code>verified_user</code>.</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>verified_report &lt;- run_plan(
+  explicit_plan,
+  records,
+  rcon,
+  verified = quality_rows,
+  verified_user = &quot;reviewer_username&quot;,
+  details = TRUE
+)</code></pre>
+<p>Every row is validated before filtering. For the exact case-sensitive
+user, the latest timestamp per normalized field context wins. Identical
+latest ties collapse; conflicting latest ties error. Only exact
+<code>&quot;VERIFIED&quot;</code> changes an otherwise-failing, already-assessed
+field-complete result. It cannot create a target, bypass a gate, start
+an instrument, affect an already-passing field, or restore a field
+removed by policy or branching.</p>
+<p>The result stores verification audit counts, never the supplied rows.
+With <code>details = TRUE</code>, detailed field rows include raw
+disposition, whether verification applied, and effective disposition.
+Compact and detailed modes produce the same targets, summary, and
+missing results.</p>
+</div>
+<div id="missing-blank-and-absent-values" class="section level2">
+<h2>Missing, blank, and absent values</h2>
+<p>The same representation has different meanings at different exposure
+points:</p>
+<table>
+<colgroup>
+<col width="25%" />
+<col width="25%" />
+<col width="25%" />
+<col width="25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Representation</th>
+<th>Structural identifier or schedule</th>
+<th>Response field</th>
+<th>Scalar/vector argument</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Typed <code>NA</code></td>
+<td>Valid only where that dimension is inapplicable; otherwise
+error.</td>
+<td>Missing.</td>
+<td>Valid only when explicitly documented; logical scalar
+<code>NA</code> errors.</td>
+</tr>
+<tr class="even">
+<td><code>NaN</code></td>
+<td>Error.</td>
+<td>Missing.</td>
+<td>Error where numeric values are accepted structurally.</td>
+</tr>
+<tr class="odd">
+<td><code>Inf</code>, <code>-Inf</code></td>
+<td>Error for numeric identifiers and instances.</td>
+<td>Not automatically missing.</td>
+<td>Error where finite values are required.</td>
+</tr>
+<tr class="even">
+<td><code>&quot;&quot;</code> or whitespace-only</td>
+<td>Structural <code>NA</code> only where inapplicable; otherwise
+error.</td>
+<td>Missing.</td>
+<td>Blank names and users error.</td>
+</tr>
+<tr class="odd">
+<td><code>&quot;NA&quot;</code>, <code>&quot;N/A&quot;</code>, <code>&quot;NULL&quot;</code>,
+<code>&quot;.&quot;</code>, <code>&quot;-999&quot;</code></td>
+<td>Literal text, validated as such.</td>
+<td>Ordinary nonmissing text.</td>
+<td>Literal text, validated as such.</td>
+</tr>
+<tr class="even">
+<td><code>NULL</code></td>
+<td>Not a cell value.</td>
+<td>Not a cell value.</td>
+<td>Omitted/disabled only where documented.</td>
+</tr>
+<tr class="odd">
+<td><code>character(0)</code></td>
+<td>Not a dataset cell.</td>
+<td>Not a dataset cell.</td>
+<td>No exclusion for field vectors; invalid for required instrument
+selection.</td>
+</tr>
+<tr class="even">
+<td>Zero-row data frame</td>
+<td>Valid only with the complete required schema.</td>
+<td>No responses.</td>
+<td>Observed planner data cannot be zero-row; explicit planner/runtime
+data may be.</td>
+</tr>
+<tr class="odd">
+<td>Absent column</td>
+<td>Error when required by project structure or evaluation.</td>
+<td>Error when required for a check.</td>
+<td>Not applicable.</td>
+</tr>
+<tr class="even">
+<td>Absent row</td>
+<td>Meaning depends on the input table.</td>
+<td>A planned physical row can fail.</td>
+<td>Not applicable.</td>
+</tr>
+</tbody>
+</table>
+<p>Record IDs accept character, factor, integer, or finite double and
+normalize to character. Character leading zeros are preserved. Missing,
+blank, padded, <code>NaN</code>, and infinite IDs error.</p>
+<p>Repeat instances accept positive integer, whole-number double, or
+canonical character digits and normalize to integer. Leading-zero
+strings, zero, negative, decimal, missing repeating instances,
+noncanonical text, <code>NaN</code>, infinity, and overflow error.</p>
+<p>Physical row identity is unique on record ID, event, repeating
+instrument, and instance. Normalization collisions produce duplicate-key
+errors; rows are never silently discarded or identifiers trimmed.</p>
+<p>For absent rows specifically:</p>
+<ul>
+<li>planner <code>data</code>: a crossing is unobserved but may be
+scheduled;</li>
+<li><code>extended_schedule</code>: make no extension and retain any
+allowable observed crossing;</li>
+<li><code>explicit_schedule</code>: do not assess that exact
+crossing;</li>
+<li>runtime <code>data</code>: the frozen target remains and may fail a
+physical-row gate;</li>
+<li><code>verified</code>: no evidence exists for that exact field
+context.</li>
+</ul>
+</div>
+<div id="results-and-presentation" class="section level2">
+<h2>Results and presentation</h2>
+<p>A <code>redcapmissing</code> object has exactly:</p>
+<pre class="text"><code>plan
+target_results
+summary
+missing
+verification
+diagnostics
+details</code></pre>
+<p><code>target_results</code> has one row per Assessible target and
+records provenance, all four check statuses, field counts, and any
+field-applicability reason. Statuses are <code>passed</code>,
+<code>failed</code>, <code>not applicable</code>, and
+<code>not reached</code>.</p>
+<p><code>summary</code> aggregates assessed, passed, and failed counts
+and exposes applicability <code>status</code> and <code>reason</code>.
+<code>missing</code> contains effective unresolved failures only.
+Structural columns use typed missing values, not blank-string
+placeholders.</p>
+<pre class="r"><code>get_summary(report)
+get_summary(report, instruments = &quot;labs&quot;)
+get_missing(report, validation_check = &quot;field-complete&quot;)
 
-missing_result &lt;- get_missing(
-  report,
-  validation_check = &quot;field-complete&quot;
-)
-missing_result[, c(&quot;record_id&quot;, &quot;form&quot;, &quot;field_name&quot;, &quot;field_label&quot;)]
-#&gt; # A tibble: 1 × 4
-#&gt;   record_id form          field_name       field_label
-#&gt;   &lt;chr&gt;     &lt;chr&gt;         &lt;chr&gt;            &lt;chr&gt;
-#&gt; 1 r1        baseline_form conditional_note conditional_note</code></pre>
-<p>See <code>?get_summary</code> and <code>?get_missing</code> for their
-complete filtering and return contracts.</p>
-<p>For presentation, <code>flexify()</code> turns either accessor result
-into a flextable, while <code>flex_event_forms()</code> provides a
-compact event/form overview of due, started, and incomplete form
-opportunities:</p>
-<pre class="r"><code>summary_ft &lt;- flexify(summary_result)
-missing_ft &lt;- flexify(missing_result)
-event_form_ft &lt;- flex_event_forms(event_report)</code></pre>
-<p>Use the accessor tables for detailed review and
-<code>flex_event_forms()</code> for a high-level reporting view. See
-<code>?flexify</code> for compatible input shapes and formatting
-behavior, and <code>?flex_event_forms</code> for the complete metric and
-threshold definitions.</p>
+flexify(get_summary(report))
+flex_event_instruments(report, missing_threshold = 0.1)
+flex_html(flexify(get_missing(report)))</code></pre>
+<p>Accessor filters are exact and case-sensitive. Their optional label
+attribute contains named <code>events</code> and
+<code>instruments</code> vectors for presentation.</p>
 </div>
 
 
