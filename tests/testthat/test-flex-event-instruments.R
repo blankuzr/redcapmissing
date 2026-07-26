@@ -37,7 +37,7 @@ flex_event_instruments_report <- function() {
       )],
       project = list(
         project_id = "1", record_id_field = "record_id", longitudinal = TRUE,
-        event_labels = c(baseline_event = "Baseline", followup_event = "Follow-up"),
+        event_labels = c(baseline_event = "Baseline", followup_event = "Follow up"),
         instrument_labels = c(alpha = "Alpha", beta = "Beta", "repeat" = "Repeat")
       ),
       structure_fingerprint = strrep("0", 64L)
@@ -59,7 +59,7 @@ test_that("flex_event_instruments replaces the retired form API", {
   expect_false(exists("flex_event_forms", envir = asNamespace("redcapmissing"), inherits = FALSE))
 })
 
-test_that("event-instrument data is computed from frozen target results", {
+test_that("event and instrument data is computed from target_results", {
   parts <- .redcapmissing_flex_event_instruments_build(
     flex_event_instruments_report(),
     missing_threshold = 0.10
@@ -76,7 +76,7 @@ test_that("event-instrument data is computed from frozen target results", {
   )
   expect_identical(parts$missing_threshold_heading, "Instrument >10% Missing")
   expect_identical(result$row_type, c("all", "event", "instrument", "instrument", "event", "instrument"))
-  expect_identical(result$Event, c("All", "Baseline", "", "", "Follow-up", ""))
+  expect_identical(result$Event, c("All", "Baseline", "", "", "Follow up", ""))
   expect_identical(result$Instrument, c("", "", "Alpha", "Repeat", "", "Beta"))
   expect_identical(result$N, c("", "2/2 (100%)", "", "0/1 (0%)", "1/2 (50%)", ""))
   expect_identical(result$`Instrument Incomplete`, c("4/5 (80%)", "", "1/2 (50%)", "1/1 (100%)", "", "2/2 (100%)"))
@@ -84,7 +84,7 @@ test_that("event-instrument data is computed from frozen target results", {
   expect_identical(result$`Instrument Missing Threshold`, c("4/5 (80%)", "", "1/2 (50%)", "1/1 (100%)", "", "2/2 (100%)"))
 })
 
-test_that("missing-threshold comparison is strict below one", {
+test_that("missing threshold comparison is strict below one", {
   result <- .redcapmissing_flex_event_instruments_build(
     flex_event_instruments_report(),
     missing_threshold = 0.5
@@ -100,7 +100,7 @@ test_that("missing-threshold comparison is strict below one", {
   )
 })
 
-test_that("integer and double one use identical missing-threshold semantics", {
+test_that("integer and double one use identical missing threshold semantics", {
   report <- flex_event_instruments_report()
   integer_parts <- .redcapmissing_flex_event_instruments_build(
     report,
@@ -122,7 +122,7 @@ test_that("integer and double one use identical missing-threshold semantics", {
   )
 })
 
-test_that("event-instrument formatter validates its public threshold", {
+test_that("event and instrument formatter validates its public threshold", {
   for (value in list(NA_real_, Inf, -0.1, 1.1, numeric(), c(0.1, 0.2), "0.1")) {
     expect_error(
       .redcapmissing_flex_event_instruments_build(
@@ -134,7 +134,7 @@ test_that("event-instrument formatter validates its public threshold", {
   }
 })
 
-test_that("event-instrument formatter rejects malformed target results", {
+test_that("event and instrument formatter rejects malformed target results", {
   report <- flex_event_instruments_report()
   report$target_results$repeat_instance <- as.character(report$target_results$repeat_instance)
   expect_error(
@@ -159,7 +159,7 @@ test_that("flex_event_instruments returns a flextable when dependencies exist", 
   expect_true("Instrument" %in% names(result$body$dataset))
   expect_false("Form" %in% names(result$body$dataset))
 })
-test_that("event-instrument aggregation scales by native contexts", {
+test_that("aggregates many target contexts accurately", {
   record_count <- 200L
   instance_count <- 40L
   grid <- expand.grid(
@@ -210,7 +210,7 @@ test_that("event-instrument aggregation scales by native contexts", {
   ))
 })
 
-test_that("event aggregation detects conflicting record-event gates", {
+test_that("event aggregation detects conflicting record and event gates", {
   report <- flex_event_instruments_report()
   report$target_results$event_row_started[[3L]] <- "failed"
 

@@ -10,13 +10,13 @@ get_missing(report, validation_check = NULL, events = NULL, instruments = NULL)
 \item{report}{A validated \code{redcapmissing} object created by \code{\link[=run_plan]{run_plan()}}.}
 
 \item{validation_check}{\code{NULL}, or a nonempty character vector containing one
-or more exact canonical codes from \code{\link[=registry]{registry()}}: \code{"event-row-started"},
+or more exact codes from \code{\link[=registry]{registry()}}: \code{"event-row-started"},
 \code{"repeat-instance-row-started"}, \code{"instrument-started"}, or
 \code{"field-complete"}.}
 
 \item{events}{\code{NULL}, or a nonempty character vector of exact raw REDCap
-unique event names represented by the plan. Classic-project event context
-is structurally missing and is not selected by a text value.}
+unique event names represented by the plan. Classic project event context
+is \code{NA_character_}; filters contain raw event names.}
 
 \item{instruments}{\code{NULL}, or a nonempty character vector of exact raw REDCap
 instrument names selected by the plan.}
@@ -24,36 +24,35 @@ instrument names selected by the plan.}
 \value{
 A tibble with exactly these columns and storage types:\tabular{ll}{
    Column \tab Storage and meaning \cr
-   \code{record_id} \tab Character canonical record ID \cr
+   \code{record_id} \tab Character normalized record ID \cr
    \code{redcap_event_name} \tab Character raw event name; \code{NA_character_} in classic projects \cr
    \code{repeat_instrument} \tab Character raw repeating instrument; otherwise \code{NA_character_} \cr
    \code{repeat_instance} \tab Integer exact instance; otherwise \code{NA_integer_} \cr
    \code{validation_context} \tab Character display context for the event/repeat location \cr
    \code{instrument} \tab Character raw instrument name \cr
-   \code{validation_check} \tab Character canonical validation-check code from \code{\link[=registry]{registry()}} \cr
-   \code{field_name}, \code{field_label}, \code{field_type}, \code{branching_logic} \tab Character field context; typed missing for failures not tied to one field \cr
-   \code{url} \tab Character REDCap data-entry URL when it can be constructed; otherwise \code{NA_character_} \cr
+   \code{validation_check} \tab Character validation check code from \code{\link[=registry]{registry()}} \cr
+   \code{field_name}, \code{field_label}, \code{field_type}, \code{branching_logic} \tab Character field context; typed missing for target level check failures \cr
+   \code{url} \tab Character REDCap data entry URL when it can be constructed; otherwise \code{NA_character_} \cr
 }
 
 
-Structural absence is represented by typed missing values, never blank-string
-placeholders. The tibble has a \code{redcapmissing_labels} attribute containing
-named character vectors \code{events} and \code{instruments} for presentation; raw
-values remain the filtering and data contract.
+Structural absence is represented by typed missing values. The tibble has a
+\code{redcapmissing_labels} attribute containing named character vectors \code{events}
+and \code{instruments} for presentation; raw
+values remain in the returned data and are used for filtering.
 }
 \description{
 \code{get_missing()} returns effective unresolved failures stored by \code{\link[=run_plan]{run_plan()}}.
-Verification-applied failures are absent. Filters subset the completed report
-without rerunning checks or changing denominators.
+Rows successfully overridden by verification are omitted. Filters select rows
+from the stored missing component. Assessment results and denominators remain
+those computed by \code{\link[=run_plan]{run_plan()}}.
 }
 \examples{
 \dontrun{
-plan <- plan_from_data(records, rcon, "baseline")
-report <- run_plan(plan, records, rcon)
-
+# report and instruments are caller supplied.
 get_missing(report)
 get_missing(report, validation_check = "field-complete")
-get_missing(report, instruments = "baseline")
+get_missing(report, instruments = instruments)
 }
 
 }

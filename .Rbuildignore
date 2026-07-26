@@ -21,3 +21,4 @@
 ^Meta$
 ^\.codex/.*$
 ^tools/benchmark-plan-run\.R$
+^tests/testthat/behavior_matrix\.md$

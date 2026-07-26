@@ -72,14 +72,14 @@ test_that("flexify drops jointly absent repeat columns without mutating input", 
   expect_identical(input, original)
 })
 
-test_that("flexify rejects retired and cross-schema columns", {
+test_that("flexify rejects retired columns and columns from different schemas", {
   input <- flexify_summary_fixture()
   input$form <- input$instrument
   expect_error(.redcapmissing_check_flexify_input(input), "unsupported column")
 
   input <- flexify_summary_fixture()
   input$field_name <- NA_character_
-  expect_error(.redcapmissing_check_flexify_input(input), "combine summary-only")
+  expect_error(.redcapmissing_check_flexify_input(input), "use columns from one accessor schema")
 
   input <- flexify_summary_fixture()
   input$repeat_instance <- as.character(input$repeat_instance)

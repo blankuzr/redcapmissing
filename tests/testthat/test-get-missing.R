@@ -35,7 +35,7 @@ missing_report_fixture <- function() {
       assessible_targets = targets,
       project = list(
         project_id = "12", record_id_field = "record_id", longitudinal = TRUE,
-        event_labels = c(baseline_event = "Baseline", followup_event = "Follow-up"),
+        event_labels = c(baseline_event = "Baseline", followup_event = "Follow up"),
         instrument_labels = c(empty = "empty", "repeat" = "Repeat", status = "Status")
       ),
       structure_fingerprint = strrep("0", 64L)
@@ -45,7 +45,7 @@ missing_report_fixture <- function() {
   complete_report_fixture(plan = plan, missing = missing)
 }
 
-test_that("get_missing exposes canonical typed structural values", {
+test_that("get_missing exposes normalized typed structural values", {
   report <- missing_report_fixture()
   result <- get_missing(report)
 
@@ -63,7 +63,7 @@ test_that("get_missing exposes canonical typed structural values", {
   expect_identical(
     attr(result, "redcapmissing_labels"),
     list(
-      events = c(baseline_event = "Baseline", followup_event = "Follow-up"),
+      events = c(baseline_event = "Baseline", followup_event = "Follow up"),
       instruments = c(status = "Status", "repeat" = "Repeat", empty = "empty")
     )
   )
@@ -97,5 +97,5 @@ test_that("get_missing rejects retired filters and malformed storage", {
 
   report <- missing_report_fixture()
   report$missing$validation_check[[1]] <- "old-check"
-  expect_error(get_missing(report), "unknown validation-check")
+  expect_error(get_missing(report), "unknown validation check")
 })

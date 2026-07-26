@@ -21,7 +21,7 @@ test_that("flex_html renders formatted summary HTML when optional packages are a
   expect_true(nchar(html_out) > 0)
 })
 
-test_that("flex_html renders multi-instrument formatted missing rows", {
+test_that("flex_html renders formatted missing rows for multiple instruments", {
   testthat::skip_if_not_installed("flextable")
   testthat::skip_if_not_installed("glue")
   testthat::skip_if_not_installed("htmltools")

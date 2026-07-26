@@ -1,4 +1,4 @@
-test_that("verification arguments are paired and require the nine-column schema", {
+test_that("verification arguments are paired and require the schema with nine columns", {
   rcon <- run_plan_rcon(); data <- run_plan_data(required_note = "")
   plan <- plan_from_data(data, rcon, "baseline_form")
   issue <- run_plan_verified_row()
@@ -49,7 +49,41 @@ test_that("exact latest VERIFIED evidence overrides only a failed field check", 
   expect_identical(result$target_results$field_complete, "passed")
 })
 
-test_that("latest user status is order independent and non-VERIFIED does not apply", {
+test_that("verification results agree across detail settings", {
+  rcon <- run_plan_rcon()
+  data <- run_plan_data(required_note = "")
+  plan <- plan_from_data(data, rcon, "baseline_form")
+  issue <- run_plan_verified_row()
+  ignored <- c("record_id", "branch_flag", "checkbox_field", "conditional_note")
+  run <- function(details) run_plan(
+    plan,
+    data,
+    rcon,
+    ignore_fields = ignored,
+    verified = issue,
+    verified_user = "alice",
+    details = details,
+    progress = FALSE
+  )
+
+  compact <- run(FALSE)
+  detailed <- run(TRUE)
+
+  expect_identical(compact$plan, detailed$plan)
+  expect_identical(compact$target_results, detailed$target_results)
+  expect_identical(compact$summary, detailed$summary)
+  expect_identical(compact$missing, detailed$missing)
+  expect_identical(compact$verification, detailed$verification)
+  expect_identical(
+    compact$diagnostics[setdiff(names(compact$diagnostics), "elapsed_seconds")],
+    detailed$diagnostics[setdiff(names(detailed$diagnostics), "elapsed_seconds")]
+  )
+  expect_null(compact$details)
+  expect_true(is.data.frame(detailed$details))
+  expect_identical(compact$verification$overrides_applied, 1L)
+})
+
+test_that("latest user status is order independent and only VERIFIED applies", {
   rcon <- run_plan_rcon(); data <- run_plan_data(required_note = "")
   plan <- plan_from_data(data, rcon, "baseline_form")
   evidence <- dplyr::bind_rows(
@@ -96,7 +130,7 @@ test_that("all verification rows are validated before user filtering", {
   )
 })
 
-test_that("a complete zero-row verification template is valid and audited", {
+test_that("a complete empty verification template is valid and audited", {
   rcon <- run_plan_rcon(); data <- run_plan_data()
   plan <- plan_from_data(data, rcon, "baseline_form")
   template <- run_plan_verified_row()[0, ]
@@ -139,7 +173,7 @@ test_that("verification nullable columns normalize typed missing values", {
   expect_identical(result$verification$overrides_applied, 1L)
 })
 
-test_that("longitudinal regular verification requires only its event key", {
+test_that("longitudinal verification omits repeat keys when no repeat applies", {
   rcon <- run_plan_rcon(longitudinal = TRUE)
   data <- dplyr::mutate(
     run_plan_data(required_note = ""),
@@ -193,7 +227,7 @@ test_that("longitudinal regular verification requires only its event key", {
   }
 })
 
-test_that("repeating-event verification requires an instance and no repeat instrument", {
+test_that("repeating event verification requires an instance and no repeat instrument", {
   rcon <- run_plan_repeat_event_rcon()
   metadata <- dplyr::bind_rows(
     rcon$metadata(),
@@ -248,7 +282,7 @@ test_that("repeating-event verification requires an instance and no repeat instr
   }
 })
 
-test_that("repeating-instrument verification requires its instrument and instance", {
+test_that("repeating instrument verification requires its instrument and instance", {
   repeat_table <- tibble::tibble(
     event_name = "baseline_arm_1",
     form_name = "baseline_form"
@@ -306,7 +340,7 @@ test_that("repeating-instrument verification requires its instrument and instanc
   }
 })
 
-test_that("verification cannot bypass a missing repeat-instance gate", {
+test_that("verification preserves a failed repeat instance gate", {
   repeat_table <- tibble::tibble(event_name = NA_character_, form_name = "baseline_form")
   rcon <- run_plan_rcon(repeat_table = repeat_table)
   data <- dplyr::mutate(
@@ -341,7 +375,7 @@ test_that("identical latest verification duplicates collapse harmlessly", {
   expect_identical(result$verification$latest_user_rows, 1L)
   expect_identical(result$verification$verified_rows, 1L)
 })
-test_that("verification never changes passing fields and username matching is case sensitive", {
+test_that("verification leaves passing fields unchanged and matches usernames case sensitively", {
   rcon <- run_plan_rcon(); data <- run_plan_data(required_note = "complete")
   plan <- plan_from_data(data, rcon, "baseline_form")
   issue <- run_plan_verified_row()
@@ -522,7 +556,7 @@ test_that("verification extras are ignored and finite POSIXct timestamps normali
   expect_false("ignored_extra" %in% names(result$details))
 })
 
-test_that("verification status and user matching are exact without empty-result warnings", {
+test_that("verification status and user matching are exact with quiet empty results", {
   rcon <- run_plan_rcon()
   data <- run_plan_data(required_note = "")
   plan <- plan_from_data(data, rcon, "baseline_form")
@@ -559,7 +593,7 @@ test_that("verification status and user matching are exact without empty-result 
   expect_identical(no_user$verification$overrides_applied, 0L)
 })
 
-test_that("verification cannot start an instrument or restore removed fields", {
+test_that("verification leaves instrument start and removed fields unchanged", {
   rcon <- run_plan_rcon()
   unstarted <- run_plan_data(
     required_note = "",
@@ -617,7 +651,7 @@ test_that("verification cannot start an instrument or restore removed fields", {
   expect_identical(ignored$verification$overrides_applied, 0L)
 })
 
-test_that("verification cannot create targets or bypass a failed event gate", {
+test_that("verification preserves targets and a failed event gate", {
   rcon <- run_plan_rcon()
   data <- run_plan_data(record_id = "1", required_note = "")
   plan <- plan_from_data(data, rcon, "baseline_form")
@@ -840,7 +874,7 @@ test_that("longitudinal verification rejects malformed event IDs before filterin
     zero_character = "0",
     negative_character = "-1",
     decimal_character = "101.5",
-    noncanonical_text = "event-101",
+    invalid_text = "event-101",
     unknown = 999L,
     zero = 0L,
     negative = -1L,
@@ -911,7 +945,7 @@ test_that("repeating verification rejects malformed instrument and instance keys
     zero_character = "0",
     negative_character = "-1",
     decimal_character = "1.5",
-    noncanonical_text = "first",
+    invalid_text = "first",
     zero = 0L,
     negative = -1L,
     decimal = 1.5,

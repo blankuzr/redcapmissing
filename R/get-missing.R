@@ -1,8 +1,9 @@
 #' Get unresolved missing rows from a REDCap missingness report
 #'
 #' `get_missing()` returns effective unresolved failures stored by [run_plan()].
-#' Verification-applied failures are absent. Filters subset the completed report
-#' without rerunning checks or changing denominators.
+#' Rows successfully overridden by verification are omitted. Filters select rows
+#' from the stored missing component. Assessment results and denominators remain
+#' those computed by [run_plan()].
 #'
 #' @inheritParams get_summary
 #'
@@ -10,29 +11,27 @@
 #'
 #' | Column | Storage and meaning |
 #' |---|---|
-#' | `record_id` | Character canonical record ID |
+#' | `record_id` | Character normalized record ID |
 #' | `redcap_event_name` | Character raw event name; `NA_character_` in classic projects |
 #' | `repeat_instrument` | Character raw repeating instrument; otherwise `NA_character_` |
 #' | `repeat_instance` | Integer exact instance; otherwise `NA_integer_` |
 #' | `validation_context` | Character display context for the event/repeat location |
 #' | `instrument` | Character raw instrument name |
-#' | `validation_check` | Character canonical validation-check code from [registry()] |
-#' | `field_name`, `field_label`, `field_type`, `branching_logic` | Character field context; typed missing for failures not tied to one field |
-#' | `url` | Character REDCap data-entry URL when it can be constructed; otherwise `NA_character_` |
+#' | `validation_check` | Character validation check code from [registry()] |
+#' | `field_name`, `field_label`, `field_type`, `branching_logic` | Character field context; typed missing for target level check failures |
+#' | `url` | Character REDCap data entry URL when it can be constructed; otherwise `NA_character_` |
 #'
-#' Structural absence is represented by typed missing values, never blank-string
-#' placeholders. The tibble has a `redcapmissing_labels` attribute containing
-#' named character vectors `events` and `instruments` for presentation; raw
-#' values remain the filtering and data contract.
+#' Structural absence is represented by typed missing values. The tibble has a
+#' `redcapmissing_labels` attribute containing named character vectors `events`
+#' and `instruments` for presentation; raw
+#' values remain in the returned data and are used for filtering.
 #'
 #' @examples
 #' \dontrun{
-#' plan <- plan_from_data(records, rcon, "baseline")
-#' report <- run_plan(plan, records, rcon)
-#'
+#' # report and instruments are caller supplied.
 #' get_missing(report)
 #' get_missing(report, validation_check = "field-complete")
-#' get_missing(report, instruments = "baseline")
+#' get_missing(report, instruments = instruments)
 #' }
 #'
 #' @seealso [get_summary()], [run_plan()], [registry()], [flexify()]
@@ -106,7 +105,7 @@ get_missing <- function(
   )
   invalid_checks <- setdiff(unique(missing_rows$validation_check), .redcapmissing_validation_checks())
   if (length(invalid_checks) > 0L) {
-    stop("`report$missing` contains unknown validation-check codes.", call. = FALSE)
+    stop("`report$missing` contains unknown validation check codes.", call. = FALSE)
   }
   invisible(missing_rows)
 }

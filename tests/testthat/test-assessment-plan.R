@@ -177,7 +177,7 @@ test_that("classic repeating instruments produce exact observed and extended ins
   expect_identical(demo$target_source, "observed+extended")
 })
 
-test_that("plan_from_data unions observed and arm-scoped longitudinal extensions", {
+test_that("plan_from_data unions observed and applicable arm extensions", {
   rcon <- .plan_longitudinal_rcon()
   data <- .plan_longitudinal_data()
   extension <- tibble::tibble(
@@ -254,7 +254,7 @@ test_that("plan_explicit freezes exact targets including records absent from dat
   )
 })
 
-test_that("a typed zero-row explicit schedule assesses nothing", {
+test_that("a typed empty explicit schedule assesses nothing", {
   rcon <- .plan_fake_rcon()
   data <- tibble::tibble(record_id = character())
   schedule <- tibble::tibble(
@@ -303,13 +303,18 @@ test_that("schedule schemas and allowable crossings fail closed", {
     plan_from_data(data, rcon, "diary", duplicate),
     class = "redcapmissing_error_schedule"
   )
-  regular_with_instance <- tibble::tibble(
+  instance_on_crossing_without_repeat <- tibble::tibble(
     instrument = "demographics",
     redcap_event_name = "baseline_arm_1",
     repeat_instance = 1L
   )
   expect_error(
-    plan_from_data(data, rcon, "demographics", regular_with_instance),
+    plan_from_data(
+      data,
+      rcon,
+      "demographics",
+      instance_on_crossing_without_repeat
+    ),
     class = "redcapmissing_error_schedule"
   )
   unselected <- tibble::tibble(
@@ -377,6 +382,19 @@ test_that("repeating events expand every mapped instrument at the exact instance
   expect_true(all(is.na(repeated$repeat_instrument)))
 })
 
+test_that("fingerprint table normalization ignores row and column order", {
+  original <- tibble::tibble(
+    second = c(2L, 1L),
+    first = factor(c("b", "a"))
+  )
+  reordered <- original[2:1, c("first", "second")]
+
+  expect_identical(
+    redcapmissing:::.rcm_fingerprint_table(original),
+    redcapmissing:::.rcm_fingerprint_table(reordered)
+  )
+})
+
 test_that("project fingerprints are stable to table row order with explicit record identity", {
   rcon <- .plan_longitudinal_rcon()
   rcon$projectInformation <- function() tibble::tibble(
@@ -402,12 +420,12 @@ test_that("project fingerprints are stable to table row order with explicit reco
   expect_identical(first$structure_fingerprint, second$structure_fingerprint)
   fingerprint_input <- list(
     project = first$project,
-    metadata = redcapmissing:::.rcm_canonical(first$metadata),
-    instruments = redcapmissing:::.rcm_canonical(first$instruments),
-    arms = redcapmissing:::.rcm_canonical(first$arms),
-    events = redcapmissing:::.rcm_canonical(first$events),
-    mapping = redcapmissing:::.rcm_canonical(first$mapping),
-    repeat_configuration = redcapmissing:::.rcm_canonical(first$repeat_configuration)
+    metadata = redcapmissing:::.rcm_fingerprint_table(first$metadata),
+    instruments = redcapmissing:::.rcm_fingerprint_table(first$instruments),
+    arms = redcapmissing:::.rcm_fingerprint_table(first$arms),
+    events = redcapmissing:::.rcm_fingerprint_table(first$events),
+    mapping = redcapmissing:::.rcm_fingerprint_table(first$mapping),
+    repeat_configuration = redcapmissing:::.rcm_fingerprint_table(first$repeat_configuration)
   )
   expect_identical(
     first$structure_fingerprint,
@@ -435,7 +453,7 @@ test_that("project fingerprints are stable to table row order with explicit reco
   )
 })
 
-test_that("fingerprints distinguish missing and delimiter-safe structured values", {
+test_that("fingerprints distinguish missing values and structured delimiter values", {
   missing_metadata <- .plan_metadata()
   missing_metadata$fingerprint_value <- c(
     NA_character_,
@@ -591,7 +609,7 @@ test_that("required constructor arguments and instrument vectors fail with class
   )
 })
 
-test_that("record identifiers normalize accepted storage and reject noncanonical values", {
+test_that("record identifiers normalize accepted storage and reject invalid values", {
   rcon <- .plan_fake_rcon()
   accepted <- list(
     leading_zero = "001",
@@ -633,7 +651,7 @@ test_that("record identifiers normalize accepted storage and reject noncanonical
   )
 })
 
-test_that("repeat columns and instances enforce canonical contextual missingness", {
+test_that("repeat columns and instances enforce contextual missingness", {
   rcon <- .plan_fake_rcon(
     repeats = tibble::tibble(event_name = NA_character_, form_name = "diary")
   )
@@ -684,7 +702,7 @@ test_that("repeat columns and instances enforce canonical contextual missingness
   )
 })
 
-test_that("zero-row schedules require complete ordered schemas and allowed storage", {
+test_that("empty schedules require complete ordered schemas and allowed storage", {
   rcon <- .plan_fake_rcon()
   data <- tibble::tibble(record_id = "r1")
   observed <- plan_from_data(data, rcon, "demographics")
@@ -821,7 +839,7 @@ test_that("normalized schedule collisions error before target construction", {
   )
 })
 
-test_that("native target identities do not collide on delimiter-like values", {
+test_that("native target identities do not collide on delimiter values", {
   separator <- intToUtf8(31L)
   second_instrument <- paste0("b", separator, "c")
   metadata <- tibble::tibble(
@@ -1013,7 +1031,7 @@ test_that("target dimensions normalize across classic longitudinal and repeat mo
   expect_identical(repeat_event$assessible_targets$repeat_instance, c(3L, 3L))
 })
 
-test_that("plan project label maps are canonical complete and protected", {
+test_that("plan project label maps are complete and protected", {
   rcon <- .plan_longitudinal_rcon()
   rcon$instruments <- function() tibble::tibble(
     instrument_name = c("notes", "diary", "demographics"),
@@ -1174,7 +1192,7 @@ test_that("plan validation rejects malformed components and target invariants", 
   )
 })
 
-test_that("constructors require complete cached project surfaces and never export records", {
+test_that("constructors retrieve project surfaces and make zero record export calls", {
   classic <- .plan_fake_rcon()
   for (surface in c("metadata", "instruments", "projectInformation", "repeatInstrumentEvent")) {
     incomplete <- classic
@@ -1242,7 +1260,7 @@ test_that("constructors require complete cached project surfaces and never expor
   expect_false(exists("exportRecords", counts, inherits = FALSE))
 })
 
-test_that("unselected and unmapped physical rows never fabricate targets", {
+test_that("target construction excludes unselected and unmapped physical rows", {
   rcon <- .plan_longitudinal_rcon()
   data <- .plan_longitudinal_data()[c(1, 3), ]
   plan <- plan_from_data(data, rcon, "notes")
@@ -1348,7 +1366,7 @@ test_that("numeric identifiers and fingerprints are option independent", {
   )
 })
 
-test_that("large numeric record vectors normalize without row-wise loss", {
+test_that("large numeric record vectors normalize without row loss", {
   record_count <- 10000L
   numeric_ids <- as.double(seq_len(record_count))
   expected_ids <- as.character(seq_len(record_count))

@@ -10,13 +10,13 @@ get_summary(report, validation_check = NULL, events = NULL, instruments = NULL)
 \item{report}{A validated \code{redcapmissing} object created by \code{\link[=run_plan]{run_plan()}}.}
 
 \item{validation_check}{\code{NULL}, or a nonempty character vector containing one
-or more exact canonical codes from \code{\link[=registry]{registry()}}: \code{"event-row-started"},
+or more exact codes from \code{\link[=registry]{registry()}}: \code{"event-row-started"},
 \code{"repeat-instance-row-started"}, \code{"instrument-started"}, or
 \code{"field-complete"}.}
 
 \item{events}{\code{NULL}, or a nonempty character vector of exact raw REDCap
-unique event names represented by the plan. Classic-project event context
-is structurally missing and is not selected by a text value.}
+unique event names represented by the plan. Classic project event context
+is \code{NA_character_}; filters contain raw event names.}
 
 \item{instruments}{\code{NULL}, or a nonempty character vector of exact raw REDCap
 instrument names selected by the plan.}
@@ -29,7 +29,7 @@ A tibble with exactly these columns and storage types:\tabular{ll}{
    \code{repeat_instrument} \tab Character raw repeating instrument; otherwise \code{NA_character_} \cr
    \code{repeat_instance} \tab Integer exact instance; otherwise \code{NA_integer_} \cr
    \code{validation_level} \tab Character: \code{"event:instrument"} or \code{"event:instrument:instance"} \cr
-   \code{validation_check} \tab Character canonical validation-check code \cr
+   \code{validation_check} \tab Character validation check code \cr
    \code{status} \tab Character: \code{"assessed"} or \code{"not applicable"} \cr
    \code{reason} \tab Character; typed missing unless the check is not applicable \cr
    \code{assessed}, \code{passed}, \code{failed} \tab Integer counts \cr
@@ -38,29 +38,27 @@ A tibble with exactly these columns and storage types:\tabular{ll}{
 
 
 The tibble has a \code{redcapmissing_labels} attribute containing named character
-vectors \code{events} and \code{instruments} for presentation. Raw values remain the
-filtering and data contract.
+vectors \code{events} and \code{instruments} for presentation. Raw values remain in
+the returned data and are used for filtering.
 }
 \description{
 \code{get_summary()} returns the stored validation summary from a report created by
-\code{\link[=run_plan]{run_plan()}}. Filters subset the completed report; they never rerun checks,
-change applicability, or recalculate denominators.
+\code{\link[=run_plan]{run_plan()}}. Filters select rows from the stored summary. Assessment results,
+applicability, and denominators remain those computed by \code{\link[=run_plan]{run_plan()}}.
 }
 \details{
-Filter matching is case-sensitive. Vectors may not contain missing, blank, or
-whitespace-padded values. Unknown values error. Duplicate filter values are
-normalized to one value.
+Filter matching is case sensitive. Vectors require present, nonblank,
+unpadded values. Unknown values error. Duplicate filter values normalize to
+one value.
 }
 \examples{
 \dontrun{
-plan <- plan_from_data(records, rcon, "baseline")
-report <- run_plan(plan, records, rcon)
-
+# report and instruments are caller supplied.
 get_summary(report)
 get_summary(
   report,
   validation_check = "field-complete",
-  instruments = "baseline"
+  instruments = instruments
 )
 }
 

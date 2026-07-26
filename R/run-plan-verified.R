@@ -79,7 +79,7 @@
   if (is.logical(x) || is.integer(x) || is.double(x)) {
     if ((is.double(x) && any(is.nan(x))) || !all(is.na(x))) {
       .rcm_verified_abort(paste0("`verified$", column,
-        "` may use a non-character type only when every value is a typed NA."))
+        "` may use a type other than character only when every value is a typed NA."))
     }
     return(rep(NA_character_, length(x)))
   }
@@ -117,7 +117,7 @@
     missing_value <- missing_value | blank
     if (any(!(missing_value | grepl("^[1-9][0-9]*$", x)))) {
       .rcm_verified_abort(paste0("`verified$", column,
-        "` must contain canonical positive integers."))
+        "` must contain positive integer digit strings."))
     }
   }
   numeric_value <- suppressWarnings(as.numeric(x))
@@ -137,7 +137,7 @@
   if (inherits(x, "POSIXct")) {
     seconds <- as.numeric(x)
     if (any(!is.finite(seconds))) {
-      .rcm_verified_abort("`verified$ts` cannot contain missing or non-finite timestamps.")
+      .rcm_verified_abort("`verified$ts` cannot contain missing timestamps; finite timestamps are required.")
     }
     return(as.POSIXct(seconds, origin = "1970-01-01", tz = "UTC"))
   }

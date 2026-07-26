@@ -1,4 +1,4 @@
-test_that("genuine redcapAPI offline connections support the plan-and-run workflow", {
+test_that("genuine redcapAPI offline connections support the plan and run workflow", {
   metadata_prototype <- get(
     "REDCAP_METADATA_STRUCTURE",
     envir = asNamespace("redcapAPI")

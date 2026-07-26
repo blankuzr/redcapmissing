@@ -340,47 +340,69 @@
         rep.int(NA_integer_, length(event_rows))
       }
 
-      regular_position <- which(is.na(repeat_instance))
-      regular_rows <- event_rows[regular_position]
-      regular_id <- source_id[regular_position]
-      duplicated_regular <- unique(regular_id[
-        duplicated(regular_id) | duplicated(regular_id, fromLast = TRUE)
-      ])
-      if (any(query_id %in% duplicated_regular)) {
+      missing_repeat_instance_positions <- which(is.na(repeat_instance))
+      rows_with_missing_repeat_instance <-
+        event_rows[missing_repeat_instance_positions]
+      ids_with_missing_repeat_instance <-
+        source_id[missing_repeat_instance_positions]
+      duplicated_ids_with_missing_repeat_instance <- unique(
+        ids_with_missing_repeat_instance[
+          duplicated(ids_with_missing_repeat_instance) |
+            duplicated(ids_with_missing_repeat_instance, fromLast = TRUE)
+        ]
+      )
+      if (any(query_id %in% duplicated_ids_with_missing_repeat_instance)) {
         stop(
-          "Cross-event branching source event `",
+          "Cross event branching source event `",
           event,
-          "` has multiple non-repeating rows for the same record.",
+          "` has multiple rows with a missing `redcap_repeat_instance` ",
+          "for the same record.",
           call. = FALSE
         )
       }
 
-      regular_match <- match(query_id, regular_id)
+      missing_repeat_instance_match <-
+        match(query_id, ids_with_missing_repeat_instance)
       source_row <- rep.int(NA_integer_, length(query_id))
-      regular_hit <- !is.na(regular_match)
-      source_row[regular_hit] <- regular_rows[regular_match[regular_hit]]
+      missing_repeat_instance_hit <- !is.na(missing_repeat_instance_match)
+      source_row[missing_repeat_instance_hit] <-
+        rows_with_missing_repeat_instance[
+          missing_repeat_instance_match[missing_repeat_instance_hit]
+        ]
 
-      repeated_position <- which(!is.na(repeat_instance))
-      repeated_rows <- event_rows[repeated_position]
-      repeated_id <- source_id[repeated_position]
-      duplicated_repeated <- unique(repeated_id[
-        duplicated(repeated_id) | duplicated(repeated_id, fromLast = TRUE)
-      ])
-      ambiguous <- is.na(source_row) & query_id %in% duplicated_repeated
+      positive_repeat_instance_positions <- which(!is.na(repeat_instance))
+      rows_with_positive_repeat_instance <-
+        event_rows[positive_repeat_instance_positions]
+      ids_with_positive_repeat_instance <-
+        source_id[positive_repeat_instance_positions]
+      duplicated_ids_with_positive_repeat_instance <- unique(
+        ids_with_positive_repeat_instance[
+          duplicated(ids_with_positive_repeat_instance) |
+            duplicated(ids_with_positive_repeat_instance, fromLast = TRUE)
+        ]
+      )
+      ambiguous <- is.na(source_row) &
+        query_id %in% duplicated_ids_with_positive_repeat_instance
       if (any(ambiguous)) {
         stop(
-          "Cross-event branching source event `",
+          "Cross event branching source event `",
           event,
-          "` has multiple repeated rows and no non-repeating row for ",
+          "` has multiple rows with a positive `redcap_repeat_instance` ",
+          "and no row with a missing `redcap_repeat_instance` for ",
           sum(ambiguous),
           " assessed target(s); an unqualified event reference is ambiguous.",
           call. = FALSE
         )
       }
 
-      repeated_match <- match(query_id, repeated_id)
-      repeated_hit <- is.na(source_row) & !is.na(repeated_match)
-      source_row[repeated_hit] <- repeated_rows[repeated_match[repeated_hit]]
+      positive_repeat_instance_match <-
+        match(query_id, ids_with_positive_repeat_instance)
+      positive_repeat_instance_hit <-
+        is.na(source_row) & !is.na(positive_repeat_instance_match)
+      source_row[positive_repeat_instance_hit] <-
+        rows_with_positive_repeat_instance[
+          positive_repeat_instance_match[positive_repeat_instance_hit]
+        ]
       result <- list(
         source_row = as.integer(source_row)
       )

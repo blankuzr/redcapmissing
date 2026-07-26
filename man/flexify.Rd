@@ -8,7 +8,7 @@ flexify(x)
 }
 \arguments{
 \item{x}{A tibble returned by \code{\link[=get_summary]{get_summary()}} or \code{\link[=get_missing]{get_missing()}}, optionally
-filtered, grouped, reordered, or reduced to a non-empty subset of its
+filtered, grouped, reordered, or reduced to a nonempty subset of its
 documented columns.}
 }
 \value{
@@ -17,38 +17,37 @@ column.
 }
 \description{
 \code{flexify()} turns a tibble returned by \code{\link[=get_summary]{get_summary()}} or \code{\link[=get_missing]{get_missing()}}
-into a presentation-ready \code{flextable}.
+into a presentation ready \code{flextable}.
 }
 \details{
-Column names and storage types must remain compatible with either the
-\code{get_summary()} or \code{get_missing()} return schema. Columns may appear in any
-order, but added or renamed columns and combinations of summary-only and
-missing-row-only columns are rejected.
+Column names and storage types must match either the \code{get_summary()} or
+\code{get_missing()} return schema. Columns may appear in any
+order, but added or renamed columns and combinations of summary columns and
+missing row columns are rejected.
 
-Event, instrument, and repeat-instrument values use the package-owned display-label
+Event, instrument, and repeat instrument values use the package display label
 metadata carried by the accessors. Raw REDCap values are used when that
 metadata is unavailable. Validation checks use the \code{flex_label} values from
-\code{\link[=registry]{registry()}}, rates are displayed as one-decimal percentages, missing values
-are displayed as blank cells, and available \code{url} values are formatted as
+\code{\link[=registry]{registry()}}, rates are displayed as percentages with one decimal place,
+missing values are displayed as blank cells, and available \code{url} values are
+formatted as
 hyperlinks.
 
-Input row and column order are preserved. If both repeat-context columns are
+Input row and column order are preserved. If both repeat context columns are
 present and entirely blank, they are omitted together when at least one other
-display column remains. \code{flexify()} formats an ungrouped copy and does not
-modify \code{x}.
+display column remains. \code{flexify()} formats an ungrouped copy; \code{x} retains its
+original rows, columns, groups, values, and attributes.
 
-This function requires the optional \code{flextable} package.
+The optional \code{flextable} package is required when this function is called;
+the error lists it when unavailable.
 }
 \examples{
-\dontshow{if (requireNamespace("flextable", quietly = TRUE)) withAutoprint(\{ # examplesIf}
-summary_rows <- tibble::tibble(
-  instrument = "baseline_instrument",
-  validation_check = "field-complete",
-  assessed = 10L,
-  pass_rate = 0.9
-)
-flexify(summary_rows)
-\dontshow{\}) # examplesIf}
+\dontrun{
+# report is caller supplied.
+summary_table <- flexify(get_summary(report))
+missing_table <- flexify(get_missing(report))
+}
+
 }
 \seealso{
 \code{\link[=get_summary]{get_summary()}}, \code{\link[=get_missing]{get_missing()}}, \code{\link[=run_plan]{run_plan()}}, \code{\link[=flex_html]{flex_html()}}

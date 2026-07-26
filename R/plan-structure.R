@@ -33,7 +33,7 @@
 
 .rcm_surface <- function(rcon, methods, label, required = TRUE) {
   if (is.null(rcon)) {
-    .rcm_plan_abort("Provide a REDCap connection-like object as `rcon`.", "project")
+    .rcm_plan_abort("Provide a REDCap connection object as `rcon`.", "project")
   }
   for (method in methods) {
     candidate <- tryCatch(rcon[[method]], error = function(e) NULL)
@@ -50,7 +50,7 @@
       .rcm_plan_abort(
         paste0(
           "The ", label, " surface returned `NULL`; supply an explicit ",
-          "data frame, including a zero-row data frame for an empty structure."
+          "data frame, including an empty data frame for an empty structure."
         ),
         "project"
       )
@@ -129,7 +129,7 @@
     )
   }
   if (is.numeric(x) && any(is.na(x) | is.nan(x) | !is.finite(x))) {
-    .rcm_plan_abort(paste0("`", source, "` cannot contain missing or non-finite values."), "schema")
+    .rcm_plan_abort(paste0("`", source, "` requires present, finite values."), "schema")
   }
   value <- if (is.factor(x)) {
     as.character(x)
@@ -141,7 +141,7 @@
   invalid <- is.na(value) | value == "" | grepl("^\\s+$", value) | trimws(value) != value
   if (any(invalid)) {
     .rcm_plan_abort(
-      paste0("`", source, "` requires non-missing, non-blank identifiers without surrounding whitespace."),
+      paste0("`", source, "` requires present, nonblank, unpadded identifiers."),
       "schema"
     )
   }
@@ -197,7 +197,7 @@
     missing <- is.na(x)
     bad <- !missing & (!is.finite(x) | x < 1 | x != floor(x) | x > .Machine$integer.max)
     if (any(bad)) {
-      .rcm_plan_abort(paste0("`", source, "` requires positive whole-number IDs within integer range."), "schema")
+      .rcm_plan_abort(paste0("`", source, "` requires positive whole number IDs within integer range."), "schema")
     }
     out <- rep(NA_integer_, length(x))
     out[!missing] <- as.integer(x[!missing])
@@ -205,11 +205,11 @@
   }
   value <- if (is.factor(x)) as.character(x) else x
   blank <- is.na(value) | grepl("^\\s*$", value)
-  canonical <- blank | grepl("^[1-9][0-9]*$", value)
+  digit_string <- blank | grepl("^[1-9][0-9]*$", value)
   number <- suppressWarnings(as.numeric(value))
-  bad <- (!blank & trimws(value) != value) | !canonical | (!blank & (!is.finite(number) | number > .Machine$integer.max))
+  bad <- (!blank & trimws(value) != value) | !digit_string | (!blank & (!is.finite(number) | number > .Machine$integer.max))
   if (any(bad)) {
-    .rcm_plan_abort(paste0("`", source, "` requires canonical positive integer IDs or missing values."), "schema")
+    .rcm_plan_abort(paste0("`", source, "` requires positive integer digit strings or missing values."), "schema")
   }
   out <- rep(NA_integer_, length(value))
   out[!blank] <- as.integer(number[!blank])
@@ -259,7 +259,7 @@
     instrument = .rcm_required_id(data[[form_col]], "mapping instruments")
   )
   if (!nrow(out) || anyDuplicated(out)) {
-    .rcm_plan_abort("The longitudinal instrument-event mapping must be nonempty and unique.", "project")
+    .rcm_plan_abort("The longitudinal instrument to event mapping must be nonempty and unique.", "project")
   }
   out
 }
@@ -325,18 +325,18 @@
   if (length(info_column)) {
     value <- .rcm_required_id(
       project_information[[info_column[[1]]]],
-      "project-information record-ID field"
+      "project information record ID field"
     )
     if (length(value) != 1 || !value %in% metadata$field_name) {
-      .rcm_plan_abort("The project-information record-ID field is invalid.", "project")
+      .rcm_plan_abort("The project information record ID field is invalid.", "project")
     }
     return(value[[1]])
   }
   attribute_value <- attr(metadata, "record_id_field", exact = TRUE)
   if (!is.null(attribute_value)) {
-    value <- .rcm_required_id(attribute_value, "metadata record-ID attribute")
+    value <- .rcm_required_id(attribute_value, "metadata record ID attribute")
     if (length(value) != 1 || !value %in% metadata$field_name) {
-      .rcm_plan_abort("The metadata record-ID attribute is invalid.", "project")
+      .rcm_plan_abort("The metadata record ID attribute is invalid.", "project")
     }
     return(value[[1]])
   }
@@ -349,8 +349,8 @@
     }
     .rcm_plan_abort("Metadata field order is not a unique finite ordering.", "project")
   }
-  # redcapAPI metadata is canonically field-ordered; the first field is the
-  # REDCap record-ID field when no explicit identity surface is supplied.
+  # redcapAPI metadata follows REDCap field order; the first field is the
+  # REDCap record ID field when no explicit identity surface is supplied.
   metadata$field_name[[1]]
 }
 .rcm_length_prefix <- function(value) {
@@ -358,7 +358,7 @@
   paste0(nchar(value, type = "bytes"), ":", value)
 }
 
-.rcm_canonical_atomic <- function(value) {
+.rcm_fingerprint_atomic <- function(value) {
   if (!length(value)) return(character())
   if (is.factor(value)) {
     type <- "character"
@@ -388,20 +388,20 @@
   out
 }
 
-.rcm_canonical_cell <- function(value) {
+.rcm_fingerprint_cell <- function(value) {
   if (is.null(value)) return("null")
   if (is.list(value)) {
-    parts <- vapply(value, .rcm_canonical_cell, character(1))
+    parts <- vapply(value, .rcm_fingerprint_cell, character(1))
   } else if (is.atomic(value)) {
-    parts <- .rcm_canonical_atomic(value)
+    parts <- .rcm_fingerprint_atomic(value)
   } else {
     bytes <- serialize(value, NULL, version = 2L)
     return(paste0("serialized", paste0(format(bytes), collapse = "")))
   }
   names_encoded <- if (is.null(names(value))) {
-    .rcm_canonical_atomic(rep(NA_character_, length(parts)))
+    .rcm_fingerprint_atomic(rep(NA_character_, length(parts)))
   } else {
-    .rcm_canonical_atomic(as.character(names(value)))
+    .rcm_fingerprint_atomic(as.character(names(value)))
   }
   payload <- as.vector(rbind(names_encoded, parts))
   paste0(
@@ -410,15 +410,15 @@
   )
 }
 
-.rcm_canonical <- function(data) {
+.rcm_fingerprint_table <- function(data) {
   data <- as.data.frame(data, stringsAsFactors = FALSE)
   data <- data[, sort(names(data)), drop = FALSE]
   for (name in names(data)) {
     value <- data[[name]]
     data[[name]] <- if (is.list(value)) {
-      vapply(value, .rcm_canonical_cell, character(1))
+      vapply(value, .rcm_fingerprint_cell, character(1))
     } else {
-      .rcm_canonical_atomic(value)
+      .rcm_fingerprint_atomic(value)
     }
   }
   if (nrow(data) > 1 && ncol(data)) {
@@ -453,7 +453,11 @@
       instrument = instruments$instrument,
       redcap_event_name = rep(NA_character_, nrow(instruments)),
       arm_num = rep(NA_character_, nrow(instruments)),
-      repeat_mode = ifelse(instruments$instrument %in% repeat_configuration$instrument, "repeating_instrument", "regular")
+      repeat_mode = ifelse(
+        instruments$instrument %in% repeat_configuration$instrument,
+        "repeating_instrument",
+        "no_repeat"
+      )
     ))
   }
   repeating_events <- repeat_configuration$redcap_event_name[is.na(repeat_configuration$instrument)]
@@ -473,7 +477,7 @@
     repeat_mode = ifelse(
       mapping$redcap_event_name %in% repeating_events,
       "repeating_event",
-      ifelse(mapping_repeats, "repeating_instrument", "regular")
+      ifelse(mapping_repeats, "repeating_instrument", "no_repeat")
     )
   )
 }
@@ -542,15 +546,15 @@
   if ("has_repeating_instruments_or_events" %in% names(info)) {
     flag <- tolower(as.character(info$has_repeating_instruments_or_events[[1L]]))
     if (!flag %in% c("0", "1", "false", "true")) {
-      .rcm_plan_abort("Project repeat-status information must be 0/1 or FALSE/TRUE.", "project")
+      .rcm_plan_abort("Project repeat status information must be 0/1 or FALSE/TRUE.", "project")
     }
     flagged_repeating <- flag %in% c("1", "true")
     if (!identical(flagged_repeating, nrow(repeat_configuration) > 0L)) {
-      .rcm_plan_abort("Project repeat-status information contradicts the repeat configuration.", "project")
+      .rcm_plan_abort("Project repeat status information contradicts the repeat configuration.", "project")
     }
   }
   if (isTRUE(longitudinal)) {
-    mapping <- .rcm_mapping(.rcm_surface(rcon, c("mapping", "mappings"), "instrument-event mappings"))
+    mapping <- .rcm_mapping(.rcm_surface(rcon, c("mapping", "mappings"), "instrument to event mappings"))
     events <- .rcm_events(.rcm_surface(rcon, c("events", "exportEvents", "event_data", "eventData"), "events"), mapping)
     arms <- .rcm_arms(.rcm_surface(rcon, c("arms", "exportArms", "arm_data", "armData"), "arms"))
   } else {
@@ -606,9 +610,12 @@
   )
   fingerprint_input <- list(
     project = project,
-    metadata = .rcm_canonical(metadata), instruments = .rcm_canonical(instruments),
-    arms = .rcm_canonical(arms), events = .rcm_canonical(events),
-    mapping = .rcm_canonical(mapping), repeat_configuration = .rcm_canonical(repeat_configuration)
+    metadata = .rcm_fingerprint_table(metadata),
+    instruments = .rcm_fingerprint_table(instruments),
+    arms = .rcm_fingerprint_table(arms),
+    events = .rcm_fingerprint_table(events),
+    mapping = .rcm_fingerprint_table(mapping),
+    repeat_configuration = .rcm_fingerprint_table(repeat_configuration)
   )
   allowable_crossings <- .rcm_allowable(
     instruments,
@@ -648,7 +655,7 @@
   ifelse(
     !is.na(repeat_instrument),
     "repeating_instrument",
-    ifelse(!is.na(instance), "repeating_event", "regular")
+    ifelse(!is.na(instance), "repeating_event", "no_repeat")
   )
 }
 
@@ -686,7 +693,9 @@
       paste0(
         "Data row ",
         min(invalid),
-        " has a regular/repeating context not allowed by `rcon`."
+        " has a combination of `redcap_event_name`, ",
+        "`redcap_repeat_instrument`, and `redcap_repeat_instance` ",
+        "that `rcon` does not allow."
       ),
       "schema"
     )
@@ -696,13 +705,7 @@
 
 #' Normalize exported REDCap rows for planning and execution
 #'
-#' @param data A REDCap record-export data frame.
-#' @param snapshot A project snapshot from `.rcm_project_snapshot()`.
-#' @param require_nonempty Whether zero rows are invalid.
-#' @param response_columns Additional response columns that must be present.
-#'
-#' @return A tibble retaining response columns and canonical structural columns.
-#' @keywords internal
+#' @noRd
 .rcm_normalize_data <- function(
   data,
   snapshot,
@@ -757,7 +760,7 @@
     if (anyNA(event)) .rcm_plan_abort("Longitudinal event names cannot be missing or blank.", "schema")
   } else if ("redcap_event_name" %in% names(data)) {
     event <- .rcm_nullable_chr(data$redcap_event_name, "data$redcap_event_name")
-    if (any(!is.na(event))) .rcm_plan_abort("Classic-project event values must be missing or blank.", "schema")
+    if (any(!is.na(event))) .rcm_plan_abort("Classic project event values must be missing or blank.", "schema")
   } else {
     event <- rep(NA_character_, nrow(data))
   }
@@ -832,7 +835,7 @@
   }
   invalid <- is.na(instruments) | instruments == "" | grepl("^\\s+$", instruments) | trimws(instruments) != instruments
   if (any(invalid) || anyDuplicated(instruments)) {
-    .rcm_plan_abort("`instruments` must contain unique, non-blank, unpadded names.", "argument")
+    .rcm_plan_abort("`instruments` must contain unique, nonblank, unpadded names.", "argument")
   }
   unknown <- setdiff(instruments, snapshot$instrument_order)
   if (length(unknown)) {
@@ -861,7 +864,7 @@
   }
   instrument <- .rcm_char(schedule$instrument, paste0(source, "$instrument"))
   bad_instrument <- is.na(instrument) | instrument == "" | grepl("^\\s+$", instrument) | trimws(instrument) != instrument
-  if (any(bad_instrument)) .rcm_plan_abort(paste0("`", source, "$instrument` must be non-missing and unpadded."), "schedule")
+  if (any(bad_instrument)) .rcm_plan_abort(paste0("`", source, "$instrument` must be nonmissing and unpadded."), "schedule")
   unknown <- setdiff(unique(instrument), instruments)
   if (length(unknown)) .rcm_plan_abort(paste0("`", source, "$instrument` must be a subset of `instruments`."), "schedule")
   event <- .rcm_nullable_chr(schedule$redcap_event_name, paste0(source, "$redcap_event_name"))
@@ -900,7 +903,7 @@
   )
   matched <- matched[order(matched$.input_row), , drop = FALSE]
   crossing_invalid <- is.na(matched$.allowed)
-  requires_instance <- !crossing_invalid & matched$repeat_mode != "regular"
+  requires_instance <- !crossing_invalid & matched$repeat_mode != "no_repeat"
   instance_invalid <- !crossing_invalid &
     (requires_instance == is.na(matched$repeat_instance))
   invalid <- which(crossing_invalid | instance_invalid)
@@ -908,8 +911,18 @@
     row <- invalid[[1L]]
     message <- if (crossing_invalid[[row]]) {
       paste0("`", source, "` row ", row, " is not an allowable crossing.")
+    } else if (requires_instance[[row]]) {
+      paste0(
+        "`", source, "` row ", row,
+        " requires a positive `repeat_instance` because its instrument ",
+        "and event crossing repeats."
+      )
     } else {
-      paste0("`", source, "` row ", row, " has an invalid instance specification.")
+      paste0(
+        "`", source, "` row ", row,
+        " requires a missing `repeat_instance` because its instrument ",
+        "and event crossing does not repeat."
+      )
     }
     .rcm_plan_abort(message, "schedule")
   }
@@ -972,17 +985,20 @@
     )
   )
   result <- list()
-  nonrepeating_rows <- contexts$repeat_mode != "repeating_instrument"
-  nonrepeating_allowed <- allowable$repeat_mode != "repeating_instrument"
-  if (any(nonrepeating_rows) && any(nonrepeating_allowed)) {
+  rows_without_repeat_instrument <-
+    contexts$repeat_mode != "repeating_instrument"
+  crossings_without_repeat_instrument <-
+    allowable$repeat_mode != "repeating_instrument"
+  if (any(rows_without_repeat_instrument) &&
+      any(crossings_without_repeat_instrument)) {
     joined <- merge(
       as.data.frame(contexts[
-        nonrepeating_rows,
+        rows_without_repeat_instrument,
         c("record_id", "redcap_event_name", "repeat_instance", "repeat_mode"),
         drop = FALSE
       ]),
       as.data.frame(allowable[
-        nonrepeating_allowed,
+        crossings_without_repeat_instrument,
         c("instrument", "redcap_event_name", "repeat_mode"),
         drop = FALSE
       ]),
@@ -1000,14 +1016,24 @@
       )
     }
   }
-  repeating_rows <- contexts[contexts$repeat_mode == "repeating_instrument", , drop = FALSE]
-  repeating_allowed <- allowable[allowable$repeat_mode == "repeating_instrument", , drop = FALSE]
-  if (nrow(repeating_rows) && nrow(repeating_allowed)) {
-    repeating_rows$instrument <- repeating_rows$context_instrument
-    repeating_rows$context_instrument <- NULL
+  repeating_instrument_rows <- contexts[
+    contexts$repeat_mode == "repeating_instrument",
+    ,
+    drop = FALSE
+  ]
+  repeating_instrument_crossings <- allowable[
+    allowable$repeat_mode == "repeating_instrument",
+    ,
+    drop = FALSE
+  ]
+  if (nrow(repeating_instrument_rows) &&
+      nrow(repeating_instrument_crossings)) {
+    repeating_instrument_rows$instrument <-
+      repeating_instrument_rows$context_instrument
+    repeating_instrument_rows$context_instrument <- NULL
     joined <- merge(
-      as.data.frame(repeating_rows),
-      as.data.frame(repeating_allowed),
+      as.data.frame(repeating_instrument_rows),
+      as.data.frame(repeating_instrument_crossings),
       by = c("instrument", "redcap_event_name", "repeat_mode"),
       sort = FALSE
     )
@@ -1190,11 +1216,7 @@
 
 #' Validate a redcapmissing assessment plan
 #'
-#' @param plan An object intended to represent a `redcapmissing_plan`.
-#' @param snapshot An optional current project snapshot.
-#'
-#' @return The validated plan.
-#' @keywords internal
+#' @noRd
 .rcm_validate_plan <- function(plan, snapshot = NULL) {
   expected_names <- c(
     "schema_version", "construction", "instruments",

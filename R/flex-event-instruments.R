@@ -1,28 +1,43 @@
 #' Format a REDCap missingness report by event and instrument
 #'
 #' @description
-#' `flex_event_instruments()` formats a [run_plan()] result as a reduced
-#' event/instrument `flextable`. It reports started/due counts together with
-#' instrument-level incomplete, not-started, and missing-threshold metrics.
+#' `flex_event_instruments()` formats a [run_plan()] result as an event and
+#' instrument `flextable`. It reports planned opportunities, started rows,
+#' incomplete instruments, instruments that have not started, and missingness
+#' above a selected threshold.
 #'
 #' @details
 #' Metrics are computed from `x$target_results`, which has one row per
-#' Assessible target. Consequently, the table uses the frozen plan rather than
-#' inferring opportunities from whichever rows happen to be present at run
-#' time. Instrument metrics display `N/D (%)`; the `All` row sums instrument
-#' opportunities without deduplicating records across instruments.
+#' Assessible target. `x$plan$assessible_targets` defines every denominator.
+#' Instrument metrics display `N/D (%)`. Event header `N (started/due)` values
+#' count unique record and event contexts: the numerator has a passed
+#' `event-row-started` check and the denominator has an assessed event gate.
+#' In a classic project the event gate is not applicable, so all planned record
+#' contexts are shown as started and due.
 #'
-#' `Instrument Incomplete` counts targets with a failed event-row,
-#' repeat-instance-row, instrument-started, or field-complete check.
-#' `Instrument Not Started` counts targets that failed before field-complete.
-#' For the threshold metric, an upstream or instrument-started failure has a
-#' missing fraction of one. A started instrument uses `fields_failed /
-#' fields_assessed`; a not-applicable field-complete check has fraction zero.
+#' On a repeating instrument or event row, `N (started/due)` is the number of
+#' passed `repeat-instance-row-started` checks over the number assessed. It is
+#' blank for instrument rows whose target context stores `NA_integer_` in
+#' `repeat_instance`. `Instrument Incomplete` counts targets with any failed
+#' `event-row-started`, `repeat-instance-row-started`, `instrument-started`, or
+#' `field-complete` check. `Instrument Not Started` counts targets with a
+#' failed event, repeat instance, or instrument start check.
+#'
+#' For the threshold metric, an event, repeat instance, or instrument start
+#' failure has a missing fraction of one. A started instrument uses
+#' `fields_failed / fields_assessed`; a `field-complete` check with no
+#' applicable fields has fraction zero. Fractions must exceed thresholds below
+#' one; a threshold of one includes fractions equal to one. The `All` row sums
+#' instrument opportunities and can count one record more than once when that
+#' record has multiple planned instruments. Event header rows leave instrument
+#' metrics blank.
+#'
+#' The optional packages `flextable` and `glue` are required when this function
+#' is called. The error lists each missing package.
 #'
 #' @param x A `redcapmissing` object created by [run_plan()].
-#' @param missing_threshold A finite numeric scalar from zero through one.
-#'   Fractions must be strictly greater than thresholds below one. At one,
-#'   fractions equal to one are counted.
+#' @param missing_threshold A finite numeric scalar from zero through one, with
+#'   comparison behavior described in **Details**.
 #' @param ... Additional arguments passed to methods; currently unused.
 #'
 #' @return A `flextable` containing an `All` row, event headers, and instrument
@@ -30,8 +45,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' plan <- plan_from_data(records, rcon, c("status", "survey"))
-#' report <- run_plan(plan, records, rcon)
+#' # report is caller supplied.
 #' flex_event_instruments(report)
 #' }
 #'
@@ -240,7 +254,7 @@ flex_event_instruments.redcapmissing <- function(
     ))
     if (any(record_event_passed > 0L & record_event_failed > 0L)) {
       stop(
-        "Conflicting event-row-started results for one record-event context.",
+        "Conflicting event-row-started results for one record and event context.",
         call. = FALSE
       )
     }
@@ -354,7 +368,7 @@ flex_event_instruments.redcapmissing <- function(
   targets <- x$target_results
   if (!is.data.frame(targets) || !identical(names(targets), required)) {
     stop(
-      "`x$target_results` must use the current target-result schema.",
+      "`x$target_results` must use the current target result schema.",
       call. = FALSE
     )
   }

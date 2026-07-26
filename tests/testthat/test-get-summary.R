@@ -38,7 +38,7 @@ summary_report_fixture <- function() {
         project_id = "12",
         record_id_field = "record_id",
         longitudinal = TRUE,
-        event_labels = c(baseline_event = "Baseline", followup_event = "Follow-up"),
+        event_labels = c(baseline_event = "Baseline", followup_event = "Follow up"),
         instrument_labels = c(alpha = "Alpha", beta = "Beta", unrepresented = "unrepresented")
       ),
       structure_fingerprint = strrep("0", 64L)
@@ -48,7 +48,7 @@ summary_report_fixture <- function() {
   complete_report_fixture(plan = plan, summary = summary)
 }
 
-test_that("get_summary exposes the exact typed plan-and-run schema", {
+test_that("get_summary exposes the exact typed plan and run schema", {
   report <- summary_report_fixture()
   result <- get_summary(report)
 
@@ -66,7 +66,7 @@ test_that("get_summary exposes the exact typed plan-and-run schema", {
   expect_identical(
     attr(result, "redcapmissing_labels"),
     list(
-      events = c(baseline_event = "Baseline", followup_event = "Follow-up"),
+      events = c(baseline_event = "Baseline", followup_event = "Follow up"),
       instruments = c(alpha = "Alpha", beta = "Beta", unrepresented = "unrepresented")
     )
   )
@@ -105,7 +105,7 @@ test_that("get_summary rejects malformed stored summaries", {
   expect_error(get_summary(report), "column names and order")
 })
 
-test_that("accessor filters enforce the complete invalid-value contract", {
+test_that("accessor filters enforce invalid value rules", {
   report <- summary_report_fixture()
   accessors <- list(
     get_summary = get_summary,

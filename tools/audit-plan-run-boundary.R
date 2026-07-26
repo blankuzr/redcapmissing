@@ -1,4 +1,4 @@
-# Static review check for the plan-and-run architecture boundary.
+# Static review of the planning and assessment source boundary.
 #
 # Run from the package root:
 #   Rscript tools/audit-plan-run-boundary.R
@@ -248,7 +248,7 @@ retired_core_patterns <- c(
   "\\bignore_ids\\b" = "legacy `ignore_ids` scope translation",
   "form-started" = "retired `form-started` validation code",
   "instance-started" = "retired `instance-started` validation code",
-  "event:form" = "retired form-based validation level"
+  "event:form" = "retired validation level that uses form"
 )
 for (pattern in names(retired_core_patterns)) {
   if (grepl(pattern, core_text, perl = TRUE)) {
@@ -260,7 +260,7 @@ expected_exports <- c("plan_from_data", "plan_explicit", "run_plan")
 missing_exports <- setdiff(expected_exports, namespace_exports)
 if (length(missing_exports)) {
   add_failure(paste0(
-    "Required plan-and-run export missing: ",
+    "Required planning or assessment export missing: ",
     paste(missing_exports, collapse = ", ")
   ))
 }
@@ -284,7 +284,7 @@ for (entry in names(expected_formals)) {
   indexes <- which(definition_names == entry)
   if (length(indexes) != 1L) {
     add_failure(paste0(
-      "Expected exactly one top-level definition of `", entry,
+      "Expected exactly one file scope definition of `", entry,
       "`; found ", length(indexes), "."
     ))
     next
@@ -338,4 +338,4 @@ if (length(failures)) {
   stop(paste(failures, collapse = "\n"), call. = FALSE)
 }
 
-cat("Plan-and-run architecture boundary audit passed.\n")
+cat("Planning and assessment source boundary review passed.\n")

@@ -21,19 +21,19 @@ run_plan(
 \item{plan}{A validated \code{redcapmissing_plan}. Its project ID, schema version,
 structure fingerprint, selected instruments, target schema, target
 uniqueness, target provenance, and deterministic ordering are revalidated
-against \code{rcon}; malformed or hand-edited plans are rejected.}
+against \code{rcon}; malformed plans and plans edited by hand are rejected.}
 
 \item{data}{A data frame containing physical REDCap rows and every response,
-checkbox-child, and branching-dependency column needed by the selected
+checkbox child, and branching dependency column needed by the selected
 checks. Structural columns follow \code{\link[=plan_from_data]{plan_from_data()}} normalization, and all
 columns must use ordinary atomic vector storage. A correctly structured
-zero-row data frame is allowed. Added unplanned rows
-cannot add targets; absent planned rows remain targets and can fail gates.}
+empty data frame is allowed. Plan targets stay fixed when \code{data} contains
+additional rows; absent planned rows remain targets and follow the checks below.}
 
-\item{rcon}{The REDCap connection-like object for the same unchanged project
+\item{rcon}{The REDCap connection object for the same unchanged project
 structure as \code{plan}. It must expose project identity, longitudinal status,
 metadata, instruments, repeat configuration, and, for longitudinal
-projects, arms, events, and instrument-event mappings.}
+projects, arms, events, and instrument to event mappings.}
 
 \item{required_fields}{One nonmissing logical value. \code{TRUE} limits
 field-complete assessment to fields marked required in REDCap metadata;
@@ -42,8 +42,9 @@ exclusions.}
 
 \item{ignore_fields}{\code{NULL}, \code{character(0)}, or a character vector of unique,
 nonmissing, nonblank, unpadded raw metadata field names on selected
-instruments. Use checkbox root names, not exported checkbox-child names.
-Unknown names and names unused after earlier policy steps are errors.}
+instruments. Supply checkbox root names. Exported checkbox child names are
+invalid. Unknown names and names unused after earlier policy steps are
+errors.}
 
 \item{exclude_types}{\code{NULL}, \code{character(0)}, or a character vector of unique,
 nonmissing, nonblank, unpadded REDCap metadata field types. \code{NULL} and
@@ -53,27 +54,30 @@ are errors. The default removes \code{"descriptive"} fields when present.}
 \item{verified}{\code{NULL}, or a data frame containing verification evidence with
 the nine required columns documented in \strong{Verification}. Extra columns are
 ignored. It must be supplied together with \code{verified_user}; a complete
-zero-row table is valid.}
+empty table is valid.}
 
 \item{verified_user}{\code{NULL}, or one exact, nonmissing, nonblank, unpadded
-character username. Matching is case-sensitive. It must be supplied
+character username. Matching is case sensitive. It must be supplied
 together with \code{verified}.}
 
-\item{details}{One nonmissing logical value. \code{TRUE} retains validation rows
-with raw and effective dispositions; \code{FALSE} stores \code{NULL} in \code{details}.
-This choice does not change targets, summaries, missing rows, or
-verification audit counts.}
+\item{details}{One nonmissing logical value. \code{TRUE} retains one row per target
+for each of the first three checks, field level rows for each applicable
+field assessed by \code{field-complete}, and one target level \code{field-complete}
+row when that check is not applicable or not reached. Fields closed by
+branching logic have no detail row because they are not assessed. \code{FALSE}
+stores \code{NULL} in \code{details}. Both settings produce identical targets,
+summaries, missing rows, verification audit counts, and effective outcomes.}
 
-\item{progress}{One nonmissing logical value controlling the twelve-stage
+\item{progress}{One nonmissing logical value controlling the twelve stage
 interactive progress bar. Progress cleanup is registered on exit.}
 }
 \value{
 A \code{redcapmissing} object as described in \strong{Return value}.
 }
 \description{
-Evaluates the Assessible targets frozen in a \code{\link[=plan_from_data]{plan_from_data()}} or
-\code{\link[=plan_explicit]{plan_explicit()}} result against supplied REDCap data. \code{run_plan()} never
-infers, removes, or expands target scope.
+\code{run_plan()} evaluates the Assessible targets stored in a
+\code{\link[=plan_from_data]{plan_from_data()}} or \code{\link[=plan_explicit]{plan_explicit()}} result against supplied REDCap data.
+Target rows come from \code{plan$assessible_targets}.
 }
 \section{Execution stages}{
 
@@ -81,7 +85,7 @@ infers, removes, or expands target scope.
 \enumerate{
 \item Validate plan, data, and \code{rcon}.
 \item Validate and normalize verification.
-\item Resolve instrument-start detection fields.
+\item Resolve instrument-start fields.
 \item Resolve field-complete fields.
 \item Join Assessible targets to physical rows.
 \item Run \code{event-row-started}.
@@ -93,9 +97,8 @@ infers, removes, or expands target scope.
 \item Construct the report.
 }
 
-Project surfaces are cached within the call. A newer record snapshot is
-permitted only when the project identity and structure fingerprint remain
-unchanged.
+A newer record snapshot is permitted when the project identity and structure
+fingerprint remain unchanged.
 }
 
 \section{Checks and gating}{
@@ -106,17 +109,23 @@ Check statuses are \code{"passed"}, \code{"failed"}, \code{"not applicable"}, an
 
 Every longitudinal target first receives \code{event-row-started}, based on any
 physical row for its record and event. Classic targets mark that check not
-applicable. A repeating target receives \code{repeat-instance-row-started} only
-after its event gate passes; a regular target marks that check not applicable.
-A failed event or repeat gate makes downstream checks not reached.
+applicable. A target with a positive \code{repeat_instance} receives
+\code{repeat-instance-row-started} only after its event gate passes; a target with
+\code{repeat_instance = NA_integer_} marks that check not applicable. A failed
+event or repeat gate makes downstream checks not reached. An absent classic
+target with \code{repeat_instance = NA_integer_} has both row checks marked not
+applicable and fails \code{instrument-started}.
 
-\code{instrument-started} uses an independent detection set: every data-entry
-metadata field on the selected instrument except the project record-ID field
+\code{instrument-started} uses an independent detection set: every data entry
+metadata field on the selected instrument except the project record ID field
 and \code{descriptive} or \code{calc} fields. Checkbox roots require a nonblank,
 unambiguous metadata choice definition and expand to exported child columns.
-At least one nonmissing detection response starts the instrument. A
-selected instrument with no usable detection fields, or a missing detection
-column, is an error. \code{field-complete} runs only after this check passes.
+An ordinary detection field starts the instrument when its response is
+nonmissing. A checkbox root starts the instrument when at least one child is
+selected. Child values \code{0}, \code{"unchecked"}, \code{"false"}, and \code{"no"}, matched in
+any letter case, are unselected. A selected instrument with no
+usable detection fields, or a missing detection column, is an error.
+\code{field-complete} runs only after this check passes.
 }
 
 \section{Field-complete policy}{
@@ -124,60 +133,66 @@ column, is an error. \code{field-complete} runs only after this check passes.
 The field set is resolved in this exact order:
 
 \if{html}{\out{<div class="sourceCode text">}}\preformatted{all fields on the selected instrument
--> required-only filter when required_fields = TRUE
+-> retain required fields when required_fields = TRUE
 -> exclude_types removal
 -> ignore_fields removal
 }\if{html}{\out{</div>}}
 
-These three arguments affect only \code{field-complete}. They cannot change the
-plan, targets, either physical-row check, or \code{instrument-started}; an optional,
-ignored, or excluded-type field may still establish that an instrument
-started. If no fields remain, \code{field-complete} is \code{"not applicable"}, its
-reason is \code{"no assessible fields after field policy"}, its counts are zero,
-and its rates are \code{NA_real_} rather than an automatic pass.
+These three arguments determine the field set for \code{field-complete}. The plan
+supplies targets, physical rows supply the two row checks, and the independent
+detection set supplies \code{instrument-started}. An optional, ignored, or excluded
+type field may establish that an instrument started. If no fields remain,
+\code{field-complete} is \code{"not applicable"}, its reason is
+\code{"no assessible fields after field policy"}, its counts are zero, and its
+rates are \code{NA_real_}.
 
 Branching logic is evaluated in the target's exact event/repeat context,
-including cross-event references. An unqualified cross-event reference uses
-the unique non-repeating row when the source event also contains repeated
-contexts. When no non-repeating row exists, one repeated source row is
-unambiguous and may be used; multiple repeated source rows are ambiguous and
-raise a project error rather than silently selecting an instance.
-Branch-closed fields are not assessed.
+including cross event references. An unqualified cross event reference uses
+the unique source row whose \code{redcap_repeat_instance} is missing when the
+source event also contains repeated rows. When no such row exists, one
+source row with a positive repeat instance is unambiguous and may be used;
+multiple source rows with positive repeat instances are ambiguous and raise
+a project error because no single instance can be selected.
+Fields closed by branching logic are not assessed.
 Checkbox roots are complete when at least one exported child choice is
-selected. Every selected response, checkbox-child, and branching-dependency
-column must be present; an absent column is never interpreted as a blank.
+selected. Every selected response, checkbox child, and branching dependency
+column must be present; absence is an error.
 }
 
 \section{Response missingness}{
 
-One predicate is used for instrument-start detection and field completeness.
-Typed R missing values, factor \code{NA}, logical \code{NA}, numeric \code{NA}/\code{NaN}, missing
-dates or timestamps, empty strings, and whitespace-only strings are missing.
+One missingness predicate is used for ordinary instrument detection fields
+and ordinary field completeness. Checkbox roots use the selection rules above
+for both checks. Typed R missing values, factor \code{NA}, logical \code{NA}, numeric
+\code{NA}/\code{NaN}, missing dates or timestamps, empty strings, and strings containing
+only whitespace are missing.
 \code{Inf} and \code{-Inf} are not automatically missing. Literal strings \code{"NA"},
 \code{"N/A"}, \code{"NULL"}, \code{"."}, and \code{"-999"} are ordinary nonmissing responses
-unless converted upstream under a separate REDCap missing-code policy.
-Physical-row presence is determined solely by structural identity, never by
-response missingness.
+unless converted upstream under a separate REDCap missing code policy.
+Physical row presence is determined solely by structural identity and is
+independent of response missingness.
 }
 
 \section{Verification}{
 
-A non-\code{NULL} \code{verified} table requires these columns; validation occurs on
-every row before username or status filtering:\tabular{lll}{
+When \code{verified} is supplied, each of these column names must occur exactly
+once. A table with zero rows is accepted after that name check. The storage
+rules below are checked when rows exist, and every row is validated before
+username or status filtering:\tabular{lll}{
    Column \tab Accepted storage and values \tab Internal normalization \cr
-   \code{project_id} \tab Character, integer, or whole-number finite double; exact project match \tab Character \cr
+   \code{project_id} \tab Character, integer, or whole number finite double; exact project match \tab Character \cr
    \code{record} \tab Character, factor, integer, or finite double; nonmissing, nonblank, unpadded \tab Character \cr
-   \code{event_id} \tab Canonical positive character digits, integer, or whole-number double; typed missing/blank only where the event dimension is inapplicable \tab Character event ID and mapped raw event name; \code{NA_character_} where inapplicable \cr
+   \code{event_id} \tab Positive character digits without leading zeros, integer, or whole number double; typed missing/blank only where the event dimension is inapplicable \tab Character event ID and mapped raw event name; \code{NA_character_} where inapplicable \cr
    \code{field_name} \tab Character; exact nonblank, unpadded raw metadata field name \tab Character \cr
    \code{repeat_instrument} \tab Character raw instrument, or character blank/typed missing only where inapplicable \tab Character; inapplicable values become \code{NA_character_} \cr
-   \code{instance} \tab Canonical positive character digits, integer, or whole-number double; typed missing/blank only where inapplicable \tab Integer; inapplicable values become \code{NA_integer_} \cr
-   \code{ts} \tab Nonmissing \code{POSIXct}, or a REDCap/ISO-8601 character timestamp with date, seconds, optional fractional seconds, and optional \code{Z} or numeric offset \tab \code{POSIXct} in UTC; timezone-less text is interpreted as UTC \cr
-   \code{current_query_status} \tab Character; nonmissing, nonblank, unpadded, case-sensitive \tab Character \cr
-   \code{username} \tab Character; nonmissing, nonblank, unpadded, case-sensitive \tab Character \cr
+   \code{instance} \tab Positive character digits without leading zeros, integer, or whole number double; typed missing/blank only where inapplicable \tab Integer; inapplicable values become \code{NA_integer_} \cr
+   \code{ts} \tab Nonmissing \code{POSIXct}, or a REDCap/ISO-8601 character timestamp with date, seconds, optional fractional seconds, and optional \code{Z} or numeric offset \tab \code{POSIXct} in UTC; text without a timezone is interpreted as UTC \cr
+   \code{current_query_status} \tab Character; nonmissing, nonblank, unpadded, case sensitive \tab Character \cr
+   \code{username} \tab Character; nonmissing, nonblank, unpadded, case sensitive \tab Character \cr
 }
 
 
-Nonapplicable repeat/event dimensions must normalize to typed missing values;
+Inapplicable repeat and event dimensions must normalize to typed missing values;
 applicable dimensions must exactly match an Assessible target. \code{NaN},
 infinity, padded identifiers, invalid timestamps, unknown project/event/field
 contexts, illegal repeat shapes, and verification contexts outside the plan
@@ -185,25 +200,27 @@ are errors.
 
 Rows are filtered to exact \code{verified_user}, grouped by normalized field
 context, and reduced to the latest timestamp. Identical rows tied at the
-latest timestamp collapse; conflicting latest ties error. Only exact
-\code{"VERIFIED"} changes an otherwise-failing, already-assessed
-\code{field-complete} result. Verification cannot create targets, bypass gates,
-start an instrument, change a passing field, or restore fields removed by
-policy or branching. The report retains audit counts, not supplied rows.
+latest timestamp collapse; conflicting latest ties error. A verification
+override is eligible only when the latest row for the exact selected user
+and normalized field context has status \code{"VERIFIED"}, the target has passed
+its upstream gates and instrument start check, the field remains selected
+and applicable, and its raw \code{field-complete} disposition is \code{"failed"}.
+Eligible rows change the effective disposition to \code{"passed"}. The stored
+verification component contains audit counts. Supplied rows are excluded.
 }
 
 \section{Return value}{
 
 A \code{redcapmissing} object with exactly \code{plan}, \code{target_results}, \code{summary},
-\code{missing}, \code{verification}, \code{diagnostics}, and \code{details}. It retains neither
-source \code{data}, raw \code{verified}, tokens, nor a live connection.
+\code{missing}, \code{verification}, \code{diagnostics}, and \code{details}. The stored components
+exclude source \code{data}, raw \code{verified}, tokens, and the live connection.
 
 \code{target_results} has one row per Assessible target and exactly:\tabular{ll}{
    Columns \tab Storage \cr
    \code{record_id}, \code{instrument}, \code{redcap_event_name}, \code{repeat_instrument}, \code{target_source} \tab Character \cr
    \code{repeat_instance}, \code{fields_assessed}, \code{fields_failed} \tab Integer \cr
    \code{event_row_started}, \code{repeat_instance_row_started}, \code{instrument_started}, \code{field_complete} \tab Character check status \cr
-   \code{field_applicability_reason} \tab Character; typed missing unless a reason applies \cr
+   \code{field_applicability_reason} \tab Character; reason that \code{field-complete} is not applicable after field policy or branching, otherwise typed missing \cr
 }
 
 
@@ -220,8 +237,8 @@ and rates are double. \code{status} is \code{"assessed"} or \code{"not applicabl
 \code{record_id}, \code{redcap_event_name}, \code{repeat_instrument}, \code{repeat_instance},
 \code{validation_context}, \code{instrument}, \code{validation_check}, \code{field_name},
 \code{field_label}, \code{field_type}, \code{branching_logic}, and \code{url}. All are character
-except integer \code{repeat_instance}; inapplicable structural values are typed
-missing rather than blank placeholders.
+except integer \code{repeat_instance}; inapplicable structural values use
+\code{NA_character_} or \code{NA_integer_}.
 
 \code{verification} is a named audit list containing logical \code{enabled}, character
 \code{verified_user}, and integer \code{input_rows}, \code{user_rows}, \code{latest_user_rows},
@@ -235,8 +252,39 @@ With \code{details = TRUE}, \code{details} is a tibble with exact columns
 \code{field_name}, \code{field_label}, \code{field_type}, \code{branching_logic},
 \code{branch_satisfied}, \code{value_summary}, \code{raw_disposition},
 \code{verification_applied}, \code{effective_disposition}, and \code{reason}. Repeat instance
-is integer; branch/verification flags are logical; all other columns are
-character. With \code{details = FALSE}, \code{details} is \code{NULL}.
+is integer; branch and verification flags are logical; all other columns are
+character. The first three checks contribute one row per target. An assessed
+\code{field-complete} check contributes one row per applicable field. A check that
+is not applicable or not reached contributes one target level row with typed
+missing field columns. Fields closed by branching logic contribute no row.
+
+\code{branch_satisfied} is \code{TRUE} on every assessed field row and typed logical
+\code{NA} on target level check rows. \code{value_summary} is the character
+representation of an ordinary field value, including raw free text. For a
+checkbox root, it is a comma separated list of selected exported child
+column names; an assessed checkbox with no selected choices uses an empty
+string. Target level check rows use typed missing \code{value_summary}.
+\code{raw_disposition} and \code{effective_disposition} each accept \code{"passed"},
+\code{"failed"}, \code{"not applicable"}, or \code{"not reached"}. The raw value records
+assessment before verification, while the effective value includes an
+eligible verification override. \code{verification_applied} is \code{TRUE} exactly on
+an overridden field row.
+
+\code{target_results$field_applicability_reason} is either typed missing,
+\code{"no assessible fields after field policy"}, or
+\code{"no assessible fields after branching logic"}. The \code{details$reason} column
+explains a target level check that is not applicable, using
+\code{"not applicable for classic project"}, \code{"not a repeating target"}, or one
+of those two exact field reasons. \code{summary$reason} carries the corresponding
+reason for an aggregated check row.
+
+With \code{details = TRUE}, the object stores raw free text and other sensitive
+field values in \code{value_summary}. Protect it under the same access, retention,
+and disclosure controls as the source REDCap export. With \code{details = FALSE},
+\code{details} is \code{NULL}. The remaining report components contain record
+identifiers, unresolved failure contexts, and may contain direct REDCap data
+entry URLs in \code{missing$url}; protect either mode according to project data
+handling requirements.
 }
 
 \section{Conditions}{
@@ -250,13 +298,7 @@ to the failing boundary.
 
 \examples{
 \dontrun{
-explicit_schedule <- data.frame(
-  record_id = c("001", "002"),
-  instrument = c("baseline", "baseline"),
-  redcap_event_name = c("baseline_arm_1", "baseline_arm_1"),
-  repeat_instance = c(NA_integer_, NA_integer_)
-)
-plan <- plan_explicit(records, rcon, "baseline", explicit_schedule)
+# plan, records, and rcon are caller supplied.
 report <- run_plan(plan, records, rcon, progress = FALSE)
 get_summary(report)
 }

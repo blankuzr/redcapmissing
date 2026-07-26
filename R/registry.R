@@ -1,33 +1,33 @@
 #' Inspect the redcapmissing validation registry
 #'
 #' `registry()` returns the public validation taxonomy used by [run_plan()]. It
-#' defines the canonical check codes, display labels, assessment order, and
-#' downstream-gating metadata used by accessors and formatters.
+#' defines the check codes, display labels, assessment order, and
+#' downstream gating metadata used by accessors and formatters.
 #'
 #' @details
-#' The four canonical validation-check codes, in assessment order, are:
+#' The four validation check codes, in assessment order, are:
 #'
 #' 1. `"event-row-started"`: a physical row exists for the record and event;
 #' 2. `"repeat-instance-row-started"`: the exact repeating physical row exists;
-#' 3. `"instrument-started"`: an independent data-entry detection field has a
-#'    response; and
+#' 3. `"instrument-started"`: an ordinary detection field has a present
+#'    response or a checkbox detection field has a selected child; and
 #' 4. `"field-complete"`: every applicable field selected by policy is complete.
 #'
 #' Report rows use validation levels `"event:instrument"` and
 #' `"event:instrument:instance"`, selected from the target's repeat context.
 #' Applicable failed upstream checks gate downstream assessment. See
-#' [run_plan()] for classic/regular not-applicable behavior and the exact field
-#' policy.
+#' [run_plan()] for event checks in classic projects, repeat instance checks
+#' when `repeat_instance = NA_integer_`, and the exact field policy.
 #'
 #' @return A tibble with class `redcapmissing_registry` and one row per
-#'   validation-check and validation-level combination. It contains integer
+#'   validation check and validation level combination. It contains integer
 #'   `validation_order` and
 #'   `downstream_order`; character `validation_level`, `validation_check`,
 #'   `validation_label`, `flex_label`, `description`, `r_identifier`,
 #'   `component_stem`, and `step_suffix`; and logical `gates_downstream`.
 #'   `validation_check` is the stable public code used by [get_summary()] and
-#'   [get_missing()]; R-safe stems are implementation metadata rather than
-#'   alternate public vocabulary.
+#'   [get_missing()]. Public filters use these `validation_check` values; R
+#'   compatible stems are internal metadata.
 #'
 #' @examples
 #' registry()
@@ -50,21 +50,21 @@ registry <- function() {
 #' @rdname registry
 #' @export
 print.redcapmissing_registry <- function(x, ...) {
-  x <- tibble::as_tibble(x)
+  display <- tibble::as_tibble(x)
   required_cols <- c(
     "validation_order",
     "validation_level",
     "validation_check",
     "description"
   )
-  if (!all(required_cols %in% names(x))) {
-    class(x) <- setdiff(class(x), "redcapmissing_registry")
-    print(x, ...)
+  if (!all(required_cols %in% names(display))) {
+    class(display) <- setdiff(class(display), "redcapmissing_registry")
+    print(display, ...)
     return(invisible(x))
   }
 
-  n_checks <- length(unique(x$validation_check))
-  n_levels <- length(unique(x$validation_level))
+  n_checks <- length(unique(display$validation_check))
+  n_levels <- length(unique(display$validation_level))
 
   stream <- stdout()
   cli::cat_line(
@@ -79,7 +79,7 @@ print.redcapmissing_registry <- function(x, ...) {
     ),
     file = stream
   )
-  .redcapmissing_registry_print_table(x, stream = stream)
+  .redcapmissing_registry_print_table(display, stream = stream)
   invisible(x)
 }
 
@@ -110,8 +110,9 @@ print.redcapmissing_registry <- function(x, ...) {
     description = rep(c(
       "The expected REDCap event row exists in the export.",
       "The expected REDCap repeat instance row exists in the export.",
-      "The exported instrument has at least one entered data-capturing field.",
-      "field complete"
+      paste("An ordinary detection response is present or a checkbox detection",
+            "field has a selected child."),
+      "Every applicable ordinary field has a present response or eligible verification override, and every applicable checkbox has a selected child or eligible verification override."
     ), each = 2L),
     r_identifier = rep(c(
       "event_row_started",
@@ -222,7 +223,19 @@ print.redcapmissing_registry <- function(x, ...) {
 
 .redcapmissing_registry_print_table <- function(x, stream = stdout()) {
   x <- x[order(x$validation_order, x$validation_level), , drop = FALSE]
-  widths <- c(34, 21, 31)
+  meanings <- vapply(
+    x$validation_check,
+    .redcapmissing_registry_print_meaning,
+    character(1)
+  )
+  display_width <- function(header, values) {
+    max(nchar(c(header, as.character(values)), type = "width"), na.rm = TRUE)
+  }
+  widths <- c(
+    display_width("level", x$validation_level),
+    display_width("check", x$validation_check),
+    display_width("meaning", meanings)
+  )
   names(widths) <- c("level", "check", "meaning")
 
   cli::cat_line(
@@ -341,8 +354,11 @@ print.redcapmissing_registry <- function(x, ...) {
     validation_check,
     "event-row-started" = "event row exists",
     "repeat-instance-row-started" = "repeat instance row exists",
-    "instrument-started" = "instrument has data",
-    "field-complete" = "field complete",
+    "instrument-started" = "ordinary response present or checkbox child selected",
+    "field-complete" = paste(
+      "ordinary response present; checkbox child selected;",
+      "eligible verification may override a failure"
+    ),
     validation_check
   )
 }

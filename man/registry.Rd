@@ -17,37 +17,37 @@ when \code{x} is malformed.}
 }
 \value{
 A tibble with class \code{redcapmissing_registry} and one row per
-validation-check and validation-level combination. It contains integer
+validation check and validation level combination. It contains integer
 \code{validation_order} and
 \code{downstream_order}; character \code{validation_level}, \code{validation_check},
 \code{validation_label}, \code{flex_label}, \code{description}, \code{r_identifier},
 \code{component_stem}, and \code{step_suffix}; and logical \code{gates_downstream}.
 \code{validation_check} is the stable public code used by \code{\link[=get_summary]{get_summary()}} and
-\code{\link[=get_missing]{get_missing()}}; R-safe stems are implementation metadata rather than
-alternate public vocabulary.
+\code{\link[=get_missing]{get_missing()}}. Public filters use these \code{validation_check} values; R
+compatible stems are internal metadata.
 
 \code{x}, invisibly.
 }
 \description{
 \code{registry()} returns the public validation taxonomy used by \code{\link[=run_plan]{run_plan()}}. It
-defines the canonical check codes, display labels, assessment order, and
-downstream-gating metadata used by accessors and formatters.
+defines the check codes, display labels, assessment order, and
+downstream gating metadata used by accessors and formatters.
 }
 \details{
-The four canonical validation-check codes, in assessment order, are:
+The four validation check codes, in assessment order, are:
 \enumerate{
 \item \code{"event-row-started"}: a physical row exists for the record and event;
 \item \code{"repeat-instance-row-started"}: the exact repeating physical row exists;
-\item \code{"instrument-started"}: an independent data-entry detection field has a
-response; and
+\item \code{"instrument-started"}: an ordinary detection field has a present
+response or a checkbox detection field has a selected child; and
 \item \code{"field-complete"}: every applicable field selected by policy is complete.
 }
 
 Report rows use validation levels \code{"event:instrument"} and
 \code{"event:instrument:instance"}, selected from the target's repeat context.
 Applicable failed upstream checks gate downstream assessment. See
-\code{\link[=run_plan]{run_plan()}} for classic/regular not-applicable behavior and the exact field
-policy.
+\code{\link[=run_plan]{run_plan()}} for event checks in classic projects, repeat instance checks
+when \code{repeat_instance = NA_integer_}, and the exact field policy.
 }
 \examples{
 registry()

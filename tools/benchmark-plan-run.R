@@ -1,4 +1,4 @@
-# Synthetic tiered benchmark for the plan-and-run workflow.
+# Synthetic tiered benchmark for planning and assessment.
 #
 # The default smoke tier is deliberately fast:
 #   Rscript tools/benchmark-plan-run.R
@@ -6,22 +6,24 @@
 # Opt into one or more representative workloads with, for example:
 #   REDCAPMISSING_BENCH_TIER=ordinary,verified Rscript tools/benchmark-plan-run.R
 # Workload families also include constructors (character and numeric observed
-# IDs, extended multi-arm repeat with no, partial, and full observed overlap,
-# and explicit), branching
-# (cross-event plus checkbox), failure-density (0%, 10%, and 100%),
-# verification-history (timestamp history plus identical
-# latest ties), detail-allocation (paired compact and detailed runs on identical
-# sparse-failure inputs), and formatter-cardinality (three context counts).
-# Each scenario performs one unmeasured warm-up before measured iterations. Use
+# IDs, extended repeats across multiple arms with zero, partial, or full
+# observed overlap, and explicit targets); branching (cross event plus
+# checkbox); `failure-density` (0%, 10%, and 100%),
+# `verification-history` (timestamp history plus identical
+# latest ties), `detail-allocation` (paired compact and detailed runs on
+# identical inputs with few failures), and `formatter-cardinality` (three
+# context counts).
+# Each scenario performs one unmeasured warmup before measured iterations. Use
 # REDCAPMISSING_BENCH_TIER=all to run every tier. Counts can be overridden
 # with REDCAPMISSING_BENCH_RECORDS, REDCAPMISSING_BENCH_INSTRUMENTS,
 # REDCAPMISSING_BENCH_FIELDS, and REDCAPMISSING_BENCH_ITERATIONS. Set
 # REDCAPMISSING_BENCH_MEMORY=true to collect approximate allocation totals with
-# Rprofmem(); detail-allocation enables it automatically. Timings include actual
-# GC-time deltas and result sizes. No benchmarking package is required.
+# Rprofmem(); `detail-allocation` enables it automatically. Timings include
+# garbage collection time deltas and result sizes. The script uses base R
+# timing and memory tools.
 
 if (!requireNamespace("pkgload", quietly = TRUE)) {
-  stop("Install `pkgload` before running the source-tree benchmark.", call. = FALSE)
+  stop("Install `pkgload` before running the source tree benchmark.", call. = FALSE)
 }
 pkgload::load_all(".", quiet = TRUE, export_all = FALSE)
 
@@ -29,7 +31,7 @@ pkgload::load_all(".", quiet = TRUE, export_all = FALSE)
   value <- Sys.getenv(name, unset = "")
   if (!nzchar(value)) return(as.integer(default))
   if (!grepl("^[1-9][0-9]*$", value)) {
-    stop(name, " must be a canonical positive integer.", call. = FALSE)
+    stop(name, " must contain character digits matching `[1-9][0-9]*`.", call. = FALSE)
   }
   parsed <- suppressWarnings(as.double(value))
   if (!is.finite(parsed) || parsed > .Machine$integer.max) {
@@ -263,7 +265,7 @@ collect_memory <- .benchmark_env_logical("REDCAPMISSING_BENCH_MEMORY")
     form_name = c("baseline", "baseline", rep("followup", 3L)),
     field_type = c("text", "text", "text", "checkbox", "text"),
     field_label = c(
-      "Record ID", "Trigger", "Follow-up started", "Checklist", "Conditional"
+      "Record ID", "Trigger", "Follow up started", "Checklist", "Conditional"
     ),
     select_choices_or_calculations = c("", "", "", "1, First | 2, Second", ""),
     text_validation_type_or_show_slider_number = rep("", 5L),
@@ -275,7 +277,7 @@ collect_memory <- .benchmark_env_logical("REDCAPMISSING_BENCH_MEMORY")
   )
   instruments <- data.frame(
     instrument_name = c("baseline", "followup"),
-    instrument_label = c("Baseline", "Follow-up"),
+    instrument_label = c("Baseline", "Follow up"),
     stringsAsFactors = FALSE
   )
   project <- data.frame(
@@ -287,7 +289,7 @@ collect_memory <- .benchmark_env_logical("REDCAPMISSING_BENCH_MEMORY")
   events <- data.frame(
     event_id = c(101L, 102L),
     unique_event_name = c("baseline_arm_1", "followup_arm_1"),
-    event_name = c("Baseline", "Follow-up"),
+    event_name = c("Baseline", "Follow up"),
     arm_num = c(1L, 1L),
     stringsAsFactors = FALSE
   )

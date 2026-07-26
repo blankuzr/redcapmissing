@@ -1,4 +1,4 @@
-test_that("registry exposes the plan-and-run validation taxonomy", {
+test_that("registry exposes the plan and run validation taxonomy", {
   reg <- registry()
 
   expect_s3_class(reg, "redcapmissing_registry")
@@ -36,6 +36,14 @@ test_that("registry exposes the plan-and-run validation taxonomy", {
     )
   )
   expect_true(all(reg$gates_downstream))
+  expect_identical(
+    unique(reg$description[reg$validation_check == "field-complete"]),
+    paste0(
+      "Every applicable ordinary field has a present response or eligible ",
+      "verification override, and every applicable checkbox has a selected ",
+      "child or eligible verification override."
+    )
+  )
 })
 
 test_that("retired monolithic and form formatter APIs are not exported", {
@@ -63,12 +71,20 @@ test_that("context validation levels use instrument terminology", {
   )
 })
 
-test_that("registry print output contains no retired form codes", {
-  printed <- cli::ansi_strip(paste(capture.output(print(registry())), collapse = "\n"))
+test_that("registry print returns its input and shows complete check codes", {
+  reg <- registry()
+  visibility <- NULL
+  output <- capture.output(visibility <- withVisible(print(reg)))
+  printed <- cli::ansi_strip(paste(output, collapse = "\n"))
 
+  expect_false(visibility$visible)
+  expect_identical(visibility$value, reg)
+  expect_s3_class(visibility$value, "redcapmissing_registry")
   expect_match(printed, "validation registry", fixed = TRUE)
-  expect_match(printed, "repeat-instance-row-", fixed = TRUE)
+  expect_match(printed, "repeat-instance-row-started", fixed = TRUE)
   expect_match(printed, "instrument-started", fixed = TRUE)
+  expect_match(printed, "checkbox child selected", fixed = TRUE)
+  expect_false(grepl("repeat-instance-row-~", printed, fixed = TRUE))
   expect_false(grepl("form-started", printed, fixed = TRUE))
   expect_false(grepl("event:form", printed, fixed = TRUE))
 })

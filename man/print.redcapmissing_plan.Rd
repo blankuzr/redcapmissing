@@ -15,8 +15,9 @@
 \code{x}, invisibly.
 }
 \description{
-Prints only the construction type, number of selected instruments, and number
-of Assessible targets. Record IDs and individual targets are not printed.
+The display contains the construction type, number of selected instruments,
+and number of Assessible targets. Record IDs and individual targets remain in
+\code{x$assessible_targets}.
 }
 \seealso{
 \code{\link[=plan_from_data]{plan_from_data()}}, \code{\link[=plan_explicit]{plan_explicit()}}

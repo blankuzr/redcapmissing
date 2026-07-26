@@ -3,7 +3,9 @@
 #' @description
 #' `flex_html()` renders a `flextable` object, such as one returned by
 #' [flexify()] or [flex_event_instruments()], to the HTML string used by email and
-#' report insertion workflows.
+#' report insertion workflows. The optional packages `flextable` and
+#' `htmltools` are required when this function is called; the error lists
+#' each missing package.
 #'
 #' @param x A `flextable` object.
 #'
@@ -11,6 +13,7 @@
 #'
 #' @examples
 #' \dontrun{
+#' # report is caller supplied.
 #' summary_html <- flex_html(flexify(get_summary(report)))
 #' missing_html <- flex_html(flexify(get_missing(report)))
 #' event_instrument_html <- flex_html(flex_event_instruments(report))

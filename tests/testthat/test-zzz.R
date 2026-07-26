@@ -31,7 +31,7 @@ test_that("startup message includes banner and release metadata", {
   )
 })
 
-test_that("startup message includes branch-spectrum ANSI styling", {
+test_that("startup message includes branch spectrum ANSI styling", {
   old_options <- options(cli.num_colors = 256)
   on.exit(options(old_options), add = TRUE)
 

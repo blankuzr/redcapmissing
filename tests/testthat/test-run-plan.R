@@ -208,7 +208,7 @@ test_that("field policy changes only field-complete assessment", {
   expect_identical(ignored$target_results$instrument_started, "passed")
 })
 
-test_that("an empty field policy is not applicable rather than complete", {
+test_that("an empty field policy reports not applicable", {
   rcon <- run_plan_rcon()
   data <- run_plan_data()
   plan <- plan_from_data(data, rcon, "baseline_form")
@@ -234,7 +234,7 @@ test_that("an empty field policy is not applicable rather than complete", {
   expect_true(is.na(field_summary$fail_rate))
 })
 
-test_that("all branch-closed fields are not applicable rather than complete", {
+test_that("fields closed by branching report not applicable", {
   rcon <- run_plan_rcon()
   data <- run_plan_data(branch_flag = "0", start_marker = "started")
   plan <- plan_from_data(data, rcon, "baseline_form")
@@ -284,7 +284,7 @@ test_that("branching and checkbox roots retain REDCap completeness semantics", {
   expect_identical(checkbox$effective_disposition, "failed")
 })
 
-test_that("cross-event branching uses the matching record and event context", {
+test_that("cross event branching uses the matching record and event context", {
   metadata <- dplyr::bind_rows(
     meta_row("record_id", "baseline", required = "y"),
     meta_row("trigger", "baseline"),
@@ -300,7 +300,7 @@ test_that("cross-event branching uses the matching record and event context", {
     metadata = function() metadata,
     instruments = function() tibble::tibble(
       instrument_name = c("baseline", "followup"),
-      instrument_label = c("Baseline", "Follow-up")
+      instrument_label = c("Baseline", "Follow up")
     ),
     projectInformation = function() tibble::tibble(
       project_id = "77",
@@ -310,7 +310,7 @@ test_that("cross-event branching uses the matching record and event context", {
     events = function() tibble::tibble(
       event_id = c(101L, 102L),
       unique_event_name = c("baseline_arm_1", "followup_arm_1"),
-      event_name = c("Baseline", "Follow-up"),
+      event_name = c("Baseline", "Follow up"),
       arm_num = c(1L, 1L)
     ),
     mapping = function() tibble::tibble(
@@ -356,7 +356,7 @@ test_that("cross-event branching uses the matching record and event context", {
   missing_dependency <- data[, names(data) != "trigger", drop = FALSE]
   expect_error(
     run_plan(plan, missing_dependency, rcon, progress = FALSE),
-    regexp = "branching-logic evaluation",
+    regexp = "branching logic evaluation",
     class = "redcapmissing_error_schema"
   )
 
@@ -400,7 +400,7 @@ test_that("cross-event branching uses the matching record and event context", {
   repeat_rcon$metadata <- function() repeat_metadata
   repeat_rcon$instruments <- function() tibble::tibble(
     instrument_name = c("baseline", "source_repeat", "followup"),
-    instrument_label = c("Baseline", "Source repeat", "Follow-up")
+    instrument_label = c("Baseline", "Source repeat", "Follow up")
   )
   repeat_rcon$mapping <- function() dplyr::bind_rows(
     rcon$mapping(),
@@ -415,17 +415,24 @@ test_that("cross-event branching uses the matching record and event context", {
     form_name = "source_repeat"
   )
 
-  regular_data <- data
-  regular_data$redcap_repeat_instrument <- NA_character_
-  regular_data$redcap_repeat_instance <- NA_integer_
-  regular_data$repeat_value <- ""
-  repeated_data <- regular_data[1L, , drop = FALSE][rep.int(1L, 2L), ]
-  repeated_data$trigger <- "0"
-  repeated_data$redcap_repeat_instrument <- "source_repeat"
-  repeated_data$redcap_repeat_instance <- 1:2
-  repeated_data$repeat_value <- c("first", "second")
+  data_without_repeat_instance <- data
+  data_without_repeat_instance$redcap_repeat_instrument <- NA_character_
+  data_without_repeat_instance$redcap_repeat_instance <- NA_integer_
+  data_without_repeat_instance$repeat_value <- ""
+  data_with_repeat_instance <- data_without_repeat_instance[
+    1L,
+    ,
+    drop = FALSE
+  ][rep.int(1L, 2L), ]
+  data_with_repeat_instance$trigger <- "0"
+  data_with_repeat_instance$redcap_repeat_instrument <- "source_repeat"
+  data_with_repeat_instance$redcap_repeat_instance <- 1:2
+  data_with_repeat_instance$repeat_value <- c("first", "second")
 
-  repeated_first <- dplyr::bind_rows(repeated_data, regular_data)
+  repeated_first <- dplyr::bind_rows(
+    data_with_repeat_instance,
+    data_without_repeat_instance
+  )
   repeated_plan <- plan_from_data(repeated_first, repeat_rcon, "followup")
   resolved <- run_plan(
     repeated_plan,
@@ -543,7 +550,7 @@ test_that("instrument detection requires every exported detection column", {
   )
 })
 
-test_that("planner and runner data reject non-atomic response columns", {
+test_that("planner and runner data reject list and matrix response columns", {
   rcon <- run_plan_rcon()
   data <- run_plan_data()
   plan <- plan_from_data(data, rcon, "baseline_form")
@@ -596,6 +603,48 @@ test_that("checkbox metadata must define unambiguous exported children", {
   )
 })
 
+test_that("checkbox detection requires a selected child", {
+  metadata <- dplyr::bind_rows(
+    meta_row("record_id", "checkbox_only", required = "y"),
+    meta_row(
+      "choices",
+      "checkbox_only",
+      field_type = "checkbox",
+      choices = "1, First | 2, Second",
+      required = "y"
+    )
+  )
+  rcon <- list(
+    metadata = function() metadata,
+    instruments = function() tibble::tibble(
+      instrument_name = "checkbox_only",
+      instrument_label = "Checkbox only"
+    ),
+    projectInformation = function() tibble::tibble(
+      project_id = "77",
+      is_longitudinal = 0L
+    ),
+    repeatInstrumentEvent = function() tibble::tibble(
+      event_name = character(),
+      form_name = character()
+    )
+  )
+  assess_start <- function(first, second) {
+    data <- tibble::tibble(
+      record_id = "1",
+      choices___1 = first,
+      choices___2 = second
+    )
+    plan <- plan_from_data(data, rcon, "checkbox_only")
+    run_plan(plan, data, rcon, progress = FALSE)$target_results$instrument_started
+  }
+
+  for (value in c("0", "unchecked", "FALSE", "No")) {
+    expect_identical(assess_start(value, value), "failed")
+  }
+  expect_identical(assess_start("1", "0"), "passed")
+})
+
 test_that("malformed branching logic raises a package project condition", {
   rcon <- run_plan_rcon()
   metadata <- rcon$metadata()
@@ -612,7 +661,7 @@ test_that("malformed branching logic raises a package project condition", {
   )
 })
 
-test_that("selected instruments require at least one usable start-detection field", {
+test_that("selected instruments require at least one usable start detection field", {
   metadata <- dplyr::bind_rows(
     meta_row("record_id", "display_only", required = "y"),
     meta_row("instructions", "display_only", field_type = "descriptive"),
@@ -646,7 +695,7 @@ test_that("selected instruments require at least one usable start-detection fiel
   )
 })
 
-test_that("run_plan validates scalar and named field-policy arguments", {
+test_that("run_plan validates scalar and named field policy arguments", {
   rcon <- run_plan_rcon(); data <- run_plan_data()
   plan <- plan_from_data(data, rcon, "baseline_form")
   expect_error(run_plan(plan, data, rcon, required_fields = NA, progress = FALSE),
@@ -686,14 +735,44 @@ test_that("compact and detailed runs have identical assessment results", {
   plan <- plan_from_data(data, rcon, "baseline_form")
   compact <- run_plan(plan, data, rcon, progress = FALSE)
   detailed <- run_plan(plan, data, rcon, details = TRUE, progress = FALSE)
+  expect_identical(compact$plan, detailed$plan)
   expect_identical(compact$target_results, detailed$target_results)
   expect_identical(compact$summary, detailed$summary)
   expect_identical(compact$missing, detailed$missing)
+  expect_identical(compact$verification, detailed$verification)
+  expect_identical(
+    compact$diagnostics[setdiff(names(compact$diagnostics), "elapsed_seconds")],
+    detailed$diagnostics[setdiff(names(detailed$diagnostics), "elapsed_seconds")]
+  )
   expect_null(compact$details)
   expect_true(is.data.frame(detailed$details))
 })
 
-test_that("zero-target explicit plans return typed empty report tables", {
+test_that("detailed values summarize ordinary and checkbox fields", {
+  rcon <- run_plan_rcon()
+  data <- run_plan_data(
+    required_note = "synthetic free text",
+    checkbox_1 = "1",
+    checkbox_2 = "1"
+  )
+  plan <- plan_from_data(data, rcon, "baseline_form")
+  result <- run_plan(plan, data, rcon, details = TRUE, progress = FALSE)
+  fields <- result$details[result$details$validation_check == "field-complete", ]
+
+  ordinary <- fields[fields$field_name == "required_note", ]
+  checkbox <- fields[fields$field_name == "checkbox_field", ]
+  expect_identical(ordinary$value_summary, "synthetic free text")
+  expect_identical(
+    checkbox$value_summary,
+    "checkbox_field___1, checkbox_field___2"
+  )
+  expect_identical(ordinary$branch_satisfied, TRUE)
+  expect_identical(checkbox$branch_satisfied, TRUE)
+  expect_identical(ordinary$raw_disposition, "passed")
+  expect_identical(ordinary$effective_disposition, "passed")
+})
+
+test_that("explicit plans with no targets return typed empty report tables", {
   rcon <- run_plan_rcon(); data <- run_plan_data()
   schedule <- run_plan_explicit_schedule()[0, ]
   plan <- plan_explicit(data, rcon, "baseline_form", schedule)
@@ -705,7 +784,7 @@ test_that("zero-target explicit plans return typed empty report tables", {
   expect_type(result$summary$pass_rate, "double")
 })
 
-test_that("longitudinal event gates use any physical row in the record-event", {
+test_that("longitudinal event gates use any physical row in the record and event", {
   metadata <- dplyr::bind_rows(
     meta_row("record_id", "alpha", required = "y"),
     meta_row("alpha_value", "alpha"),
@@ -760,7 +839,7 @@ test_that("longitudinal event gates use any physical row in the record-event", {
   expect_identical(result$target_results$field_complete, "not reached")
 })
 
-test_that("repeating-event gates distinguish absent events from absent instances", {
+test_that("repeating event gates distinguish absent events from absent instances", {
   rcon <- run_plan_repeat_event_rcon()
   data <- run_plan_repeat_event_data()
   schedule <- tibble::tibble(
@@ -791,7 +870,7 @@ test_that("repeating-event gates distinguish absent events from absent instances
   )
 })
 
-test_that("longitudinal unresolved rows receive canonical REDCap URLs", {
+test_that("longitudinal unresolved rows receive REDCap data entry URLs", {
   rcon <- run_plan_rcon(longitudinal = TRUE)
   data <- dplyr::mutate(run_plan_data(required_note = ""),
                         redcap_event_name = "baseline_arm_1")
@@ -880,7 +959,7 @@ test_that("zero targets and fully gated targets reconcile across report componen
     c("instrument-started", "field-complete")))
 })
 
-test_that("every field-policy argument leaves targets and upstream checks invariant", {
+test_that("every field policy argument leaves targets and upstream checks invariant", {
   rcon <- run_plan_rcon(); data <- run_plan_data(required_note = "")
   plan <- plan_from_data(data, rcon, "baseline_form")
   runs <- list(
@@ -918,7 +997,7 @@ test_that("typed response missing values fail while nonfinite values remain lite
                    c("passed", "passed"))
 })
 
-test_that("field details retain target provenance for same-context instruments", {
+test_that("field details retain target provenance for instruments in one context", {
   metadata <- dplyr::bind_rows(
     meta_row("record_id", "alpha", required = "y"),
     meta_row("alpha_value", "alpha", required = "y"),
@@ -963,7 +1042,7 @@ test_that("run_plan rejects incomplete metadata before field resolution", {
   )
 })
 
-test_that("canonical structural IDs never overwrite a raw record_id response field", {
+test_that("normalized structural IDs preserve a raw record_id response field", {
   metadata <- dplyr::bind_rows(
     meta_row("study_id", "baseline_form", required = "y"),
     meta_row("record_id", "baseline_form", required = "y"),
@@ -1007,7 +1086,7 @@ test_that("canonical structural IDs never overwrite a raw record_id response fie
   expect_true("record_id" %in% result$missing$field_name)
 })
 
-test_that("explicit exclusions must remain relevant after the required-only filter", {
+test_that("explicit exclusions must remain relevant after the required fields filter", {
   rcon <- run_plan_rcon()
   original_metadata <- rcon$metadata()
   metadata <- dplyr::bind_rows(
@@ -1094,7 +1173,7 @@ test_that("runner reads every project structure surface once", {
   expect_false(exists("exportRecords", counts, inherits = FALSE))
 })
 
-test_that("logical and character controls enforce their complete scalar/vector contracts", {
+test_that("logical and character controls enforce their scalar and vector rules", {
   rcon <- run_plan_rcon()
   data <- run_plan_data()
   plan <- plan_from_data(data, rcon, "baseline_form")

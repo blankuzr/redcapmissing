@@ -4,46 +4,54 @@
 \name{redcapmissing-package}
 \alias{redcapmissing}
 \alias{redcapmissing-package}
-\title{redcapmissing: Plan-and-Run Completeness Assessment for REDCap Exports}
+\title{Plan and Run Missingness Assessment for REDCap Exports}
 \description{
-Construct a frozen set of Assessible REDCap targets, then evaluate physical
-rows, instrument start, and branching-aware field completeness against a
-record export. Public API terminology consistently uses \emph{instrument}, matching
-raw REDCap instrument names.
+Construct a set of Assessible REDCap targets, then evaluate physical rows,
+instrument start, branching logic, and field completeness against a record
+export. Exported functions use \emph{instrument} for raw REDCap instrument names.
 }
 \details{
-The workflow deliberately separates target construction from assessment:
+The package workflow has three steps:
 \enumerate{
 \item \code{\link[=plan_from_data]{plan_from_data()}} combines allowable crossings observed in the export
-with an optional sparse extension; or \code{\link[=plan_explicit]{plan_explicit()}} accepts an
-authoritative record-level schedule.
-\item \code{\link[=run_plan]{run_plan()}} evaluates the frozen plan without allowing runtime rows to add
-targets.
+with an optional extension. \code{\link[=plan_explicit]{plan_explicit()}} uses an exact schedule that
+includes a record ID for every target.
+\item \code{\link[=run_plan]{run_plan()}} evaluates the targets stored in the plan.
 \item \code{\link[=get_summary]{get_summary()}} and \code{\link[=get_missing]{get_missing()}} inspect results, while \code{\link[=flexify]{flexify()}} and
 \code{\link[=flex_event_instruments]{flex_event_instruments()}} format them.
 }
 
-Constructors discover the record-ID field and project structure from \code{rcon}.
-Plans retain canonical target identity and a deterministic SHA-256 structure
-fingerprint, but neither source records nor a live connection. Reports retain
-the plan, target-level results, aggregates, unresolved failures, verification
-audit counts, diagnostics, and optional validation detail; they do not retain
-source data, raw verification rows, tokens, or a live connection.
+Constructors discover the record ID field and project structure from \code{rcon}.
+A plan contains \code{schema_version}, \code{construction}, \code{instruments},
+\code{assessible_targets}, \code{project}, and \code{structure_fingerprint}. Source records
+and the live connection remain outside the plan.
 
-Structural absence is represented by typed missing values: for example,
-\code{NA_character_} for classic event context and non-repeating instrument context,
-and \code{NA_integer_} for a regular target's repeat instance. Response missingness
-is separate from physical-row presence. See \code{\link[=plan_from_data]{plan_from_data()}} for structural
-normalization and \code{\link[=run_plan]{run_plan()}} for response and verification missingness.
+A report contains the plan, target results, summaries, unresolved failures,
+verification counts, diagnostics, and optional field details. With
+\code{details = TRUE}, \code{details$value_summary} stores assessed ordinary field
+values as character. For checkbox fields, it stores selected exported
+checkbox child column names. Reports contain record IDs and may
+contain REDCap data entry URLs. Store each report under the same access,
+retention, and sharing rules as its source REDCap export.
 
-Public validation failures inherit from \code{redcapmissing_error} and use boundary
-subclasses for argument, schema, project, schedule, plan, and verification
-failures. Sparse extensions into arms without observed records use the classed
+Structural dimensions use typed missing values when they do not apply. In
+\code{plan$assessible_targets}, \code{redcap_event_name} is \code{NA_character_} for classic
+projects. \code{repeat_instrument} contains the raw instrument name for a
+repeating instrument target; it is \code{NA_character_} for a repeating event
+target or a target where neither the event nor instrument repeats.
+\code{repeat_instance} contains a positive integer for repeating event and
+repeating instrument targets; it is \code{NA_integer_} when neither repeats. See
+\code{\link[=plan_from_data]{plan_from_data()}} for structural normalization and \code{\link[=run_plan]{run_plan()}} for field
+and verification missing values.
+
+Validation failures inherit from \code{redcapmissing_error} and use subclasses for
+argument, schema, project, schedule, plan, and verification failures.
+Extensions into arms with zero observed records use the
 \code{redcapmissing_warning_empty_arm_extension} warning.
 
-A typical online workflow uses \code{redcapAPI::redcapConnection()} and a typed
-export from \code{redcapAPI::exportRecordsTyped()}. Keep REDCap API tokens outside
-source, logs, reports, and serialized objects.
+An online workflow uses \code{redcapAPI::redcapConnection()} and
+\code{redcapAPI::exportRecordsTyped()}. Keep REDCap API tokens outside source,
+logs, reports, and saved R objects.
 }
 \seealso{
 \code{\link[=plan_from_data]{plan_from_data()}}, \code{\link[=plan_explicit]{plan_explicit()}}, \code{\link[=run_plan]{run_plan()}},

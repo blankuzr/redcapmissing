@@ -1,24 +1,24 @@
 #' Get validation summaries from a REDCap missingness report
 #'
 #' `get_summary()` returns the stored validation summary from a report created by
-#' [run_plan()]. Filters subset the completed report; they never rerun checks,
-#' change applicability, or recalculate denominators.
+#' [run_plan()]. Filters select rows from the stored summary. Assessment results,
+#' applicability, and denominators remain those computed by [run_plan()].
 #'
 #' @param report A validated `redcapmissing` object created by [run_plan()].
 #' @param validation_check `NULL`, or a nonempty character vector containing one
-#'   or more exact canonical codes from [registry()]: `"event-row-started"`,
+#'   or more exact codes from [registry()]: `"event-row-started"`,
 #'   `"repeat-instance-row-started"`, `"instrument-started"`, or
 #'   `"field-complete"`.
 #' @param events `NULL`, or a nonempty character vector of exact raw REDCap
-#'   unique event names represented by the plan. Classic-project event context
-#'   is structurally missing and is not selected by a text value.
+#'   unique event names represented by the plan. Classic project event context
+#'   is `NA_character_`; filters contain raw event names.
 #' @param instruments `NULL`, or a nonempty character vector of exact raw REDCap
 #'   instrument names selected by the plan.
 #'
 #' @details
-#' Filter matching is case-sensitive. Vectors may not contain missing, blank, or
-#' whitespace-padded values. Unknown values error. Duplicate filter values are
-#' normalized to one value.
+#' Filter matching is case sensitive. Vectors require present, nonblank,
+#' unpadded values. Unknown values error. Duplicate filter values normalize to
+#' one value.
 #'
 #' @return A tibble with exactly these columns and storage types:
 #'
@@ -29,26 +29,24 @@
 #' | `repeat_instrument` | Character raw repeating instrument; otherwise `NA_character_` |
 #' | `repeat_instance` | Integer exact instance; otherwise `NA_integer_` |
 #' | `validation_level` | Character: `"event:instrument"` or `"event:instrument:instance"` |
-#' | `validation_check` | Character canonical validation-check code |
+#' | `validation_check` | Character validation check code |
 #' | `status` | Character: `"assessed"` or `"not applicable"` |
 #' | `reason` | Character; typed missing unless the check is not applicable |
 #' | `assessed`, `passed`, `failed` | Integer counts |
 #' | `pass_rate`, `fail_rate` | Double proportions; `NA_real_` when nothing was assessed |
 #'
 #' The tibble has a `redcapmissing_labels` attribute containing named character
-#' vectors `events` and `instruments` for presentation. Raw values remain the
-#' filtering and data contract.
+#' vectors `events` and `instruments` for presentation. Raw values remain in
+#' the returned data and are used for filtering.
 #'
 #' @examples
 #' \dontrun{
-#' plan <- plan_from_data(records, rcon, "baseline")
-#' report <- run_plan(plan, records, rcon)
-#'
+#' # report and instruments are caller supplied.
 #' get_summary(report)
 #' get_summary(
 #'   report,
 #'   validation_check = "field-complete",
-#'   instruments = "baseline"
+#'   instruments = instruments
 #' )
 #' }
 #'
@@ -125,7 +123,7 @@ get_summary <- function(
   )
   invalid_checks <- setdiff(unique(summary_rows$validation_check), .redcapmissing_validation_checks())
   if (length(invalid_checks) > 0L) {
-    stop("`report$summary` contains unknown validation-check codes.", call. = FALSE)
+    stop("`report$summary` contains unknown validation check codes.", call. = FALSE)
   }
   invalid_status <- setdiff(unique(summary_rows$status), c("assessed", "not applicable"))
   if (length(invalid_status) > 0L) {
@@ -190,7 +188,7 @@ get_summary <- function(
     return(NULL)
   }
   if (!is.character(values) || length(values) == 0L) {
-    stop("`", arg, "` must be `NULL` or a non-empty character vector.", call. = FALSE)
+    stop("`", arg, "` must be `NULL` or a nonempty character vector.", call. = FALSE)
   }
   if (anyNA(values) || any(trimws(values) == "")) {
     stop("`", arg, "` may not contain `NA` or blank values.", call. = FALSE)

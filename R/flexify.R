@@ -2,43 +2,43 @@
 #'
 #' @description
 #' `flexify()` turns a tibble returned by [get_summary()] or [get_missing()]
-#' into a presentation-ready `flextable`.
+#' into a presentation ready `flextable`.
 #'
 #' @details
-#' Column names and storage types must remain compatible with either the
-#' `get_summary()` or `get_missing()` return schema. Columns may appear in any
-#' order, but added or renamed columns and combinations of summary-only and
-#' missing-row-only columns are rejected.
+#' Column names and storage types must match either the `get_summary()` or
+#' `get_missing()` return schema. Columns may appear in any
+#' order, but added or renamed columns and combinations of summary columns and
+#' missing row columns are rejected.
 #'
-#' Event, instrument, and repeat-instrument values use the package-owned display-label
+#' Event, instrument, and repeat instrument values use the package display label
 #' metadata carried by the accessors. Raw REDCap values are used when that
 #' metadata is unavailable. Validation checks use the `flex_label` values from
-#' [registry()], rates are displayed as one-decimal percentages, missing values
-#' are displayed as blank cells, and available `url` values are formatted as
+#' [registry()], rates are displayed as percentages with one decimal place,
+#' missing values are displayed as blank cells, and available `url` values are
+#' formatted as
 #' hyperlinks.
 #'
-#' Input row and column order are preserved. If both repeat-context columns are
+#' Input row and column order are preserved. If both repeat context columns are
 #' present and entirely blank, they are omitted together when at least one other
-#' display column remains. `flexify()` formats an ungrouped copy and does not
-#' modify `x`.
+#' display column remains. `flexify()` formats an ungrouped copy; `x` retains its
+#' original rows, columns, groups, values, and attributes.
 #'
-#' This function requires the optional `flextable` package.
+#' The optional `flextable` package is required when this function is called;
+#' the error lists it when unavailable.
 #'
 #' @param x A tibble returned by [get_summary()] or [get_missing()], optionally
-#'   filtered, grouped, reordered, or reduced to a non-empty subset of its
+#'   filtered, grouped, reordered, or reduced to a nonempty subset of its
 #'   documented columns.
 #'
 #' @return A `flextable` object with one display column per retained input
 #'   column.
 #'
-#' @examplesIf requireNamespace("flextable", quietly = TRUE)
-#' summary_rows <- tibble::tibble(
-#'   instrument = "baseline_instrument",
-#'   validation_check = "field-complete",
-#'   assessed = 10L,
-#'   pass_rate = 0.9
-#' )
-#' flexify(summary_rows)
+#' @examples
+#' \dontrun{
+#' # report is caller supplied.
+#' summary_table <- flexify(get_summary(report))
+#' missing_table <- flexify(get_missing(report))
+#' }
 #'
 #' @seealso [get_summary()], [get_missing()], [run_plan()], [flex_html()]
 #'
@@ -97,7 +97,7 @@ flexify <- function(x) {
       anyNA(column_names) ||
       any(trimws(column_names) == "")
   ) {
-    stop("Every column in `x` must have a non-blank name.", call. = FALSE)
+    stop("Every column in `x` must have a nonblank name.", call. = FALSE)
   }
   if (anyDuplicated(column_names)) {
     stop("Column names in `x` must be unique.", call. = FALSE)
@@ -120,7 +120,7 @@ flexify <- function(x) {
   missing_compatible <- all(column_names %in% missing_columns)
   if (!summary_compatible && !missing_compatible) {
     stop(
-      "`x` may not combine summary-only and missing-row-only columns.",
+      "`x` must use columns from one accessor schema.",
       call. = FALSE
     )
   }
