@@ -93,112 +93,219 @@ flex_event_instruments.redcapmissing <- function(
 ) {
   .redcapmissing_flex_event_instruments_check_threshold(missing_threshold)
   targets <- .redcapmissing_flex_event_instruments_targets(x)
-  labels <- attr(get_summary(x), "redcapmissing_labels", exact = TRUE) %||% list()
+  project <- x$plan$project %||% list()
+  event_values <- unique(targets$redcap_event_name)
+  instrument_values <- unique(c(
+    targets$instrument,
+    targets$repeat_instrument[!is.na(targets$repeat_instrument)]
+  ))
+  labels <- list(
+    events = .redcapmissing_resolve_labels(
+      project$event_labels,
+      event_values[!is.na(event_values)]
+    ),
+    instruments = .redcapmissing_resolve_labels(
+      project$instrument_labels,
+      instrument_values
+    )
+  )
   has_repeat <- nrow(targets) > 0L && (
     any(!is.na(targets$repeat_instrument)) ||
       any(!is.na(targets$repeat_instance))
   )
 
-  contexts <- unique(targets[c(
+  context_columns <- c(
     "redcap_event_name",
     "instrument",
     "repeat_instrument",
     "repeat_instance"
-  )])
-  event_values <- unique(targets$redcap_event_name)
-  rows <- list()
-  row_index <- 0L
+  )
+  contexts <- unique(targets[context_columns])
 
-  for (event in event_values) {
-    event_targets <- targets[.redcapmissing_same_value(
-      targets$redcap_event_name,
-      event
-    ), , drop = FALSE]
-    event_stats <- .redcapmissing_flex_event_instruments_event_stats(event_targets)
-    row_index <- row_index + 1L
-    rows[[row_index]] <- .redcapmissing_flex_event_instruments_row(
-      row_type = "event",
-      event = .redcapmissing_flex_event_instruments_event_label(event, labels),
-      instrument = "",
-      repeat_instrument = "",
-      repeat_instance = "",
-      n = .redcapmissing_flex_event_instruments_format_stats(event_stats),
-      incomplete = "",
-      not_started = "",
-      threshold = "",
+  if (!nrow(targets)) {
+    out <- .redcapmissing_flex_event_instruments_empty(has_repeat)
+  } else {
+    context_count <- nrow(contexts)
+    context_groups <- .redcapmissing_flex_event_instruments_group_id(
+      dplyr::bind_rows(contexts, targets[context_columns])
+    )
+    context_id <- match(
+      context_groups[context_count + seq_len(nrow(targets))],
+      context_groups[seq_len(context_count)]
+    )
+
+    upstream_failed <- targets$event_row_started == "failed" |
+      targets$repeat_instance_row_started == "failed" |
+      targets$instrument_started == "failed"
+    incomplete <- upstream_failed | targets$field_complete == "failed"
+    missing_fraction <- numeric(nrow(targets))
+    missing_fraction[upstream_failed] <- 1
+    with_fields <- !upstream_failed &
+      targets$instrument_started == "passed" &
+      targets$fields_assessed > 0L
+    missing_fraction[with_fields] <- targets$fields_failed[with_fields] /
+      targets$fields_assessed[with_fields]
+    threshold_hit <- if (missing_threshold == 1) {
+      missing_fraction >= 1
+    } else {
+      missing_fraction > missing_threshold
+    }
+
+    context_denominator <- as.integer(tabulate(context_id, context_count))
+    context_incomplete <- as.integer(tabulate(
+      context_id[incomplete],
+      context_count
+    ))
+    context_not_started <- as.integer(tabulate(
+      context_id[upstream_failed],
+      context_count
+    ))
+    context_threshold <- as.integer(tabulate(
+      context_id[threshold_hit],
+      context_count
+    ))
+    repeat_passed <- as.integer(tabulate(
+      context_id[targets$repeat_instance_row_started == "passed"],
+      context_count
+    ))
+    repeat_assessed <- as.integer(tabulate(
+      context_id[
+        targets$repeat_instance_row_started %in% c("passed", "failed")
+      ],
+      context_count
+    ))
+    repeat_context <- !is.na(contexts$repeat_instance) |
+      !is.na(contexts$repeat_instrument)
+
+    instrument_rows <- .redcapmissing_flex_event_instruments_row(
+      row_type = rep("instrument", context_count),
+      event = rep("", context_count),
+      instrument = .redcapmissing_flex_event_instruments_label(
+        contexts$instrument,
+        labels$instruments
+      ),
+      repeat_instrument = .redcapmissing_flex_event_instruments_label(
+        contexts$repeat_instrument,
+        labels$instruments
+      ),
+      repeat_instance = ifelse(
+        is.na(contexts$repeat_instance),
+        "",
+        as.character(contexts$repeat_instance)
+      ),
+      n = ifelse(
+        repeat_context,
+        .redcapmissing_flex_event_instruments_format_fraction(
+          repeat_passed,
+          repeat_assessed
+        ),
+        ""
+      ),
+      incomplete = .redcapmissing_flex_event_instruments_format_fraction(
+        context_incomplete,
+        context_denominator
+      ),
+      not_started = .redcapmissing_flex_event_instruments_format_fraction(
+        context_not_started,
+        context_denominator
+      ),
+      threshold = .redcapmissing_flex_event_instruments_format_fraction(
+        context_threshold,
+        context_denominator
+      ),
+      has_repeat = has_repeat,
+      incomplete_count = context_incomplete,
+      denominator = context_denominator,
+      not_started_count = context_not_started,
+      threshold_count = context_threshold
+    )
+
+    record_event_columns <- c("record_id", "redcap_event_name")
+    record_events <- unique(targets[record_event_columns])
+    record_event_count <- nrow(record_events)
+    record_event_groups <- .redcapmissing_flex_event_instruments_group_id(
+      dplyr::bind_rows(record_events, targets[record_event_columns])
+    )
+    record_event_id <- match(
+      record_event_groups[record_event_count + seq_len(nrow(targets))],
+      record_event_groups[seq_len(record_event_count)]
+    )
+    record_event_passed <- as.integer(tabulate(
+      record_event_id[targets$event_row_started == "passed"],
+      record_event_count
+    ))
+    record_event_failed <- as.integer(tabulate(
+      record_event_id[targets$event_row_started == "failed"],
+      record_event_count
+    ))
+    if (any(record_event_passed > 0L & record_event_failed > 0L)) {
+      stop(
+        "Conflicting event-row-started results for one record-event context.",
+        call. = FALSE
+      )
+    }
+    record_event_status <- ifelse(
+      record_event_passed > 0L,
+      "passed",
+      ifelse(record_event_failed > 0L, "failed", "not applicable")
+    )
+    record_event_event_id <- match(
+      record_events$redcap_event_name,
+      event_values
+    )
+    event_count <- length(event_values)
+    event_record_count <- as.integer(tabulate(
+      record_event_event_id,
+      event_count
+    ))
+    event_passed <- as.integer(tabulate(
+      record_event_event_id[record_event_status == "passed"],
+      event_count
+    ))
+    event_assessed <- as.integer(tabulate(
+      record_event_event_id[
+        record_event_status %in% c("passed", "failed")
+      ],
+      event_count
+    ))
+    no_applicable_event_gate <- event_assessed == 0L
+    event_passed[no_applicable_event_gate] <-
+      event_record_count[no_applicable_event_gate]
+    event_assessed[no_applicable_event_gate] <-
+      event_record_count[no_applicable_event_gate]
+
+    event_rows <- .redcapmissing_flex_event_instruments_row(
+      row_type = rep("event", event_count),
+      event = .redcapmissing_flex_event_instruments_event_label(
+        event_values,
+        labels
+      ),
+      instrument = rep("", event_count),
+      repeat_instrument = rep("", event_count),
+      repeat_instance = rep("", event_count),
+      n = .redcapmissing_flex_event_instruments_format_fraction(
+        event_passed,
+        event_assessed
+      ),
+      incomplete = rep("", event_count),
+      not_started = rep("", event_count),
+      threshold = rep("", event_count),
       has_repeat = has_repeat
     )
 
-    event_contexts <- contexts[.redcapmissing_same_value(
+    event_rows$.event_order <- seq_len(event_count)
+    event_rows$.row_order <- 0L
+    instrument_rows$.event_order <- match(
       contexts$redcap_event_name,
-      event
-    ), , drop = FALSE]
-    for (context_index in seq_len(nrow(event_contexts))) {
-      context <- event_contexts[context_index, , drop = FALSE]
-      context_targets <- targets[
-        .redcapmissing_flex_event_instruments_context_match(targets, context),
-        ,
-        drop = FALSE
-      ]
-      metrics <- .redcapmissing_flex_event_instruments_metrics(
-        context_targets,
-        missing_threshold
-      )
-      repeat_context <- !is.na(context$repeat_instance[[1]]) ||
-        !is.na(context$repeat_instrument[[1]])
-      repeat_stats <- list(
-        passed = sum(context_targets$repeat_instance_row_started == "passed"),
-        assessed = sum(context_targets$repeat_instance_row_started %in% c("passed", "failed"))
-      )
-
-      row_index <- row_index + 1L
-      rows[[row_index]] <- .redcapmissing_flex_event_instruments_row(
-        row_type = "instrument",
-        event = "",
-        instrument = .redcapmissing_flex_event_instruments_label(
-          context$instrument[[1]],
-          labels$instruments
-        ),
-        repeat_instrument = .redcapmissing_flex_event_instruments_label(
-          context$repeat_instrument[[1]],
-          labels$instruments
-        ),
-        repeat_instance = if (is.na(context$repeat_instance[[1]])) {
-          ""
-        } else {
-          as.character(context$repeat_instance[[1]])
-        },
-        n = if (repeat_context) {
-          .redcapmissing_flex_event_instruments_format_stats(repeat_stats)
-        } else {
-          ""
-        },
-        incomplete = .redcapmissing_flex_event_instruments_format_fraction(
-          metrics$incomplete,
-          metrics$denominator
-        ),
-        not_started = .redcapmissing_flex_event_instruments_format_fraction(
-          metrics$not_started,
-          metrics$denominator
-        ),
-        threshold = .redcapmissing_flex_event_instruments_format_fraction(
-          metrics$threshold,
-          metrics$denominator
-        ),
-        has_repeat = has_repeat,
-        incomplete_count = metrics$incomplete,
-        denominator = metrics$denominator,
-        not_started_count = metrics$not_started,
-        threshold_count = metrics$threshold
-      )
-    }
+      event_values
+    )
+    instrument_rows$.row_order <- seq_len(context_count)
+    out <- dplyr::bind_rows(event_rows, instrument_rows)
+    out <- out[order(out$.event_order, out$.row_order), , drop = FALSE]
+    out$.event_order <- NULL
+    out$.row_order <- NULL
   }
 
-  out <- if (length(rows) == 0L) {
-    .redcapmissing_flex_event_instruments_empty(has_repeat)
-  } else {
-    dplyr::bind_rows(rows)
-  }
   out <- .redcapmissing_flex_event_instruments_add_all(out, has_repeat)
 
   display_columns <- c("Event", "Instrument")
@@ -267,87 +374,39 @@ flex_event_instruments.redcapmissing <- function(
   targets
 }
 
-.redcapmissing_flex_event_instruments_event_stats <- function(targets) {
-  if (nrow(targets) == 0L) {
-    return(list(passed = 0L, assessed = 0L))
-  }
-  keys <- paste(targets$record_id, .redcapmissing_key_value(targets$redcap_event_name), sep = "\r")
-  split_rows <- split(seq_len(nrow(targets)), keys)
-  statuses <- vapply(split_rows, function(index) {
-    value <- unique(targets$event_row_started[index])
-    applicable <- value[value %in% c("passed", "failed")]
-    if (length(applicable) > 1L) {
-      stop("Conflicting event-row-started results for one record-event context.", call. = FALSE)
-    }
-    if (length(applicable) == 0L) "not applicable" else applicable[[1]]
-  }, character(1))
-  if (all(statuses == "not applicable")) {
-    return(list(passed = length(statuses), assessed = length(statuses)))
-  }
-  list(
-    passed = sum(statuses == "passed"),
-    assessed = sum(statuses %in% c("passed", "failed"))
+.redcapmissing_flex_event_instruments_group_id <- function(x) {
+  x <- as.data.frame(x, stringsAsFactors = FALSE)
+  row_count <- nrow(x)
+  if (!row_count) return(integer())
+  ordering <- do.call(
+    order,
+    c(unname(x), list(na.last = TRUE, method = "radix"))
   )
-}
+  if (row_count == 1L) return(1L)
 
-.redcapmissing_flex_event_instruments_metrics <- function(targets, threshold) {
-  upstream_failed <- targets$event_row_started == "failed" |
-    targets$repeat_instance_row_started == "failed" |
-    targets$instrument_started == "failed"
-  incomplete <- upstream_failed | targets$field_complete == "failed"
-
-  fraction <- rep(0, nrow(targets))
-  fraction[upstream_failed] <- 1
-  started <- !upstream_failed & targets$instrument_started == "passed"
-  with_fields <- started & targets$fields_assessed > 0L
-  fraction[with_fields] <- targets$fields_failed[with_fields] /
-    targets$fields_assessed[with_fields]
-  threshold_hit <- if (identical(threshold, 1)) {
-    fraction >= 1
-  } else {
-    fraction > threshold
+  same_as_previous <- rep(TRUE, row_count - 1L)
+  for (column in x) {
+    sorted <- column[ordering]
+    previous <- sorted[-row_count]
+    following <- sorted[-1L]
+    equal <- (is.na(previous) & is.na(following)) |
+      (!is.na(previous) & !is.na(following) & previous == following)
+    same_as_previous <- same_as_previous & equal
   }
-
-  list(
-    denominator = nrow(targets),
-    incomplete = sum(incomplete),
-    not_started = sum(upstream_failed),
-    threshold = sum(threshold_hit)
-  )
-}
-
-.redcapmissing_flex_event_instruments_context_match <- function(x, context) {
-  .redcapmissing_same_value(x$redcap_event_name, context$redcap_event_name[[1]]) &
-    x$instrument == context$instrument[[1]] &
-    .redcapmissing_same_value(x$repeat_instrument, context$repeat_instrument[[1]]) &
-    .redcapmissing_same_value(x$repeat_instance, context$repeat_instance[[1]])
-}
-
-.redcapmissing_same_value <- function(x, value) {
-  if (is.na(value)) is.na(x) else !is.na(x) & x == value
-}
-
-.redcapmissing_key_value <- function(x) {
-  out <- as.character(x)
-  out[is.na(x)] <- "<NA>"
-  out
+  sorted_id <- cumsum(c(TRUE, !same_as_previous))
+  group_id <- integer(row_count)
+  group_id[ordering] <- sorted_id
+  group_id
 }
 
 .redcapmissing_flex_event_instruments_event_label <- function(event, labels) {
-  if (is.na(event)) {
-    return("Single event")
-  }
-  .redcapmissing_flex_event_instruments_label(event, labels$events)
+  out <- .redcapmissing_flex_event_instruments_label(event, labels$events)
+  out[is.na(event)] <- "Single event"
+  out
 }
 
 .redcapmissing_flex_event_instruments_label <- function(value, labels) {
-  if (is.na(value)) {
-    return("")
-  }
-  if (is.character(labels) && !is.null(names(labels)) && value %in% names(labels)) {
-    return(unname(labels[[value]]))
-  }
-  value
+  .redcapmissing_flex_label_values(value, labels)
 }
 
 .redcapmissing_flex_event_instruments_check_threshold <- function(x) {
@@ -363,7 +422,7 @@ flex_event_instruments.redcapmissing <- function(
     percent <- sub("0+$", "", percent)
     percent <- sub("[.]$", "", percent)
   }
-  if (identical(x, 1)) {
+  if (x == 1) {
     "Instrument = 100% Missing"
   } else {
     paste0("Instrument >", percent, "% Missing")
@@ -375,8 +434,12 @@ flex_event_instruments.redcapmissing <- function(
 }
 
 .redcapmissing_flex_event_instruments_format_fraction <- function(count, denominator) {
-  percent <- if (denominator > 0L) round(count / denominator * 100, 1) else 0
-  as.character(glue::glue("{count}/{denominator} ({percent}%)"))
+  count <- as.integer(count)
+  denominator <- as.integer(denominator)
+  percent <- numeric(length(denominator))
+  assessed <- denominator > 0L
+  percent[assessed] <- round(count[assessed] / denominator[assessed] * 100, 1)
+  paste0(count, "/", denominator, " (", percent, "%)")
 }
 
 .redcapmissing_flex_event_instruments_empty <- function(has_repeat) {

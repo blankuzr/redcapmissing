@@ -231,9 +231,15 @@
     return(cached)
   }
 
-  fields <- project$system_fields
-  event_col <- fields$event_col
-  if (!event_col %in% names(lookup_records)) {
+  event_index <- .miss_branch_event_index(
+    branch_cache = branch_cache,
+    records = records,
+    lookup_records = lookup_records,
+    event = event,
+    project = project
+  )
+  if (!any(!is.na(event_index$source_row)) ||
+      !field %in% names(lookup_records)) {
     value <- rep(NA_character_, nrow(records))
     .miss_branch_cache_set(
       branch_cache,
@@ -244,23 +250,9 @@
     return(value)
   }
 
-  event_rows <- as.character(lookup_records[[event_col]]) == event
-  event_records <- lookup_records[event_rows, , drop = FALSE]
-  if (nrow(event_records) == 0 || !field %in% names(event_records)) {
-    value <- rep(NA_character_, nrow(records))
-    .miss_branch_cache_set(
-      branch_cache,
-      event = event,
-      field = field,
-      value = value
-    )
-    return(value)
-  }
-
-  row_match <- match(records[[project$id_col]], event_records[[project$id_col]])
   value <- rep(NA_character_, nrow(records))
-  hit <- !is.na(row_match)
-  value[hit] <- .miss_chr_vec(event_records[[field]][row_match[hit]])
+  hit <- !is.na(event_index$source_row)
+  value[hit] <- .miss_chr_vec(lookup_records[[field]][event_index$source_row[hit]])
   .miss_branch_cache_set(
     branch_cache,
     event = event,
@@ -271,76 +263,134 @@
 }
 
 .miss_new_branch_cache <- function(records, lookup_records, project) {
-  env <- new.env(parent = emptyenv())
-  env$values <- list()
+  env <- new.env(hash = TRUE, parent = emptyenv())
+  env$values <- new.env(hash = TRUE, parent = emptyenv())
+  env$event_indices <- new.env(hash = TRUE, parent = emptyenv())
   env
 }
 
-.miss_branch_cache_key <- function(event, field) {
-  paste(.miss_chr(event), .miss_chr(field), sep = "\r")
-}
-
 .miss_branch_cache_get <- function(branch_cache, event, field) {
-  if (is.null(branch_cache)) {
+  if (is.null(branch_cache) || length(event) != 1L || is.na(event) ||
+      length(field) != 1L || is.na(field)) return(NULL)
+
+  event <- as.character(event)
+  field <- as.character(field)
+  if (!exists(event, envir = branch_cache$values, inherits = FALSE)) {
     return(NULL)
   }
-
-  key <- .miss_branch_cache_key(event = event, field = field)
-  branch_cache$values[[key]] %||% NULL
+  event_cache <- get(event, envir = branch_cache$values, inherits = FALSE)
+  if (!exists(field, envir = event_cache, inherits = FALSE)) return(NULL)
+  get(field, envir = event_cache, inherits = FALSE)
 }
 
 .miss_branch_cache_set <- function(branch_cache, event, field, value) {
-  if (is.null(branch_cache)) {
-    return(invisible(value))
-  }
+  if (is.null(branch_cache) || length(event) != 1L || is.na(event) ||
+      length(field) != 1L || is.na(field)) return(invisible(value))
 
-  key <- .miss_branch_cache_key(event = event, field = field)
-  branch_cache$values[[key]] <- value
+  event <- as.character(event)
+  field <- as.character(field)
+  if (exists(event, envir = branch_cache$values, inherits = FALSE)) {
+    event_cache <- get(event, envir = branch_cache$values, inherits = FALSE)
+  } else {
+    event_cache <- new.env(hash = TRUE, parent = emptyenv())
+    assign(event, event_cache, envir = branch_cache$values)
+  }
+  assign(field, value, envir = event_cache)
   invisible(value)
 }
 
-.miss_field_present <- function(
+.miss_branch_event_index <- function(
+  branch_cache,
   records,
-  field,
-  field_type,
-  child_fields,
-  choice_map
+  lookup_records,
+  event,
+  project
 ) {
-  if (identical(field_type, "checkbox")) {
-    child_fields <- child_fields[child_fields %in% names(records)]
-    if (length(child_fields) == 0) {
-      return(list(
-        field_complete = rep(FALSE, nrow(records)),
-        value_summary = rep("", nrow(records))
-      ))
-    }
+  empty <- list(source_row = rep.int(NA_integer_, nrow(records)))
+  if (length(event) != 1L || is.na(event)) return(empty)
+  event <- as.character(event)
+  if (!nzchar(event)) return(empty)
 
-    selected <- vapply(
-      child_fields,
-      function(child) .miss_checkbox_selected_vec(records[[child]]),
-      logical(nrow(records))
-    )
-    if (is.null(dim(selected))) {
-      selected <- matrix(selected, ncol = length(child_fields))
-    }
-
-    field_complete <- rowSums(selected, na.rm = TRUE) > 0
-    value_summary <- apply(selected, 1, function(row) {
-      picked <- child_fields[row]
-      if (length(picked) == 0) "" else paste(picked, collapse = ", ")
-    })
-
-    return(list(
-      field_complete = field_complete,
-      value_summary = value_summary
+  if (!is.null(branch_cache) && exists(
+    event,
+    envir = branch_cache$event_indices,
+    inherits = FALSE
+  )) {
+    return(get(
+      event,
+      envir = branch_cache$event_indices,
+      inherits = FALSE
     ))
   }
 
-  value <- .miss_col_vec(records, field)
-  list(
-    field_complete = !.miss_is_blank_vec(value),
-    value_summary = .miss_chr_vec(value)
-  )
+  event_col <- project$system_fields$event_col
+  repeat_instance_col <- project$system_fields$repeat_instance_col
+  id_col <- project$id_col
+  result <- empty
+  if (event_col %in% names(lookup_records) &&
+      id_col %in% names(records) && id_col %in% names(lookup_records)) {
+    event_value <- as.character(lookup_records[[event_col]])
+    event_rows <- which(!is.na(event_value) & event_value == event)
+    if (length(event_rows)) {
+      query_id <- .miss_chr_vec(records[[id_col]])
+      source_id <- .miss_chr_vec(lookup_records[[id_col]][event_rows])
+      repeat_instance <- if (repeat_instance_col %in% names(lookup_records)) {
+        lookup_records[[repeat_instance_col]][event_rows]
+      } else {
+        rep.int(NA_integer_, length(event_rows))
+      }
+
+      regular_position <- which(is.na(repeat_instance))
+      regular_rows <- event_rows[regular_position]
+      regular_id <- source_id[regular_position]
+      duplicated_regular <- unique(regular_id[
+        duplicated(regular_id) | duplicated(regular_id, fromLast = TRUE)
+      ])
+      if (any(query_id %in% duplicated_regular)) {
+        stop(
+          "Cross-event branching source event `",
+          event,
+          "` has multiple non-repeating rows for the same record.",
+          call. = FALSE
+        )
+      }
+
+      regular_match <- match(query_id, regular_id)
+      source_row <- rep.int(NA_integer_, length(query_id))
+      regular_hit <- !is.na(regular_match)
+      source_row[regular_hit] <- regular_rows[regular_match[regular_hit]]
+
+      repeated_position <- which(!is.na(repeat_instance))
+      repeated_rows <- event_rows[repeated_position]
+      repeated_id <- source_id[repeated_position]
+      duplicated_repeated <- unique(repeated_id[
+        duplicated(repeated_id) | duplicated(repeated_id, fromLast = TRUE)
+      ])
+      ambiguous <- is.na(source_row) & query_id %in% duplicated_repeated
+      if (any(ambiguous)) {
+        stop(
+          "Cross-event branching source event `",
+          event,
+          "` has multiple repeated rows and no non-repeating row for ",
+          sum(ambiguous),
+          " assessed target(s); an unqualified event reference is ambiguous.",
+          call. = FALSE
+        )
+      }
+
+      repeated_match <- match(query_id, repeated_id)
+      repeated_hit <- is.na(source_row) & !is.na(repeated_match)
+      source_row[repeated_hit] <- repeated_rows[repeated_match[repeated_hit]]
+      result <- list(
+        source_row = as.integer(source_row)
+      )
+    }
+  }
+
+  if (!is.null(branch_cache)) {
+    assign(event, result, envir = branch_cache$event_indices)
+  }
+  result
 }
 
 .miss_normalize_value <- function(value, field, meta, choice_map) {

@@ -100,6 +100,28 @@ test_that("missing-threshold comparison is strict below one", {
   )
 })
 
+test_that("integer and double one use identical missing-threshold semantics", {
+  report <- flex_event_instruments_report()
+  integer_parts <- .redcapmissing_flex_event_instruments_build(
+    report,
+    missing_threshold = 1L
+  )
+  double_parts <- .redcapmissing_flex_event_instruments_build(
+    report,
+    missing_threshold = 1
+  )
+
+  expect_identical(integer_parts$data, double_parts$data)
+  expect_identical(
+    integer_parts$missing_threshold_heading,
+    "Instrument = 100% Missing"
+  )
+  expect_identical(
+    integer_parts$data$`Instrument Missing Threshold`[[1L]],
+    "3/5 (60%)"
+  )
+})
+
 test_that("event-instrument formatter validates its public threshold", {
   for (value in list(NA_real_, Inf, -0.1, 1.1, numeric(), c(0.1, 0.2), "0.1")) {
     expect_error(
@@ -136,4 +158,84 @@ test_that("flex_event_instruments returns a flextable when dependencies exist", 
   expect_s3_class(result, "flextable")
   expect_true("Instrument" %in% names(result$body$dataset))
   expect_false("Form" %in% names(result$body$dataset))
+})
+test_that("event-instrument aggregation scales by native contexts", {
+  record_count <- 200L
+  instance_count <- 40L
+  grid <- expand.grid(
+    record_id = sprintf("r%03d", seq_len(record_count)),
+    repeat_instance = seq_len(instance_count),
+    KEEP.OUT.ATTRS = FALSE,
+    stringsAsFactors = FALSE
+  )
+  failed <- as.integer(sub("r", "", grid$record_id)) %% 10L == 0L
+  targets <- tibble::tibble(
+    record_id = grid$record_id,
+    instrument = rep("repeat", nrow(grid)),
+    redcap_event_name = rep("baseline_event", nrow(grid)),
+    repeat_instrument = rep("repeat", nrow(grid)),
+    repeat_instance = as.integer(grid$repeat_instance),
+    target_source = rep("observed", nrow(grid)),
+    event_row_started = rep("passed", nrow(grid)),
+    repeat_instance_row_started = rep("passed", nrow(grid)),
+    instrument_started = rep("passed", nrow(grid)),
+    field_complete = ifelse(failed, "failed", "passed"),
+    fields_assessed = rep(2L, nrow(grid)),
+    fields_failed = as.integer(failed),
+    field_applicability_reason = rep(NA_character_, nrow(grid))
+  )
+  report <- flex_event_instruments_report()
+  report$target_results <- targets
+  report$plan$instruments <- "repeat"
+  report$plan$assessible_targets <- targets[c(
+    "record_id", "instrument", "redcap_event_name", "repeat_instrument",
+    "repeat_instance", "target_source"
+  )]
+
+  result <- .redcapmissing_flex_event_instruments_build(report)$data
+
+  expect_identical(
+    result$row_type,
+    c("all", "event", rep("instrument", instance_count))
+  )
+  expect_identical(
+    result$`Repeat Instance`[-c(1L, 2L)],
+    as.character(seq_len(instance_count))
+  )
+  expect_identical(result$N[[2L]], "200/200 (100%)")
+  expect_true(all(result$N[-c(1L, 2L)] == "200/200 (100%)"))
+  expect_identical(result$`Instrument Incomplete`[[1L]], "800/8000 (10%)")
+  expect_true(all(
+    result$`Instrument Incomplete`[-c(1L, 2L)] == "20/200 (10%)"
+  ))
+})
+
+test_that("event aggregation detects conflicting record-event gates", {
+  report <- flex_event_instruments_report()
+  report$target_results$event_row_started[[3L]] <- "failed"
+
+  expect_error(
+    .redcapmissing_flex_event_instruments_build(report),
+    "Conflicting event-row-started"
+  )
+})
+
+test_that("classic event gates remain fully due when not applicable", {
+  report <- flex_event_instruments_report()
+  targets <- report$target_results[1:2, , drop = FALSE]
+  targets$redcap_event_name <- NA_character_
+  targets$event_row_started <- "not applicable"
+  targets$repeat_instance_row_started <- "not applicable"
+  targets$repeat_instrument <- NA_character_
+  targets$repeat_instance <- NA_integer_
+  report$target_results <- targets
+  report$plan$assessible_targets <- targets[c(
+    "record_id", "instrument", "redcap_event_name", "repeat_instrument",
+    "repeat_instance", "target_source"
+  )]
+
+  result <- .redcapmissing_flex_event_instruments_build(report)$data
+
+  expect_identical(result$Event, c("All", "Single event", ""))
+  expect_identical(result$N, c("", "2/2 (100%)", ""))
 })

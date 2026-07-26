@@ -435,6 +435,65 @@ test_that("project fingerprints are stable to table row order with explicit reco
   )
 })
 
+test_that("fingerprints distinguish missing and delimiter-safe structured values", {
+  missing_metadata <- .plan_metadata()
+  missing_metadata$fingerprint_value <- c(
+    NA_character_,
+    rep("same", nrow(missing_metadata) - 1L)
+  )
+  literal_metadata <- missing_metadata
+  literal_metadata$fingerprint_value[[1L]] <- "<NA>"
+
+  missing_snapshot <- redcapmissing:::.rcm_project_snapshot(
+    .plan_fake_rcon(metadata = missing_metadata)
+  )
+  literal_snapshot <- redcapmissing:::.rcm_project_snapshot(
+    .plan_fake_rcon(metadata = literal_metadata)
+  )
+  expect_false(identical(
+    missing_snapshot$structure_fingerprint,
+    literal_snapshot$structure_fingerprint
+  ))
+
+  separator <- intToUtf8(31L)
+  first_metadata <- .plan_metadata()
+  first_values <- rep(list("same"), nrow(first_metadata))
+  first_values[[1L]] <- c(paste0("a", separator, "b"), "c")
+  first_metadata$fingerprint_value <- first_values
+  second_metadata <- first_metadata
+  second_metadata$fingerprint_value[[1L]] <- c(
+    "a",
+    paste0("b", separator, "c")
+  )
+
+  first_snapshot <- redcapmissing:::.rcm_project_snapshot(
+    .plan_fake_rcon(
+      metadata = first_metadata,
+      record_id_field = "record_id"
+    )
+  )
+  second_snapshot <- redcapmissing:::.rcm_project_snapshot(
+    .plan_fake_rcon(
+      metadata = second_metadata,
+      record_id_field = "record_id"
+    )
+  )
+  shuffled_snapshot <- redcapmissing:::.rcm_project_snapshot(
+    .plan_fake_rcon(
+      metadata = first_metadata[rev(seq_len(nrow(first_metadata))), ],
+      record_id_field = "record_id"
+    )
+  )
+  expect_false(identical(
+    first_snapshot$structure_fingerprint,
+    second_snapshot$structure_fingerprint
+  ))
+  expect_identical(
+    first_snapshot$structure_fingerprint,
+    shuffled_snapshot$structure_fingerprint
+  )
+})
+
 test_that("plan validation rejects hand edits and changed project structure", {
   rcon <- .plan_fake_rcon()
   plan <- plan_from_data(tibble::tibble(record_id = "r1"), rcon, "demographics")
@@ -760,6 +819,69 @@ test_that("normalized schedule collisions error before target construction", {
     plan_explicit(data, rcon, "demographics", explicit),
     class = "redcapmissing_error_schedule"
   )
+})
+
+test_that("native target identities do not collide on delimiter-like values", {
+  separator <- intToUtf8(31L)
+  second_instrument <- paste0("b", separator, "c")
+  metadata <- tibble::tibble(
+    field_name = c("record_id", "c_value", "second_value"),
+    form_name = c("c", "c", second_instrument),
+    field_type = rep("text", 3L)
+  )
+  rcon <- .plan_fake_rcon(metadata = metadata)
+  data <- tibble::tibble(
+    record_id = c(paste0("alpha", separator, "b"), "alpha")
+  )
+
+  plan <- plan_from_data(data, rcon, c("c", second_instrument))
+
+  expect_identical(nrow(plan$assessible_targets), 4L)
+  expect_false(anyDuplicated(
+    plan$assessible_targets[, c(
+      "record_id", "instrument", "redcap_event_name",
+      "repeat_instrument", "repeat_instance"
+    )]
+  ) > 0L)
+})
+
+test_that("planning materializes moderate record expansions with exact provenance", {
+  rcon <- .plan_fake_rcon(
+    repeats = tibble::tibble(
+      event_name = NA_character_,
+      form_name = "diary"
+    )
+  )
+  record_count <- 500L
+  data <- tibble::tibble(
+    record_id = sprintf("r%04d", seq_len(record_count)),
+    redcap_repeat_instrument = rep(NA_character_, record_count),
+    redcap_repeat_instance = rep(NA_integer_, record_count)
+  )
+  extension <- tibble::tibble(
+    instrument = c("demographics", "diary"),
+    redcap_event_name = c(NA_character_, NA_character_),
+    repeat_instance = c(NA_integer_, 2L)
+  )
+
+  plan <- plan_from_data(
+    data,
+    rcon,
+    c("demographics", "diary"),
+    extension
+  )
+
+  expect_identical(nrow(plan$assessible_targets), 2L * record_count)
+  expect_identical(
+    as.integer(table(plan$assessible_targets$target_source)),
+    c(record_count, record_count)
+  )
+  expect_identical(
+    names(table(plan$assessible_targets$target_source)),
+    c("extended", "observed+extended")
+  )
+  diary <- plan$assessible_targets$instrument == "diary"
+  expect_true(all(plan$assessible_targets$repeat_instance[diary] == 2L))
 })
 
 test_that("event missingness is contextual for classic and longitudinal planning", {
@@ -1194,6 +1316,21 @@ test_that("numeric identifiers and fingerprints are option independent", {
   expect_identical(second$assessible_targets$record_id, "100000")
   expect_identical(first$structure_fingerprint, second$structure_fingerprint)
 
+  special <- redcapmissing:::.rcm_numeric_character(c(
+    NA_real_, NaN, Inf, -Inf, 0, -0
+  ))
+  expect_identical(
+    special,
+    c("NA", "NaN", "Inf", "-Inf", "0", "0")
+  )
+  extrema <- c(.Machine$double.xmax, -.Machine$double.xmax)
+  normalized_extrema <- redcapmissing:::.rcm_numeric_character(extrema)
+  expect_identical(
+    as.numeric(normalized_extrema),
+    extrema
+  )
+  expect_false(any(grepl("[eE]", normalized_extrema)))
+
   precise_ids <- c(1.234567890123456, 1.234567890123457)
   precise <- plan_from_data(
     tibble::tibble(record_id = precise_ids),
@@ -1209,6 +1346,29 @@ test_that("numeric identifiers and fingerprints are option independent", {
     precise_ids,
     tolerance = 0
   )
+})
+
+test_that("large numeric record vectors normalize without row-wise loss", {
+  record_count <- 10000L
+  numeric_ids <- as.double(seq_len(record_count))
+  expected_ids <- as.character(seq_len(record_count))
+
+  plan <- plan_from_data(
+    tibble::tibble(record_id = numeric_ids),
+    .plan_fake_rcon(),
+    "demographics"
+  )
+
+  expect_identical(nrow(plan$assessible_targets), record_count)
+  expect_identical(
+    typeof(plan$assessible_targets$record_id),
+    "character"
+  )
+  expect_setequal(
+    plan$assessible_targets$record_id,
+    expected_ids
+  )
+  expect_false(anyDuplicated(plan$assessible_targets$record_id) > 0L)
 })
 
 test_that("repeat configuration must be explicit and consistent with project status", {

@@ -142,6 +142,19 @@ References use `file -- "test_that name"`.
 | DOWN-05 | `flex_event_instruments()` replaces the old API, validates inputs, and computes frozen-target metrics. | `test-flex-event-instruments.R` -- "flex_event_instruments replaces the retired form API"; "event-instrument data is computed from frozen target results"; "missing-threshold comparison is strict below one"; "event-instrument formatter validates its public threshold"; "event-instrument formatter rejects malformed target results"; "flex_event_instruments returns a flextable when dependencies exist" | **Covered** |
 | DOWN-06 | `flex_html()` consumes final schemas and uses instrument terminology/N/A display. | `test-flex-html.R` -- "flex_html renders formatted summary HTML when optional packages are available"; "flex_html renders multi-instrument formatted missing rows" | **Covered** |
 
+## Optimized execution architecture
+
+| ID | Required invariant | Test or workflow evidence | Coverage |
+|---|---|---|---|
+| PERF-01 | Constructors use native structural columns for matching, provenance, duplicate detection, and ordering; delimiter-like identifiers cannot collide. | `test-assessment-plan.R` -- "native target identities do not collide on delimiter-like values"; "planning materializes moderate record expansions with exact provenance" | **Covered** |
+| PERF-02 | Fingerprints distinguish typed missing values, literal sentinel-like text, and delimiter-containing sequences while remaining independent of source row order. | `test-assessment-plan.R` -- "fingerprints distinguish missing and delimiter-safe structured values" | **Covered** |
+| PERF-03 | Branching plans compile once per unique expression, evaluate across records with record-specific outcomes, and fail closed for ambiguous repeated-only cross-event sources. | `test-run-plan.R` -- "run_plan evaluates shared branching plans across record vectors"; "cross-event branching uses the matching record and event context" | **Covered** |
+| PERF-04 | Compact execution does not construct detailed validation rows and remains semantically identical to detailed execution. | `test-run-plan.R` -- "compact execution does not construct detailed validation rows"; "compact and detailed runs have identical assessment results" | **Covered** |
+| PERF-05 | Verification normalizes timestamps in batches and groups exact contexts on native typed columns. | `test-run-plan-verified.R` -- "verification preparation batches many native field contexts"; timestamp and latest-tie tests under VER-05 through VER-07 | **Covered** |
+| PERF-06 | Event/instrument formatting aggregates high-cardinality contexts in bulk and rejects inconsistent record-event gates. | `test-flex-event-instruments.R` -- "event-instrument aggregation scales by native contexts"; "event aggregation detects conflicting record-event gates" | **Covered** |
+| PERF-07 | Constructor (character/numeric IDs and no/partial/full extension overlap), runner, verification-history, failure-density, branching, detailed/compact, and formatter workloads have reproducible timing and allocation evidence without test-time thresholds. | Representative tiers in `tools/benchmark-plan-run.R` | **Workflow** |
+| PERF-08 | The package has one plan-native engine, no retired entry point, no new-to-old argument translation, and no callable legacy fallback. | AST definition/export/call, exact-signature, and public-body scope checks in `tools/audit-plan-run-boundary.R`; `test-registry.R` -- "retired monolithic and form formatter APIs are not exported" | **Workflow** |
+
 ## Operational, release, and validation evidence
 
 | ID | Public behavior | Test evidence | Coverage |
@@ -152,7 +165,8 @@ References use `file -- "test_that name"`.
 | OPS-04 | Version is 7.0.0 with imported `digest`; roxygen/Rd/NAMESPACE, README, vignette, package docs, and NEWS agree. | `devtools::document()`; direct README and vignette renders; `devtools::check()` vignette build/rebuild; diff audit | **Workflow** |
 | OPS-05 | Historical NEWS remains; no pkgdown/CI is added; opaque fixture is retired after synthetic translation. | Repository file/diff audit | **Workflow** |
 | OPS-06 | Focused tests, `devtools::test()`, `devtools::check()`, stale-term search, `git diff --check`, and leak/artifact scans pass. | Final validation transcript | **Workflow** |
+| OPS-07 | The static architecture-boundary audit parses every R source file and rejects retired definitions, exports, calls, named former-pipeline helpers, legacy scope symbols in the three public workflows, signature drift, restored former-engine files, and retired validation codes. | `Rscript tools/audit-plan-run-boundary.R` | **Workflow** |
 
 ## Coverage status
 
-All 90 normative contract rows are directly covered by named automated tests. The remaining four operational rows are workflow evidence established by documentation generation, artifact rendering, package checks, benchmark smoke execution, and repository audits.
+All normative behavior rows marked **Covered** are directly exercised by named automated tests. Rows marked **Workflow** are established by documentation generation, artifact rendering, package checks, reproducible benchmarks, and repository audits.

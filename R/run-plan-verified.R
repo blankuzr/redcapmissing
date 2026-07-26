@@ -145,36 +145,49 @@
   if (any(is.na(x) | !nzchar(x) | x != trimws(x))) {
     .rcm_verified_abort("`verified$ts` must contain nonblank, unpadded timestamps.")
   }
-  parse_one <- function(value) {
-    normalized <- sub("Z$", "+0000", value)
-    normalized <- sub(
-      "([+-][0-9]{2}):([0-9]{2})$",
-      "\\1\\2",
-      normalized,
-      perl = TRUE
-    )
-    with_offset <- grepl("[+-][0-9]{4}$", normalized)
-    shape <- if (with_offset) {
-      "^[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?[+-][0-9]{4}$"
-    } else {
-      "^[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?$"
-    }
-    if (!grepl(shape, normalized, perl = TRUE)) return(NA_real_)
-    separator <- substr(normalized, 11L, 11L)
-    format <- paste0(
-      "%Y-%m-%d",
-      separator,
-      "%H:%M:%OS",
-      if (with_offset) "%z" else ""
-    )
-    parsed <- suppressWarnings(tryCatch(
-      strptime(normalized, format = format, tz = "UTC"),
-      error = function(e) NA
-    ))
-    if (length(parsed) != 1L || is.na(parsed)) return(NA_real_)
-    as.numeric(as.POSIXct(parsed, tz = "UTC"))
+
+  normalized <- sub("Z$", "+0000", x)
+  normalized <- sub(
+    "([+-][0-9]{2}):([0-9]{2})$",
+    "\\1\\2",
+    normalized,
+    perl = TRUE
+  )
+  with_offset <- grepl("[+-][0-9]{4}$", normalized)
+  shape_without_offset <-
+    "^[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?$"
+  shape_with_offset <- paste0(
+    substr(shape_without_offset, 1L, nchar(shape_without_offset) - 1L),
+    "[+-][0-9]{4}$"
+  )
+  valid_shape <- ifelse(
+    with_offset,
+    grepl(shape_with_offset, normalized, perl = TRUE),
+    grepl(shape_without_offset, normalized, perl = TRUE)
+  )
+  if (any(!valid_shape)) {
+    .rcm_verified_abort("`verified$ts` contains an unparseable timestamp.")
   }
-  seconds <- vapply(x, parse_one, numeric(1))
+
+  substr(normalized, 11L, 11L) <- " "
+  seconds <- rep(NA_real_, length(normalized))
+  for (offset in c(FALSE, TRUE)) {
+    index <- which(with_offset == offset)
+    if (!length(index)) next
+    parsed <- suppressWarnings(tryCatch(
+      strptime(
+        normalized[index],
+        format = if (offset) {
+          "%Y-%m-%d %H:%M:%OS%z"
+        } else {
+          "%Y-%m-%d %H:%M:%OS"
+        },
+        tz = "UTC"
+      ),
+      error = function(e) rep(as.POSIXct(NA), length(index))
+    ))
+    seconds[index] <- as.numeric(as.POSIXct(parsed, tz = "UTC"))
+  }
   if (any(!is.finite(seconds))) {
     .rcm_verified_abort("`verified$ts` contains an unparseable timestamp.")
   }
@@ -200,16 +213,49 @@
        redcap_event_name = as.character(events$redcap_event_name[index]))
 }
 
-.rcm_field_context_key <- function(record_id, redcap_event_name,
-                                   repeat_instrument, repeat_instance, field_name) {
-  encode <- function(x) { out <- as.character(x); out[is.na(x)] <- "<NA>"; out }
-  paste(encode(record_id), encode(redcap_event_name), encode(repeat_instrument),
-        encode(repeat_instance), encode(field_name), sep = "\r")
+.rcm_verified_context_prototype <- function() {
+  tibble::tibble(
+    record_id = character(),
+    redcap_event_name = character(),
+    repeat_instrument = character(),
+    repeat_instance = integer(),
+    field_name = character()
+  )
+}
+
+.rcm_verified_group_id <- function(x) {
+  x <- as.data.frame(x, stringsAsFactors = FALSE)
+  row_count <- nrow(x)
+  if (!row_count) return(integer())
+  ordering <- do.call(
+    order,
+    c(unname(x), list(na.last = TRUE, method = "radix"))
+  )
+  if (row_count == 1L) return(1L)
+
+  same_as_previous <- rep(TRUE, row_count - 1L)
+  for (column in x) {
+    sorted <- column[ordering]
+    previous <- sorted[-row_count]
+    following <- sorted[-1L]
+    equal <- (is.na(previous) & is.na(following)) |
+      (!is.na(previous) & !is.na(following) & previous == following)
+    same_as_previous <- same_as_previous & equal
+  }
+  sorted_id <- cumsum(c(TRUE, !same_as_previous))
+  group_id <- integer(row_count)
+  group_id[ordering] <- sorted_id
+  group_id
 }
 
 .rcm_prepare_verified <- function(verified, verified_user, snapshot, plan) {
   .rcm_check_verified_pair(verified, verified_user)
-  if (is.null(verified)) return(list(keys = character(), audit = .rcm_verification_audit()))
+  if (is.null(verified)) {
+    return(list(
+      contexts = .rcm_verified_context_prototype(),
+      audit = .rcm_verification_audit()
+    ))
+  }
   required <- .rcm_verified_columns()
   required_counts <- vapply(
     required,
@@ -226,8 +272,15 @@
   }
   rows <- verified[, required, drop = FALSE]
   input_rows <- nrow(rows)
-  if (!input_rows) return(list(keys = character(), audit = .rcm_verification_audit(
-    enabled = TRUE, verified_user = verified_user)))
+  if (!input_rows) {
+    return(list(
+      contexts = .rcm_verified_context_prototype(),
+      audit = .rcm_verification_audit(
+        enabled = TRUE,
+        verified_user = verified_user
+      )
+    ))
+  }
 
   rows$project_id <- .rcm_verified_identifier(rows$project_id, "project_id", whole_numeric = TRUE)
   rows$record <- .rcm_verified_identifier(rows$record, "record", allow_factor = TRUE)
@@ -253,37 +306,84 @@
   if (anyNA(meta_index)) .rcm_verified_abort("`verified$field_name` contains an unknown raw field name.")
   field_instrument <- as.character(meta$form_name[meta_index])
   targets <- plan$assessible_targets
-  target_key <- .rcm_field_context_key(targets$record_id, targets$redcap_event_name,
-    targets$repeat_instrument, targets$repeat_instance, targets$instrument)
-  row_target_key <- .rcm_field_context_key(rows$record, rows$redcap_event_name,
-    rows$repeat_instrument, rows$instance, field_instrument)
-  if (any(!row_target_key %in% target_key)) {
+  target_context <- tibble::tibble(
+    record_id = targets$record_id,
+    redcap_event_name = targets$redcap_event_name,
+    repeat_instrument = targets$repeat_instrument,
+    repeat_instance = targets$repeat_instance,
+    instrument = targets$instrument
+  )
+  row_target_context <- tibble::tibble(
+    record_id = rows$record,
+    redcap_event_name = rows$redcap_event_name,
+    repeat_instrument = rows$repeat_instrument,
+    repeat_instance = rows$instance,
+    instrument = field_instrument
+  )
+  target_count <- nrow(target_context)
+  target_groups <- .rcm_verified_group_id(dplyr::bind_rows(
+    target_context,
+    row_target_context
+  ))
+  plan_groups <- target_groups[seq_len(target_count)]
+  verified_groups <- target_groups[target_count + seq_len(nrow(row_target_context))]
+  if (any(!verified_groups %in% plan_groups)) {
     .rcm_verified_abort("`verified` contains a field context that is not an Assessible target.")
   }
-  rows$.field_key <- .rcm_field_context_key(rows$record, rows$redcap_event_name,
-    rows$repeat_instrument, rows$instance, rows$field_name)
+  rows$.field_group <- .rcm_verified_group_id(tibble::tibble(
+    record_id = rows$record,
+    redcap_event_name = rows$redcap_event_name,
+    repeat_instrument = rows$repeat_instrument,
+    repeat_instance = rows$instance,
+    field_name = rows$field_name
+  ))
   user_rows <- rows[rows$username == verified_user, , drop = FALSE]
   user_count <- nrow(user_rows)
-  if (!user_count) return(list(keys = character(), audit = .rcm_verification_audit(
-    enabled = TRUE, verified_user = verified_user, input_rows = input_rows)))
-
-  latest_time <- stats::ave(as.numeric(user_rows$ts), user_rows$.field_key, FUN = max)
-  latest <- user_rows[as.numeric(user_rows$ts) == latest_time, , drop = FALSE]
-  split_latest <- split(seq_len(nrow(latest)), latest$.field_key)
-  keep <- integer(length(split_latest)); i <- 0L
-  for (indices in split_latest) {
-    i <- i + 1L
-    comparable <- latest[indices, required, drop = FALSE]
-    comparable$ts <- as.numeric(comparable$ts)
-    if (nrow(unique(comparable)) != 1L) {
-      .rcm_verified_abort("Conflicting verification rows share the latest timestamp for one field context.")
-    }
-    keep[[i]] <- indices[[1L]]
+  if (!user_count) {
+    return(list(
+      contexts = .rcm_verified_context_prototype(),
+      audit = .rcm_verification_audit(
+        enabled = TRUE,
+        verified_user = verified_user,
+        input_rows = input_rows
+      )
+    ))
   }
-  latest <- latest[keep, , drop = FALSE]
+
+  user_seconds <- as.numeric(user_rows$ts)
+  ordering <- order(user_rows$.field_group, -user_seconds, method = "radix")
+  ordered <- user_rows[ordering, , drop = FALSE]
+  ordered_seconds <- user_seconds[ordering]
+  first_group <- !duplicated(ordered$.field_group)
+  first_position <- which(first_group)
+  latest_seconds <- ordered_seconds[
+    first_position[match(ordered$.field_group, ordered$.field_group[first_group])]
+  ]
+  latest <- ordered[ordered_seconds == latest_seconds, , drop = FALSE]
+
+  comparable <- latest[, required, drop = FALSE]
+  comparable$ts <- as.numeric(comparable$ts)
+  latest <- latest[!duplicated(comparable), , drop = FALSE]
+  if (anyDuplicated(latest$.field_group)) {
+    .rcm_verified_abort("Conflicting verification rows share the latest timestamp for one field context.")
+  }
   verified_latest <- latest$current_query_status == "VERIFIED"
-  list(keys = unique(latest$.field_key[verified_latest]),
-       audit = .rcm_verification_audit(enabled = TRUE, verified_user = verified_user,
-         input_rows = input_rows, user_rows = user_count,
-         latest_user_rows = nrow(latest), verified_rows = sum(verified_latest)))
+  verified_contexts <- tibble::tibble(
+    record_id = latest$record[verified_latest],
+    redcap_event_name = latest$redcap_event_name[verified_latest],
+    repeat_instrument = latest$repeat_instrument[verified_latest],
+    repeat_instance = as.integer(latest$instance[verified_latest]),
+    field_name = latest$field_name[verified_latest]
+  )
+  list(
+    contexts = verified_contexts,
+    audit = .rcm_verification_audit(
+      enabled = TRUE,
+      verified_user = verified_user,
+      input_rows = input_rows,
+      user_rows = user_count,
+      latest_user_rows = nrow(latest),
+      verified_rows = sum(verified_latest)
+    )
+  )
 }

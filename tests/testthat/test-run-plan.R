@@ -359,6 +359,128 @@ test_that("cross-event branching uses the matching record and event context", {
     regexp = "branching-logic evaluation",
     class = "redcapmissing_error_schema"
   )
+
+  record_n <- 60L
+  many_data <- data[rep(seq_len(nrow(data)), times = record_n), , drop = FALSE]
+  many_data$record_id <- rep(sprintf("%03d", seq_len(record_n)), each = 2L)
+  baseline_rows <- seq.int(1L, nrow(many_data), by = 2L)
+  followup_rows <- baseline_rows + 1L
+  trigger <- rep(c("1", "0"), length.out = record_n)
+  many_data$trigger <- ""
+  many_data$trigger[baseline_rows] <- trigger
+  many_data$follow_start <- ""
+  many_data$follow_start[followup_rows] <- "started"
+  many_plan <- plan_from_data(many_data, rcon, "followup")
+  many <- run_plan(
+    many_plan,
+    many_data,
+    rcon,
+    details = FALSE,
+    progress = FALSE
+  )
+
+  expect_identical(many$target_results$record_id, sprintf(
+    "%03d", seq_len(record_n)
+  ))
+  expect_true(all(many$target_results$instrument_started == "passed"))
+  expect_identical(
+    many$target_results$field_complete,
+    ifelse(trigger == "1", "failed", "not applicable")
+  )
+  expect_identical(
+    many$target_results$fields_assessed,
+    as.integer(trigger == "1")
+  )
+
+  repeat_metadata <- dplyr::bind_rows(
+    metadata,
+    meta_row("repeat_value", "source_repeat")
+  )
+  repeat_rcon <- rcon
+  repeat_rcon$metadata <- function() repeat_metadata
+  repeat_rcon$instruments <- function() tibble::tibble(
+    instrument_name = c("baseline", "source_repeat", "followup"),
+    instrument_label = c("Baseline", "Source repeat", "Follow-up")
+  )
+  repeat_rcon$mapping <- function() dplyr::bind_rows(
+    rcon$mapping(),
+    tibble::tibble(
+      arm_num = 1L,
+      unique_event_name = "baseline_arm_1",
+      form = "source_repeat"
+    )
+  )
+  repeat_rcon$repeatInstrumentEvent <- function() tibble::tibble(
+    event_name = "baseline_arm_1",
+    form_name = "source_repeat"
+  )
+
+  regular_data <- data
+  regular_data$redcap_repeat_instrument <- NA_character_
+  regular_data$redcap_repeat_instance <- NA_integer_
+  regular_data$repeat_value <- ""
+  repeated_data <- regular_data[1L, , drop = FALSE][rep.int(1L, 2L), ]
+  repeated_data$trigger <- "0"
+  repeated_data$redcap_repeat_instrument <- "source_repeat"
+  repeated_data$redcap_repeat_instance <- 1:2
+  repeated_data$repeat_value <- c("first", "second")
+
+  repeated_first <- dplyr::bind_rows(repeated_data, regular_data)
+  repeated_plan <- plan_from_data(repeated_first, repeat_rcon, "followup")
+  resolved <- run_plan(
+    repeated_plan,
+    repeated_first,
+    repeat_rcon,
+    details = TRUE,
+    progress = FALSE
+  )
+  expect_identical(resolved$target_results$field_complete, "failed")
+  resolved_field <- resolved$details[
+    resolved$details$validation_check == "field-complete",
+    ,
+    drop = FALSE
+  ]
+  expect_true(resolved_field$branch_satisfied)
+
+  sole_repeated_data <- repeated_first[!(
+    repeated_first$redcap_event_name == "baseline_arm_1" &
+      (
+        is.na(repeated_first$redcap_repeat_instance) |
+          repeated_first$redcap_repeat_instance == 2L
+      )
+  ), , drop = FALSE]
+  sole_repeated_plan <- plan_from_data(
+    sole_repeated_data,
+    repeat_rcon,
+    "followup"
+  )
+  sole_repeated <- run_plan(
+    sole_repeated_plan,
+    sole_repeated_data,
+    repeat_rcon,
+    progress = FALSE
+  )
+  expect_identical(sole_repeated$target_results$field_complete, "not applicable")
+
+  ambiguous_data <- repeated_first[!(
+    repeated_first$redcap_event_name == "baseline_arm_1" &
+      is.na(repeated_first$redcap_repeat_instance)
+  ), , drop = FALSE]
+  ambiguous_plan <- plan_from_data(
+    ambiguous_data,
+    repeat_rcon,
+    "followup"
+  )
+  expect_error(
+    run_plan(
+      ambiguous_plan,
+      ambiguous_data,
+      repeat_rcon,
+      progress = FALSE
+    ),
+    regexp = "unqualified event reference is ambiguous",
+    class = "redcapmissing_error_project"
+  )
 })
 
 test_that("instrument detection uses the complete independent field set", {
@@ -1189,4 +1311,80 @@ test_that("all failing targets reconcile exactly without losing structural absen
   ]
   expect_setequal(failed_details$record_id, c("one", "two"))
   expect_true(all(failed_details$target_source == "observed"))
+})
+test_that("run_plan evaluates shared branching plans across record vectors", {
+  rcon <- run_plan_rcon()
+  record_n <- 80L
+  data <- run_plan_data()[rep.int(1L, record_n), , drop = FALSE]
+  data$record_id <- sprintf("%03d", seq_len(record_n))
+  data$branch_flag <- rep(c("0", "1"), length.out = record_n)
+  data$conditional_note <- ""
+  plan <- plan_from_data(data, rcon, "baseline_form")
+
+  original_compile <- redcapmissing:::.miss_compile_branch_logic
+  compiled <- character()
+  testthat::local_mocked_bindings(
+    .miss_compile_branch_logic = function(logic) {
+      compiled <<- c(compiled, logic)
+      original_compile(logic)
+    },
+    .package = "redcapmissing"
+  )
+
+  result <- run_plan(
+    plan,
+    data,
+    rcon,
+    details = TRUE,
+    progress = FALSE
+  )
+
+  expect_identical(
+    compiled,
+    "[branch_flag] = '1'"
+  )
+  expect_identical(
+    result$target_results$field_complete,
+    ifelse(data$branch_flag == "1", "failed", "passed")
+  )
+  field_details <- result$details[
+    result$details$validation_check == "field-complete",
+    ,
+    drop = FALSE
+  ]
+  detail_record_order <- match(field_details$record_id, data$record_id)
+  expect_false(is.unsorted(detail_record_order))
+})
+
+test_that("compact execution does not construct detailed validation rows", {
+  rcon <- run_plan_rcon()
+  data <- run_plan_data(required_note = "")
+  plan <- plan_from_data(data, rcon, "baseline_form")
+
+  testthat::local_mocked_bindings(
+    .rcm_run_check_rows = function(...) {
+      stop("detailed validation rows were constructed", call. = FALSE)
+    },
+    .package = "redcapmissing"
+  )
+
+  compact <- run_plan(
+    plan,
+    data,
+    rcon,
+    details = FALSE,
+    progress = FALSE
+  )
+  expect_s3_class(compact, "redcapmissing")
+  expect_null(compact$details)
+  expect_error(
+    run_plan(
+      plan,
+      data,
+      rcon,
+      details = TRUE,
+      progress = FALSE
+    ),
+    "detailed validation rows were constructed"
+  )
 })

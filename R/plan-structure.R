@@ -94,17 +94,30 @@
 }
 
 .rcm_numeric_character <- function(x) {
-  vapply(
-    x,
-    format,
-    character(1),
-    scientific = FALSE,
-    trim = TRUE,
-    digits = 17L,
-    decimal.mark = ".",
-    big.mark = "",
-    small.mark = ""
-  )
+  if (!length(x)) return(character())
+  out <- character(length(x))
+  missing <- is.na(x)
+  finite <- is.finite(x)
+  whole <- finite & x == trunc(x)
+  if (any(whole)) {
+    out[whole] <- sprintf("%.0f", x[whole])
+  }
+  fractional <- finite & !whole
+  if (any(fractional)) {
+    out[fractional] <- trimws(formatC(
+      x[fractional],
+      digits = 17L,
+      format = "fg",
+      drop0trailing = TRUE,
+      decimal.mark = "."
+    ))
+  }
+  out[is.infinite(x) & x > 0] <- "Inf"
+  out[is.infinite(x) & x < 0] <- "-Inf"
+  out[missing & !is.nan(x)] <- "NA"
+  out[is.nan(x)] <- "NaN"
+  out[out == "-0"] <- "0"
+  out
 }
 
 .rcm_required_id <- function(x, source) {
@@ -340,22 +353,98 @@
   # REDCap record-ID field when no explicit identity surface is supplied.
   metadata$field_name[[1]]
 }
+.rcm_length_prefix <- function(value) {
+  value <- enc2utf8(value)
+  paste0(nchar(value, type = "bytes"), ":", value)
+}
+
+.rcm_canonical_atomic <- function(value) {
+  if (!length(value)) return(character())
+  if (is.factor(value)) {
+    type <- "character"
+    text <- as.character(value)
+  } else if (is.numeric(value) && !inherits(value, c("Date", "POSIXt"))) {
+    type <- "number"
+    text <- .rcm_numeric_character(value)
+  } else if (inherits(value, "Date")) {
+    type <- "date"
+    text <- as.character(value)
+  } else if (inherits(value, "POSIXt")) {
+    type <- "datetime"
+    text <- format(
+      as.POSIXct(value, tz = "UTC"),
+      "%Y-%m-%dT%H:%M:%OS6Z",
+      tz = "UTC"
+    )
+  } else {
+    type <- typeof(value)
+    text <- as.character(value)
+  }
+  type <- .rcm_length_prefix(type)
+  missing <- is.na(value)
+  text <- enc2utf8(text)
+  out <- paste0("v", type, .rcm_length_prefix(text))
+  out[missing] <- paste0("m", type)
+  out
+}
+
+.rcm_canonical_cell <- function(value) {
+  if (is.null(value)) return("null")
+  if (is.list(value)) {
+    parts <- vapply(value, .rcm_canonical_cell, character(1))
+  } else if (is.atomic(value)) {
+    parts <- .rcm_canonical_atomic(value)
+  } else {
+    bytes <- serialize(value, NULL, version = 2L)
+    return(paste0("serialized", paste0(format(bytes), collapse = "")))
+  }
+  names_encoded <- if (is.null(names(value))) {
+    .rcm_canonical_atomic(rep(NA_character_, length(parts)))
+  } else {
+    .rcm_canonical_atomic(as.character(names(value)))
+  }
+  payload <- as.vector(rbind(names_encoded, parts))
+  paste0(
+    "sequence", length(parts), ":",
+    paste0(.rcm_length_prefix(payload), collapse = "")
+  )
+}
+
 .rcm_canonical <- function(data) {
   data <- as.data.frame(data, stringsAsFactors = FALSE)
   data <- data[, sort(names(data)), drop = FALSE]
   for (name in names(data)) {
     value <- data[[name]]
-    out <- if (is.list(value)) {
-      vapply(value, function(x) paste(as.character(x), collapse = "\u001f"), character(1))
-    } else if (is.numeric(value) && !inherits(value, c("Date", "POSIXt"))) {
-      .rcm_numeric_character(value)
-    } else as.character(value)
-    out[is.na(out)] <- "<NA>"
-    data[[name]] <- out
+    data[[name]] <- if (is.list(value)) {
+      vapply(value, .rcm_canonical_cell, character(1))
+    } else {
+      .rcm_canonical_atomic(value)
+    }
   }
-  if (nrow(data) > 1 && ncol(data)) data <- data[do.call(order, unname(data)), , drop = FALSE]
+  if (nrow(data) > 1 && ncol(data)) {
+    data <- data[do.call(order, unname(data)), , drop = FALSE]
+  }
   rownames(data) <- NULL
   data
+}
+
+.rcm_rows_present <- function(data, table, columns) {
+  if (!nrow(data)) return(logical())
+  if (!nrow(table)) return(rep(FALSE, nrow(data)))
+  candidate <- as.data.frame(data[, columns, drop = FALSE])
+  candidate$.input_row <- seq_len(nrow(candidate))
+  lookup <- unique(as.data.frame(table[, columns, drop = FALSE]))
+  lookup$.present <- TRUE
+  matched <- merge(
+    candidate,
+    lookup,
+    by = columns,
+    all.x = TRUE,
+    sort = FALSE
+  )
+  present <- rep(FALSE, nrow(candidate))
+  present[matched$.input_row] <- !is.na(matched$.present)
+  present
 }
 
 .rcm_allowable <- function(instruments, mapping, repeat_configuration, longitudinal) {
@@ -368,8 +457,15 @@
     ))
   }
   repeating_events <- repeat_configuration$redcap_event_name[is.na(repeat_configuration$instrument)]
-  repeat_pairs <- paste(repeat_configuration$redcap_event_name[!is.na(repeat_configuration$instrument)], repeat_configuration$instrument[!is.na(repeat_configuration$instrument)], sep = "\u001f")
-  mapping_pairs <- paste(mapping$redcap_event_name, mapping$instrument, sep = "\u001f")
+  repeating_instruments <- repeat_configuration[
+    !is.na(repeat_configuration$instrument),
+    c("redcap_event_name", "instrument"),
+    drop = FALSE
+  ]
+  mapping_repeats <- .rcm_rows_present(
+    mapping, repeating_instruments,
+    c("redcap_event_name", "instrument")
+  )
   tibble::tibble(
     instrument = mapping$instrument,
     redcap_event_name = mapping$redcap_event_name,
@@ -377,7 +473,7 @@
     repeat_mode = ifelse(
       mapping$redcap_event_name %in% repeating_events,
       "repeating_event",
-      ifelse(mapping_pairs %in% repeat_pairs, "repeating_instrument", "regular")
+      ifelse(mapping_repeats, "repeating_instrument", "regular")
     )
   )
 }
@@ -477,9 +573,19 @@
     if (length(setdiff(repeat_configuration$redcap_event_name, events$redcap_event_name))) .rcm_plan_abort("Repeat configuration contains an unknown event.", "project")
     repeating_forms <- !is.na(repeat_configuration$instrument)
     if (any(repeating_forms)) {
-      repeat_pairs <- paste(repeat_configuration$redcap_event_name[repeating_forms], repeat_configuration$instrument[repeating_forms], sep = "\u001f")
-      mapping_pairs <- paste(mapping$redcap_event_name, mapping$instrument, sep = "\u001f")
-      if (length(setdiff(repeat_pairs, mapping_pairs))) .rcm_plan_abort("A repeating instrument is not mapped to its event.", "project")
+      repeating_crossings <- repeat_configuration[
+        repeating_forms,
+        c("redcap_event_name", "instrument"),
+        drop = FALSE
+      ]
+      mapped <- .rcm_rows_present(
+        repeating_crossings, mapping,
+        c("redcap_event_name", "instrument")
+      )
+      if (any(!mapped)) .rcm_plan_abort(
+        "A repeating instrument is not mapped to its event.",
+        "project"
+      )
     }
   }
   record_id_field <- .rcm_record_id_field(metadata, info)
@@ -504,53 +610,86 @@
     arms = .rcm_canonical(arms), events = .rcm_canonical(events),
     mapping = .rcm_canonical(mapping), repeat_configuration = .rcm_canonical(repeat_configuration)
   )
+  allowable_crossings <- .rcm_allowable(
+    instruments,
+    mapping,
+    repeat_configuration,
+    longitudinal
+  )
+  physical_contexts <- tibble::tibble(
+    redcap_event_name = allowable_crossings$redcap_event_name,
+    repeat_mode = allowable_crossings$repeat_mode,
+    context_instrument = ifelse(
+      allowable_crossings$repeat_mode == "repeating_instrument",
+      allowable_crossings$instrument,
+      NA_character_
+    )
+  )
+  physical_contexts <- tibble::as_tibble(unique(as.data.frame(
+    physical_contexts,
+    stringsAsFactors = FALSE
+  )))
+  event_arms <- events[, c("redcap_event_name", "arm_num"), drop = FALSE]
   list(
     project = project, metadata = metadata, instruments = instruments,
     arms = arms, events = events, mapping = mapping,
     repeat_configuration = repeat_configuration,
-    allowable_crossings = .rcm_allowable(instruments, mapping, repeat_configuration, longitudinal),
+    allowable_crossings = allowable_crossings,
+    physical_contexts = physical_contexts,
+    event_arms = event_arms,
     event_order = events$redcap_event_name[order(as.integer(events$event_id))],
     instrument_order = instruments$instrument,
     structure_fingerprint = digest::digest(fingerprint_input, algo = "sha256", serialize = TRUE)
   )
 }
 
-.rcm_event_equal <- function(x, y) {
-  (is.na(x) & is.na(y)) | (!is.na(x) & !is.na(y) & x == y)
+
+.rcm_repeat_mode <- function(repeat_instrument, instance) {
+  ifelse(
+    !is.na(repeat_instrument),
+    "repeating_instrument",
+    ifelse(!is.na(instance), "repeating_event", "regular")
+  )
 }
 
-.rcm_context_key <- function(record_id, event, repeat_instrument, instance) {
-  part <- function(x) {
-    out <- as.character(x)
-    out[is.na(x)] <- "<NA>"
-    out
-  }
-  paste(part(record_id), part(event), part(repeat_instrument), part(instance), sep = "\u001f")
+.rcm_has_duplicate_rows <- function(data, columns) {
+  anyDuplicated(as.data.frame(data[, columns, drop = FALSE])) > 0L
 }
 
 .rcm_validate_physical_contexts <- function(data, snapshot) {
-  allowable <- snapshot$allowable_crossings
-  for (i in seq_len(nrow(data))) {
-    event <- data$redcap_event_name[[i]]
-    repeat_instrument <- data$redcap_repeat_instrument[[i]]
-    instance <- data$redcap_repeat_instance[[i]]
-    at_event <- .rcm_event_equal(allowable$redcap_event_name, event)
-    valid <- if (!is.na(repeat_instrument)) {
-      !is.na(instance) && any(
-        at_event & allowable$instrument == repeat_instrument &
-          allowable$repeat_mode == "repeating_instrument"
-      )
-    } else if (!is.na(instance)) {
-      any(at_event & allowable$repeat_mode == "repeating_event")
-    } else {
-      any(at_event & allowable$repeat_mode == "regular")
-    }
-    if (!isTRUE(valid)) {
-      .rcm_plan_abort(
-        paste0("Data row ", i, " has a regular/repeating context not allowed by `rcon`."),
-        "schema"
-      )
-    }
+  if (!nrow(data)) return(invisible(data))
+  candidate <- tibble::tibble(
+    redcap_event_name = data$redcap_event_name,
+    repeat_mode = .rcm_repeat_mode(
+      data$redcap_repeat_instrument,
+      data$redcap_repeat_instance
+    ),
+    context_instrument = ifelse(
+      is.na(data$redcap_repeat_instrument),
+      NA_character_,
+      data$redcap_repeat_instrument
+    ),
+    .input_row = seq_len(nrow(data))
+  )
+  allowed <- snapshot$physical_contexts
+  allowed$.allowed <- TRUE
+  matched <- merge(
+    as.data.frame(candidate),
+    as.data.frame(allowed),
+    by = c("redcap_event_name", "repeat_mode", "context_instrument"),
+    all.x = TRUE,
+    sort = FALSE
+  )
+  invalid <- matched$.input_row[is.na(matched$.allowed)]
+  if (length(invalid)) {
+    .rcm_plan_abort(
+      paste0(
+        "Data row ",
+        min(invalid),
+        " has a regular/repeating context not allowed by `rcon`."
+      ),
+      "schema"
+    )
   }
   invisible(data)
 }
@@ -636,8 +775,16 @@
   normalized$redcap_event_name <- event
   normalized$redcap_repeat_instrument <- repeat_instrument
   normalized$redcap_repeat_instance <- repeat_instance
-  key <- .rcm_context_key(record_id, event, repeat_instrument, repeat_instance)
-  if (anyDuplicated(key)) .rcm_plan_abort("`data` contains duplicate normalized physical row keys.", "schema")
+  physical_key <- c(
+    ".rcm_record_id", "redcap_event_name",
+    "redcap_repeat_instrument", "redcap_repeat_instance"
+  )
+  if (.rcm_has_duplicate_rows(normalized, physical_key)) {
+    .rcm_plan_abort(
+      "`data` contains duplicate normalized physical row keys.",
+      "schema"
+    )
+  }
   .rcm_validate_physical_contexts(normalized, snapshot)
   normalized
 }
@@ -647,18 +794,33 @@
   if (!isTRUE(snapshot$project$longitudinal)) {
     return(tibble::tibble(record_id = records, arm_num = rep(NA_character_, length(records))))
   }
-  event_arm <- stats::setNames(snapshot$events$arm_num, snapshot$events$redcap_event_name)
-  arms <- unname(event_arm[data$redcap_event_name])
-  result <- vector("list", length(records))
-  for (i in seq_along(records)) {
-    candidate <- unique(arms[data$.rcm_record_id == records[[i]]])
-    candidate <- candidate[!is.na(candidate)]
-    if (length(candidate) != 1) {
-      .rcm_plan_abort(paste0("Record `", records[[i]], "` is observed in more than one arm."), "schema")
-    }
-    result[[i]] <- tibble::tibble(record_id = records[[i]], arm_num = candidate[[1]])
+  if (!length(records)) {
+    return(tibble::tibble(record_id = character(), arm_num = character()))
   }
-  dplyr::bind_rows(result)
+  arms <- snapshot$event_arms$arm_num[
+    match(data$redcap_event_name, snapshot$event_arms$redcap_event_name)
+  ]
+  record_arm_pairs <- unique(data.frame(
+    record_id = data$.rcm_record_id,
+    arm_num = arms,
+    stringsAsFactors = FALSE
+  ))
+  duplicated_records <- unique(
+    record_arm_pairs$record_id[duplicated(record_arm_pairs$record_id)]
+  )
+  if (length(duplicated_records)) {
+    first_conflict <- records[records %in% duplicated_records][[1L]]
+    .rcm_plan_abort(
+      paste0("Record `", first_conflict, "` is observed in more than one arm."),
+      "schema"
+    )
+  }
+  tibble::tibble(
+    record_id = records,
+    arm_num = record_arm_pairs$arm_num[
+      match(records, record_arm_pairs$record_id)
+    ]
+  )
 }
 
 .rcm_selected_instruments <- function(instruments, snapshot) {
@@ -720,35 +882,58 @@
     repeat_instance = instance,
     repeat_mode = rep(NA_character_, nrow(schedule))
   )
-  allowable <- snapshot$allowable_crossings
-  for (i in seq_len(nrow(out))) {
-    row <- allowable[
-      allowable$instrument == out$instrument[[i]] &
-        .rcm_event_equal(allowable$redcap_event_name, out$redcap_event_name[[i]]),
-      , drop = FALSE
-    ]
-    if (nrow(row) != 1) {
-      .rcm_plan_abort(paste0("`", source, "` row ", i, " is not an allowable crossing."), "schedule")
-    }
-    out$repeat_mode[[i]] <- row$repeat_mode[[1]]
-    requires_instance <- row$repeat_mode[[1]] != "regular"
-    if (requires_instance == is.na(out$repeat_instance[[i]])) {
-      .rcm_plan_abort(paste0("`", source, "` row ", i, " has an invalid instance specification."), "schedule")
-    }
-  }
-  key <- paste(
-    if (identical(type, "explicit")) out$record_id else "",
-    out$instrument,
-    ifelse(is.na(out$redcap_event_name), "<NA>", out$redcap_event_name),
-    ifelse(is.na(out$repeat_instance), "<NA>", out$repeat_instance),
-    sep = "\u001f"
+  if (!nrow(out)) return(out)
+  allowable <- snapshot$allowable_crossings[
+    , c("instrument", "redcap_event_name", "repeat_mode"),
+    drop = FALSE
+  ]
+  allowable$.allowed <- TRUE
+  candidate <- out
+  candidate$.input_row <- seq_len(nrow(candidate))
+  candidate$repeat_mode <- NULL
+  matched <- merge(
+    as.data.frame(candidate),
+    as.data.frame(allowable),
+    by = c("instrument", "redcap_event_name"),
+    all.x = TRUE,
+    sort = FALSE
   )
-  if (anyDuplicated(key)) .rcm_plan_abort(paste0("`", source, "` contains duplicate normalized rows."), "schedule")
+  matched <- matched[order(matched$.input_row), , drop = FALSE]
+  crossing_invalid <- is.na(matched$.allowed)
+  requires_instance <- !crossing_invalid & matched$repeat_mode != "regular"
+  instance_invalid <- !crossing_invalid &
+    (requires_instance == is.na(matched$repeat_instance))
+  invalid <- which(crossing_invalid | instance_invalid)
+  if (length(invalid)) {
+    row <- invalid[[1L]]
+    message <- if (crossing_invalid[[row]]) {
+      paste0("`", source, "` row ", row, " is not an allowable crossing.")
+    } else {
+      paste0("`", source, "` row ", row, " has an invalid instance specification.")
+    }
+    .rcm_plan_abort(message, "schedule")
+  }
+  out <- tibble::as_tibble(matched[, c(
+    "record_id", "instrument", "redcap_event_name",
+    "repeat_instance", "repeat_mode"
+  ), drop = FALSE])
+  schedule_key <- if (identical(type, "explicit")) {
+    c("record_id", "instrument", "redcap_event_name", "repeat_instance")
+  } else {
+    c("instrument", "redcap_event_name", "repeat_instance")
+  }
+  if (.rcm_has_duplicate_rows(out, schedule_key)) {
+    .rcm_plan_abort(
+      paste0("`", source, "` contains duplicate normalized rows."),
+      "schedule"
+    )
+  }
   if (identical(type, "explicit") && nrow(out) && isTRUE(snapshot$project$longitudinal) && nrow(data)) {
     record_arms <- .rcm_record_arms(data, snapshot)
-    event_arm <- stats::setNames(snapshot$events$arm_num, snapshot$events$redcap_event_name)
     observed_arm <- record_arms$arm_num[match(out$record_id, record_arms$record_id)]
-    scheduled_arm <- unname(event_arm[out$redcap_event_name])
+    scheduled_arm <- snapshot$event_arms$arm_num[
+      match(out$redcap_event_name, snapshot$event_arms$redcap_event_name)
+    ]
     if (any(!is.na(observed_arm) & observed_arm != scheduled_arm)) {
       .rcm_plan_abort("An explicit target cannot place an observed record in a contradictory arm.", "schedule")
     }
@@ -764,40 +949,78 @@
   )
 }
 
-.rcm_make_targets <- function(record_id, allowable, instance, source) {
-  if (!nrow(allowable)) return(.rcm_empty_targets())
-  tibble::tibble(
-    record_id = rep(record_id, nrow(allowable)),
-    instrument = allowable$instrument,
-    redcap_event_name = allowable$redcap_event_name,
-    repeat_instrument = ifelse(
-      allowable$repeat_mode == "repeating_instrument",
-      allowable$instrument,
-      NA_character_
-    ),
-    repeat_instance = rep(as.integer(instance), nrow(allowable)),
-    target_source = rep(source, nrow(allowable))
-  )
+.rcm_target_identity_columns <- function() {
+  c("record_id", "instrument", "redcap_event_name", "repeat_instrument", "repeat_instance")
 }
 
 .rcm_observed_targets <- function(data, snapshot, instruments) {
   allowable <- snapshot$allowable_crossings
-  allowable <- allowable[allowable$instrument %in% instruments, , drop = FALSE]
-  result <- vector("list", nrow(data))
-  for (i in seq_len(nrow(data))) {
-    at_event <- .rcm_event_equal(allowable$redcap_event_name, data$redcap_event_name[[i]])
-    repeat_instrument <- data$redcap_repeat_instrument[[i]]
-    instance <- data$redcap_repeat_instance[[i]]
-    keep <- if (!is.na(repeat_instrument)) {
-      at_event & allowable$repeat_mode == "repeating_instrument" & allowable$instrument == repeat_instrument
-    } else if (!is.na(instance)) {
-      at_event & allowable$repeat_mode == "repeating_event"
-    } else {
-      at_event & allowable$repeat_mode == "regular"
+  allowable <- allowable[
+    allowable$instrument %in% instruments,
+    c("instrument", "redcap_event_name", "repeat_mode"),
+    drop = FALSE
+  ]
+  if (!nrow(data) || !nrow(allowable)) return(.rcm_empty_targets())
+  contexts <- tibble::tibble(
+    record_id = data$.rcm_record_id,
+    redcap_event_name = data$redcap_event_name,
+    context_instrument = data$redcap_repeat_instrument,
+    repeat_instance = data$redcap_repeat_instance,
+    repeat_mode = .rcm_repeat_mode(
+      data$redcap_repeat_instrument,
+      data$redcap_repeat_instance
+    )
+  )
+  result <- list()
+  nonrepeating_rows <- contexts$repeat_mode != "repeating_instrument"
+  nonrepeating_allowed <- allowable$repeat_mode != "repeating_instrument"
+  if (any(nonrepeating_rows) && any(nonrepeating_allowed)) {
+    joined <- merge(
+      as.data.frame(contexts[
+        nonrepeating_rows,
+        c("record_id", "redcap_event_name", "repeat_instance", "repeat_mode"),
+        drop = FALSE
+      ]),
+      as.data.frame(allowable[
+        nonrepeating_allowed,
+        c("instrument", "redcap_event_name", "repeat_mode"),
+        drop = FALSE
+      ]),
+      by = c("redcap_event_name", "repeat_mode"),
+      sort = FALSE
+    )
+    if (nrow(joined)) {
+      result[[length(result) + 1L]] <- tibble::tibble(
+        record_id = joined$record_id,
+        instrument = joined$instrument,
+        redcap_event_name = joined$redcap_event_name,
+        repeat_instrument = rep(NA_character_, nrow(joined)),
+        repeat_instance = joined$repeat_instance,
+        target_source = rep("observed", nrow(joined))
+      )
     }
-    selected <- allowable[keep, , drop = FALSE]
-    target_instance <- if (!nrow(selected) || all(selected$repeat_mode == "regular")) NA_integer_ else instance
-    result[[i]] <- .rcm_make_targets(data$.rcm_record_id[[i]], selected, target_instance, "observed")
+  }
+  repeating_rows <- contexts[contexts$repeat_mode == "repeating_instrument", , drop = FALSE]
+  repeating_allowed <- allowable[allowable$repeat_mode == "repeating_instrument", , drop = FALSE]
+  if (nrow(repeating_rows) && nrow(repeating_allowed)) {
+    repeating_rows$instrument <- repeating_rows$context_instrument
+    repeating_rows$context_instrument <- NULL
+    joined <- merge(
+      as.data.frame(repeating_rows),
+      as.data.frame(repeating_allowed),
+      by = c("instrument", "redcap_event_name", "repeat_mode"),
+      sort = FALSE
+    )
+    if (nrow(joined)) {
+      result[[length(result) + 1L]] <- tibble::tibble(
+        record_id = joined$record_id,
+        instrument = joined$instrument,
+        redcap_event_name = joined$redcap_event_name,
+        repeat_instrument = joined$instrument,
+        repeat_instance = joined$repeat_instance,
+        target_source = rep("observed", nrow(joined))
+      )
+    }
   }
   if (!length(result)) return(.rcm_empty_targets())
   dplyr::bind_rows(result)
@@ -805,81 +1028,147 @@
 
 .rcm_scheduled_targets <- function(schedule, snapshot, data, type) {
   if (!nrow(schedule)) return(.rcm_empty_targets())
-  allowable <- snapshot$allowable_crossings
-  record_arms <- .rcm_record_arms(data, snapshot)
-  event_arm <- stats::setNames(snapshot$events$arm_num, snapshot$events$redcap_event_name)
-  result <- list()
-  empty_events <- character()
-  index <- 0L
-  for (i in seq_len(nrow(schedule))) {
-    allowed <- allowable[
-      allowable$instrument == schedule$instrument[[i]] &
-        .rcm_event_equal(allowable$redcap_event_name, schedule$redcap_event_name[[i]]),
-      , drop = FALSE
-    ]
-    records <- if (identical(type, "explicit")) {
-      schedule$record_id[[i]]
-    } else if (!isTRUE(snapshot$project$longitudinal)) {
-      unique(data$.rcm_record_id)
-    } else {
-      arm <- unname(event_arm[schedule$redcap_event_name[[i]]])
-      record_arms$record_id[record_arms$arm_num == arm]
-    }
-    if (!length(records)) {
-      empty_events <- c(empty_events, ifelse(is.na(schedule$redcap_event_name[[i]]), "<classic>", schedule$redcap_event_name[[i]]))
-      next
-    }
-    for (record in records) {
-      index <- index + 1L
-      result[[index]] <- .rcm_make_targets(
-        record, allowed, schedule$repeat_instance[[i]],
-        if (identical(type, "explicit")) "explicit" else "extended"
-      )
-    }
+  if (identical(type, "explicit")) {
+    return(tibble::tibble(
+      record_id = schedule$record_id,
+      instrument = schedule$instrument,
+      redcap_event_name = schedule$redcap_event_name,
+      repeat_instrument = ifelse(
+        schedule$repeat_mode == "repeating_instrument",
+        schedule$instrument,
+        NA_character_
+      ),
+      repeat_instance = schedule$repeat_instance,
+      target_source = rep("explicit", nrow(schedule))
+    ))
   }
-  if (identical(type, "extended") && length(empty_events)) .rcm_plan_warn_empty_arm(empty_events)
-  if (!length(result)) return(.rcm_empty_targets())
-  dplyr::bind_rows(result)
-}
-
-.rcm_target_key <- function(x) {
-  paste(
-    x$record_id, x$instrument,
-    ifelse(is.na(x$redcap_event_name), "<NA>", x$redcap_event_name),
-    ifelse(is.na(x$repeat_instrument), "<NA>", x$repeat_instrument),
-    ifelse(is.na(x$repeat_instance), "<NA>", x$repeat_instance),
-    sep = "\u001f"
+  if (!isTRUE(snapshot$project$longitudinal)) {
+    records <- unique(data$.rcm_record_id)
+    if (!length(records)) {
+      .rcm_plan_warn_empty_arm("<classic>")
+      return(.rcm_empty_targets())
+    }
+    schedule_index <- rep(seq_len(nrow(schedule)), each = length(records))
+    record_index <- rep(seq_along(records), times = nrow(schedule))
+    expanded <- schedule[schedule_index, , drop = FALSE]
+    return(tibble::tibble(
+      record_id = records[record_index],
+      instrument = expanded$instrument,
+      redcap_event_name = expanded$redcap_event_name,
+      repeat_instrument = ifelse(
+        expanded$repeat_mode == "repeating_instrument",
+        expanded$instrument,
+        NA_character_
+      ),
+      repeat_instance = expanded$repeat_instance,
+      target_source = rep("extended", nrow(expanded))
+    ))
+  }
+  record_arms <- .rcm_record_arms(data, snapshot)
+  schedule_arm <- snapshot$event_arms$arm_num[
+    match(schedule$redcap_event_name, snapshot$event_arms$redcap_event_name)
+  ]
+  empty_arm <- !schedule_arm %in% record_arms$arm_num
+  if (any(empty_arm)) {
+    .rcm_plan_warn_empty_arm(schedule$redcap_event_name[empty_arm])
+  }
+  if (all(empty_arm)) return(.rcm_empty_targets())
+  schedule_rows <- data.frame(
+    arm_num = schedule_arm[!empty_arm],
+    instrument = schedule$instrument[!empty_arm],
+    redcap_event_name = schedule$redcap_event_name[!empty_arm],
+    repeat_instance = schedule$repeat_instance[!empty_arm],
+    repeat_mode = schedule$repeat_mode[!empty_arm],
+    stringsAsFactors = FALSE
+  )
+  expanded <- merge(
+    schedule_rows,
+    as.data.frame(record_arms),
+    by = "arm_num",
+    sort = FALSE
+  )
+  tibble::tibble(
+    record_id = expanded$record_id,
+    instrument = expanded$instrument,
+    redcap_event_name = expanded$redcap_event_name,
+    repeat_instrument = ifelse(
+      expanded$repeat_mode == "repeating_instrument",
+      expanded$instrument,
+      NA_character_
+    ),
+    repeat_instance = expanded$repeat_instance,
+    target_source = rep("extended", nrow(expanded))
   )
 }
 
+
 .rcm_merge_targets <- function(observed, scheduled, construction) {
-  combined <- dplyr::bind_rows(observed, scheduled)
-  if (!nrow(combined)) return(.rcm_empty_targets())
-  key <- .rcm_target_key(combined)
-  unique_key <- unique(key)
-  result <- vector("list", length(unique_key))
-  for (i in seq_along(unique_key)) {
-    rows <- combined[key == unique_key[[i]], , drop = FALSE]
-    source <- unique(rows$target_source)
-    row <- rows[1, , drop = FALSE]
-    if (identical(construction, "from_data") && all(c("observed", "extended") %in% source)) {
-      row$target_source <- "observed+extended"
-    }
-    result[[i]] <- row
+  if (!nrow(observed)) return(scheduled)
+  if (!nrow(scheduled)) return(observed)
+  identity_columns <- .rcm_target_identity_columns()
+  output_columns <- c(identity_columns, "target_source")
+  scheduled_keys <- unique(as.data.frame(
+    scheduled[, identity_columns, drop = FALSE]
+  ))
+  scheduled_keys$.extended <- TRUE
+  observed_marked <- merge(
+    as.data.frame(observed),
+    scheduled_keys,
+    by = identity_columns,
+    all.x = TRUE,
+    sort = FALSE
+  )
+  overlap <- !is.na(observed_marked$.extended)
+  if (identical(construction, "from_data")) {
+    observed_marked$target_source[overlap] <- "observed+extended"
   }
-  dplyr::bind_rows(result)
+  observed_result <- tibble::as_tibble(
+    observed_marked[, output_columns, drop = FALSE]
+  )
+  observed_keys <- unique(as.data.frame(
+    observed[, identity_columns, drop = FALSE]
+  ))
+  observed_keys$.observed <- TRUE
+  scheduled_marked <- merge(
+    as.data.frame(scheduled),
+    observed_keys,
+    by = identity_columns,
+    all.x = TRUE,
+    sort = FALSE
+  )
+  extension_only <- is.na(scheduled_marked$.observed)
+  if (!any(extension_only)) return(observed_result)
+  dplyr::bind_rows(
+    observed_result,
+    scheduled_marked[extension_only, output_columns, drop = FALSE]
+  )
+}
+
+.rcm_target_order_index <- function(targets, snapshot, instruments) {
+  if (!nrow(targets)) return(integer())
+  instrument_order <- match(targets$instrument, instruments)
+  event_order <- ifelse(
+    is.na(targets$redcap_event_name),
+    0L,
+    match(targets$redcap_event_name, snapshot$event_order)
+  )
+  repeat_kind <- ifelse(
+    is.na(targets$repeat_instance),
+    0L,
+    ifelse(is.na(targets$repeat_instrument), 1L, 2L)
+  )
+  order(
+    instrument_order, event_order, targets$record_id,
+    repeat_kind, targets$repeat_instance, na.last = TRUE
+  )
 }
 
 .rcm_order_targets <- function(targets, snapshot, instruments) {
   if (!nrow(targets)) return(.rcm_empty_targets())
-  instrument_order <- match(targets$instrument, instruments)
-  event_order <- ifelse(is.na(targets$redcap_event_name), 0L, match(targets$redcap_event_name, snapshot$event_order))
-  repeat_kind <- ifelse(is.na(targets$repeat_instance), 0L, ifelse(is.na(targets$repeat_instrument), 1L, 2L))
-  ordering <- order(
-    instrument_order, event_order, targets$record_id,
-    repeat_kind, targets$repeat_instance, na.last = TRUE
-  )
-  targets <- targets[ordering, , drop = FALSE]
+  targets <- targets[
+    .rcm_target_order_index(targets, snapshot, instruments),
+    , drop = FALSE
+  ]
   rownames(targets) <- NULL
   tibble::as_tibble(targets)
 }
@@ -993,7 +1282,9 @@
       is.na(targets$instrument) | !targets$instrument %in% plan$instruments |
       event_invalid | repeat_name_invalid | repeat_shape_invalid |
       is.na(targets$target_source) | !targets$target_source %in% valid_sources
-    if (any(bad) || anyDuplicated(.rcm_target_key(targets))) {
+    if (any(bad) || .rcm_has_duplicate_rows(
+      targets, .rcm_target_identity_columns()
+    )) {
       .rcm_plan_abort("`plan$assessible_targets` contains invalid or duplicate targets.", "plan")
     }
   }
@@ -1005,23 +1296,36 @@
     if (length(setdiff(plan$instruments, snapshot$instrument_order))) {
       .rcm_plan_abort("`plan` contains unavailable instruments.", "plan")
     }
-    ordered_targets <- .rcm_order_targets(targets, snapshot, plan$instruments)
-    if (!identical(.rcm_target_key(targets), .rcm_target_key(ordered_targets))) {
+    target_order <- .rcm_target_order_index(
+      targets,
+      snapshot,
+      plan$instruments
+    )
+    if (!identical(target_order, seq_len(nrow(targets)))) {
       .rcm_plan_abort("`plan$assessible_targets` is not in deterministic target order.", "plan")
     }
-    for (i in seq_len(nrow(targets))) {
+    if (nrow(targets)) {
+      candidate <- tibble::tibble(
+        instrument = targets$instrument,
+        redcap_event_name = targets$redcap_event_name,
+        repeat_mode = .rcm_repeat_mode(
+          targets$repeat_instrument,
+          targets$repeat_instance
+        )
+      )
       allowed <- snapshot$allowable_crossings[
-        snapshot$allowable_crossings$instrument == targets$instrument[[i]] &
-          .rcm_event_equal(snapshot$allowable_crossings$redcap_event_name, targets$redcap_event_name[[i]]),
-        , drop = FALSE
+        , c("instrument", "redcap_event_name", "repeat_mode"),
+        drop = FALSE
       ]
-      mode <- if (is.na(targets$repeat_instance[[i]])) {
-        "regular"
-      } else if (is.na(targets$repeat_instrument[[i]])) {
-        "repeating_event"
-      } else "repeating_instrument"
-      if (nrow(allowed) != 1 || allowed$repeat_mode[[1]] != mode ||
-          (mode == "repeating_instrument" && targets$repeat_instrument[[i]] != targets$instrument[[i]])) {
+      allowed$.allowed <- TRUE
+      matched <- merge(
+        as.data.frame(candidate),
+        as.data.frame(allowed),
+        by = c("instrument", "redcap_event_name", "repeat_mode"),
+        all.x = TRUE,
+        sort = FALSE
+      )
+      if (anyNA(matched$.allowed)) {
         .rcm_plan_abort("`plan` contains a target disallowed by current project structure.", "plan")
       }
     }

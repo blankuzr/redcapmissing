@@ -24,6 +24,15 @@
 - Changed the report object to store its plan, target results, summary,
   unresolved missing rows, verification audit, fixed-stage diagnostics, and
   optional detailed results.
+- Reworked plan construction and execution around native structural joins,
+  integer target identities, vector field kernels, compiled branching logic,
+  batched verification, and grouped report aggregation. Compact execution now
+  retains failed field rows rather than materializing every passing field while
+  preserving the same targets, summaries, missing rows, and audit counts.
+- Defined fail-closed cross-event branching when a referenced event contains
+  repeated rows: a unique regular source row takes precedence, a sole repeated
+  source row is usable, and multiple repeated-only source rows error rather
+  than selecting an arbitrary instance.
 
 # redcapmissing 6.1.2
 

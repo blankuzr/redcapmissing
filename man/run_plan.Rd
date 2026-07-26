@@ -137,7 +137,12 @@ reason is \code{"no assessible fields after field policy"}, its counts are zero,
 and its rates are \code{NA_real_} rather than an automatic pass.
 
 Branching logic is evaluated in the target's exact event/repeat context,
-including cross-event references. Branch-closed fields are not assessed.
+including cross-event references. An unqualified cross-event reference uses
+the unique non-repeating row when the source event also contains repeated
+contexts. When no non-repeating row exists, one repeated source row is
+unambiguous and may be used; multiple repeated source rows are ambiguous and
+raise a project error rather than silently selecting an instance.
+Branch-closed fields are not assessed.
 Checkbox roots are complete when at least one exported child choice is
 selected. Every selected response, checkbox-child, and branching-dependency
 column must be present; an absent column is never interpreted as a blank.

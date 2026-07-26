@@ -956,3 +956,52 @@ test_that("repeating verification rejects malformed instrument and instance keys
     )
   }
 })
+
+test_that("verification preparation batches many native field contexts", {
+  record_count <- 500L
+  records <- sprintf("r%04d", seq_len(record_count))
+  rcon <- run_plan_rcon()
+  data <- run_plan_data(record_id = records, required_note = "")
+  plan <- plan_from_data(data, rcon, "baseline_form")
+  evidence <- run_plan_verified_row(
+    record = rep(records, each = 2L),
+    ts = rep(
+      c("2026-07-25T11:00:00Z", "2026-07-25 12:00:00.250"),
+      record_count
+    ),
+    status = rep(c("OPEN", "VERIFIED"), record_count)
+  )
+  evidence <- evidence[rev(seq_len(nrow(evidence))), , drop = FALSE]
+
+  prepared <- .rcm_prepare_verified(
+    verified = evidence,
+    verified_user = "alice",
+    snapshot = .rcm_project_snapshot(rcon),
+    plan = plan
+  )
+
+  expect_identical(
+    names(prepared$contexts),
+    c(
+      "record_id", "redcap_event_name", "repeat_instrument",
+      "repeat_instance", "field_name"
+    )
+  )
+  expect_identical(
+    vapply(prepared$contexts, typeof, character(1)),
+    c(
+      record_id = "character",
+      redcap_event_name = "character",
+      repeat_instrument = "character",
+      repeat_instance = "integer",
+      field_name = "character"
+    )
+  )
+  expect_identical(nrow(prepared$contexts), record_count)
+  expect_setequal(prepared$contexts$record_id, records)
+  expect_true(all(prepared$contexts$field_name == "required_note"))
+  expect_identical(prepared$audit$input_rows, record_count * 2L)
+  expect_identical(prepared$audit$user_rows, record_count * 2L)
+  expect_identical(prepared$audit$latest_user_rows, record_count)
+  expect_identical(prepared$audit$verified_rows, record_count)
+})
