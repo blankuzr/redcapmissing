@@ -147,7 +147,7 @@
 #' |---|---|---|
 #' | `project_id` | Character, integer, or whole number finite double; exact project match | Character |
 #' | `record` | Character, factor, integer, or finite double; nonmissing, nonblank, unpadded | Character |
-#' | `event_id` | Positive character digits without leading zeros, integer, or whole number double; typed missing/blank only where the event dimension is inapplicable | Character event ID and mapped raw event name; `NA_character_` where inapplicable |
+#' | `event_id` | Longitudinal project: positive character digits without leading zeros, integer, or whole number double. Classic project: typed missing or character blank only | Character event ID and mapped raw event name for a longitudinal project; `NA_character_` for a classic project |
 #' | `field_name` | Character; exact nonblank, unpadded raw metadata field name | Character |
 #' | `repeat_instrument` | Character raw instrument, or character blank/typed missing only where inapplicable | Character; inapplicable values become `NA_character_` |
 #' | `instance` | Positive character digits without leading zeros, integer, or whole number double; typed missing/blank only where inapplicable | Integer; inapplicable values become `NA_integer_` |
@@ -155,11 +155,14 @@
 #' | `current_query_status` | Character; nonmissing, nonblank, unpadded, case sensitive | Character |
 #' | `username` | Character; nonmissing, nonblank, unpadded, case sensitive | Character |
 #'
-#' Inapplicable repeat and event dimensions must normalize to typed missing values;
-#' applicable dimensions must exactly match an `assessible_targets` row. `NaN`,
-#' infinity, padded identifiers, invalid timestamps, unknown project/event/field
-#' contexts, illegal repeat shapes, and verification contexts outside the plan
-#' are errors.
+#' In a classic project, every `event_id` must be missing or blank. Any
+#' nonmissing value is an error and is never discarded during matching. In a
+#' longitudinal project, every `event_id` must identify a known project event.
+#' Inapplicable repeat dimensions must normalize to typed missing values;
+#' applicable dimensions must exactly match an `assessible_targets` row.
+#' `NaN`, infinity, padded identifiers, invalid timestamps, unknown
+#' project/event/field contexts, illegal repeat shapes, and verification
+#' contexts outside the plan are errors.
 #'
 #' Rows are filtered to exact `verified_user`, grouped by normalized field
 #' context, and reduced to the latest timestamp. Identical rows tied at the

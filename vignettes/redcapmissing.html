@@ -1373,13 +1373,16 @@ preserved.</td>
 </tr>
 <tr class="odd">
 <td><code>event_id</code></td>
-<td>Positive integer, finite whole number double, or character digits
-matching <code>[1-9][0-9]*</code> within R integer range.</td>
+<td>A longitudinal project requires a positive integer, finite whole
+number double, or character digits matching <code>[1-9][0-9]*</code>
+within R integer range. A classic project does not accept a nonmissing
+value.</td>
 <td>A classic project accepts numeric or character missing or blank
 values, or a logical column whose every value is <code>NA</code>. A
 longitudinal project requires a value.</td>
-<td>Character REDCap event ID and the corresponding raw event name;
-<code>NA_character_</code> in a classic project.</td>
+<td>Character REDCap event ID and the corresponding raw event name in a
+longitudinal project; <code>NA_character_</code> in a classic
+project.</td>
 </tr>
 <tr class="even">
 <td><code>field_name</code></td>
@@ -1439,6 +1442,11 @@ table contains rows. Every row is validated before filtering by
 <code>username</code> or <code>current_query_status</code>. Each event,
 repeat, field, and record context must match a target stored in
 <code>plan</code>.</p>
+<p>For a classic project, every <code>event_id</code> must be missing or
+blank. A nonmissing value is an error and is never discarded to make
+verification evidence match a classic target. For a longitudinal
+project, every <code>event_id</code> must identify a known project
+event.</p>
 <div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>verified_report <span class="ot">&lt;-</span> <span class="fu">run_plan</span>(</span>
 <span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a>  <span class="at">plan =</span> explicit_plan,</span>
 <span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a>  <span class="at">data =</span> records,</span>

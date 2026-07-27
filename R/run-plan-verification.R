@@ -198,8 +198,19 @@
   longitudinal <- isTRUE(snapshot$project$longitudinal)
   normalized_id <- .verification_normalize_positive_integer(event_id, "event_id", nullable = !longitudinal)
   if (!longitudinal) {
-    return(list(event_id = ifelse(is.na(normalized_id), NA_character_, as.character(normalized_id)),
-                redcap_event_name = rep(NA_character_, length(normalized_id))))
+    nonmissing_rows <- which(!is.na(normalized_id))
+    if (length(nonmissing_rows)) {
+      .verification_signal_error(paste0(
+        "For a classic project, `verified$event_id` must contain only missing ",
+        "or blank values; nonmissing value(s) were found in row(s): ",
+        paste(nonmissing_rows, collapse = ", "),
+        "."
+      ))
+    }
+    return(list(
+      event_id = rep(NA_character_, length(normalized_id)),
+      redcap_event_name = rep(NA_character_, length(normalized_id))
+    ))
   }
   events <- snapshot$events
   if (!all(c("event_id", "redcap_event_name") %in% names(events))) {

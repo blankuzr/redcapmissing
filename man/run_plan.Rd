@@ -185,7 +185,7 @@ username or status filtering:\tabular{lll}{
    Column \tab Accepted storage and values \tab Internal normalization \cr
    \code{project_id} \tab Character, integer, or whole number finite double; exact project match \tab Character \cr
    \code{record} \tab Character, factor, integer, or finite double; nonmissing, nonblank, unpadded \tab Character \cr
-   \code{event_id} \tab Positive character digits without leading zeros, integer, or whole number double; typed missing/blank only where the event dimension is inapplicable \tab Character event ID and mapped raw event name; \code{NA_character_} where inapplicable \cr
+   \code{event_id} \tab Longitudinal project: positive character digits without leading zeros, integer, or whole number double. Classic project: typed missing or character blank only \tab Character event ID and mapped raw event name for a longitudinal project; \code{NA_character_} for a classic project \cr
    \code{field_name} \tab Character; exact nonblank, unpadded raw metadata field name \tab Character \cr
    \code{repeat_instrument} \tab Character raw instrument, or character blank/typed missing only where inapplicable \tab Character; inapplicable values become \code{NA_character_} \cr
    \code{instance} \tab Positive character digits without leading zeros, integer, or whole number double; typed missing/blank only where inapplicable \tab Integer; inapplicable values become \code{NA_integer_} \cr
@@ -195,11 +195,14 @@ username or status filtering:\tabular{lll}{
 }
 
 
-Inapplicable repeat and event dimensions must normalize to typed missing values;
-applicable dimensions must exactly match an \code{assessible_targets} row. \code{NaN},
-infinity, padded identifiers, invalid timestamps, unknown project/event/field
-contexts, illegal repeat shapes, and verification contexts outside the plan
-are errors.
+In a classic project, every \code{event_id} must be missing or blank. Any
+nonmissing value is an error and is never discarded during matching. In a
+longitudinal project, every \code{event_id} must identify a known project event.
+Inapplicable repeat dimensions must normalize to typed missing values;
+applicable dimensions must exactly match an \code{assessible_targets} row.
+\code{NaN}, infinity, padded identifiers, invalid timestamps, unknown
+project/event/field contexts, illegal repeat shapes, and verification
+contexts outside the plan are errors.
 
 Rows are filtered to exact \code{verified_user}, grouped by normalized field
 context, and reduced to the latest timestamp. Identical rows tied at the

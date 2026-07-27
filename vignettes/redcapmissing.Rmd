@@ -433,7 +433,7 @@ table requires these nine columns. Extra columns are ignored.
 |---|---|---|---|
 | `project_id` | Character, integer, or finite whole number double matching `plan$project$project_id`. | None. | Character. |
 | `record` | Character, factor, integer, or finite double; values are nonblank and unpadded. | None. | Character; factor labels and character leading zeros are preserved. |
-| `event_id` | Positive integer, finite whole number double, or character digits matching `[1-9][0-9]*` within R integer range. | A classic project accepts numeric or character missing or blank values, or a logical column whose every value is `NA`. A longitudinal project requires a value. | Character REDCap event ID and the corresponding raw event name; `NA_character_` in a classic project. |
+| `event_id` | A longitudinal project requires a positive integer, finite whole number double, or character digits matching `[1-9][0-9]*` within R integer range. A classic project does not accept a nonmissing value. | A classic project accepts numeric or character missing or blank values, or a logical column whose every value is `NA`. A longitudinal project requires a value. | Character REDCap event ID and the corresponding raw event name in a longitudinal project; `NA_character_` in a classic project. |
 | `field_name` | Character raw metadata field name; values are nonblank and unpadded. | None. | Character. |
 | `repeat_instrument` | Character raw instrument name. | Character blank or missing values are accepted for an inapplicable repeat instrument dimension. A logical, integer, or double column is accepted when every value is typed `NA`; factor storage is rejected. | Character or `NA_character_`. |
 | `instance` | Positive integer, finite whole number double, or character digits matching `[1-9][0-9]*` within R integer range. | Numeric or character missing or blank values are accepted when neither the event nor instrument repeats. A logical column is accepted when every value is `NA`; factor storage is rejected. | Integer or `NA_integer_`. |
@@ -446,6 +446,11 @@ once; column storage and row values are checked when the table contains rows.
 Every row is validated before filtering by `username` or
 `current_query_status`. Each event, repeat, field, and record context must match
 a target stored in `plan`.
+
+For a classic project, every `event_id` must be missing or blank. A nonmissing
+value is an error and is never discarded to make verification evidence match a
+classic target. For a longitudinal project, every `event_id` must identify a
+known project event.
 
 ```{r verified, eval = FALSE}
 verified_report <- run_plan(

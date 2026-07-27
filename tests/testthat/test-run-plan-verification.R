@@ -161,16 +161,87 @@ test_that("a complete empty verification template is valid and audited", {
 test_that("verification nullable columns normalize typed missing values", {
   rcon <- run_plan_rcon(); data <- run_plan_data(required_note = "")
   plan <- plan_from_data(data, rcon, "baseline_form")
-  issue <- run_plan_verified_row()
-  issue$event_id <- NA_real_
-  issue$repeat_instrument <- NA_real_
-  issue$instance <- NA_real_
-  result <- run_plan(
-    plan, data, rcon, ignore_fields = c("record_id", "branch_flag", "checkbox_field",
-      "conditional_note"), verified = issue, verified_user = "alice",
-    progress = FALSE
+  accepted_event_ids <- list(
+    character_missing = NA_character_,
+    integer_missing = NA_integer_,
+    double_missing = NA_real_,
+    logical_missing = NA,
+    blank = "",
+    whitespace = " "
   )
-  expect_identical(result$verification$overrides_applied, 1L)
+
+  for (case_name in names(accepted_event_ids)) {
+    issue <- run_plan_verified_row()
+    issue$event_id <- accepted_event_ids[[case_name]]
+    issue$repeat_instrument <- NA_real_
+    issue$instance <- NA_real_
+    result <- run_plan(
+      plan, data, rcon,
+      ignore_fields = c(
+        "record_id", "branch_flag", "checkbox_field", "conditional_note"
+      ),
+      verified = issue,
+      verified_user = "alice",
+      progress = FALSE
+    )
+    expect_identical(
+      result$verification$overrides_applied,
+      1L,
+      info = case_name
+    )
+  }
+})
+
+test_that("classic verification rejects nonmissing event IDs before overrides", {
+  rcon <- run_plan_rcon()
+  data <- run_plan_data(required_note = "")
+  plan <- plan_from_data(data, rcon, "baseline_form")
+  nonmissing_event_ids <- list(
+    character = "999",
+    integer = 999L,
+    double = 999
+  )
+
+  for (case_name in names(nonmissing_event_ids)) {
+    issue <- run_plan_verified_row()
+    issue$event_id <- nonmissing_event_ids[[case_name]]
+    expect_error(
+      run_plan(
+        plan,
+        data,
+        rcon,
+        verified = issue,
+        verified_user = "alice",
+        progress = FALSE
+      ),
+      regexp = "classic project.*row\\(s\\): 1",
+      class = "redcapmissing_error_verification",
+      info = case_name
+    )
+  }
+})
+
+test_that("classic event IDs are validated before user and status filtering", {
+  rcon <- run_plan_rcon()
+  data <- run_plan_data(required_note = "")
+  plan <- plan_from_data(data, rcon, "baseline_form")
+  selected <- run_plan_verified_row()
+  unselected <- run_plan_verified_row(status = "OPEN", username = "bob")
+  unselected$event_id <- "999"
+  evidence <- dplyr::bind_rows(selected, unselected)
+
+  expect_error(
+    run_plan(
+      plan,
+      data,
+      rcon,
+      verified = evidence,
+      verified_user = "alice",
+      progress = FALSE
+    ),
+    regexp = "classic project.*row\\(s\\): 2",
+    class = "redcapmissing_error_verification"
+  )
 })
 
 test_that("longitudinal verification omits repeat keys when no repeat applies", {

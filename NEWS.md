@@ -14,6 +14,9 @@
   condition for an assessed check and drives the printed `condition` column.
 - Added a credential-free synthetic offline plan-to-report example and corrected
   the documented accessor attribute name to `redcapmissing_labels`.
+- Made verification evidence fail closed for classic projects. Every
+  `verified$event_id` must be missing or blank; a nonmissing value now errors
+  before username or status filtering and cannot authorize an override.
 
 ## 2026-07-25
 
