@@ -272,11 +272,11 @@ run_plan <- function(
   details = FALSE, progress = interactive()
 ) {
   exclude_types_was_missing <- missing(exclude_types)
-  .rcm_run_logical(required_fields, "required_fields")
-  .rcm_run_logical(details, "details")
-  .rcm_run_logical(progress, "progress")
-  ignore_fields <- .rcm_run_character_vector(ignore_fields, "ignore_fields")
-  exclude_types <- .rcm_run_character_vector(exclude_types, "exclude_types")
+  .run_plan_normalize_logical_argument(required_fields, "required_fields")
+  .run_plan_normalize_logical_argument(details, "details")
+  .run_plan_normalize_logical_argument(progress, "progress")
+  ignore_fields <- .run_plan_normalize_character_argument(ignore_fields, "ignore_fields")
+  exclude_types <- .run_plan_normalize_character_argument(exclude_types, "exclude_types")
 
   stage_names <- c(
     "Validate plan, data, and rcon",
@@ -304,14 +304,14 @@ run_plan <- function(
   }
 
   started <- Sys.time()
-  if (missing(plan) || is.null(plan)) .rcm_plan_abort("`plan` is required.", "plan")
+  if (missing(plan) || is.null(plan)) .condition_signal_error("`plan` is required.", "plan")
   if (missing(data) || is.null(data) || !is.data.frame(data)) {
-    .rcm_plan_abort("`data` must be a data frame or tibble.", "schema")
+    .condition_signal_error("`data` must be a data frame or tibble.", "schema")
   }
-  if (missing(rcon) || is.null(rcon)) .rcm_plan_abort("`rcon` is required.", "project")
-  snapshot <- .rcm_project_snapshot(rcon)
-  plan <- .rcm_validate_plan(plan, snapshot = snapshot)
-  normalized_data <- .rcm_normalize_data(data, snapshot, require_nonempty = FALSE,
+  if (missing(rcon) || is.null(rcon)) .condition_signal_error("`rcon` is required.", "project")
+  snapshot <- .project_structure_build_snapshot(rcon)
+  plan <- .plan_validate_object(plan, snapshot = snapshot)
+  normalized_data <- .record_normalize_export(data, snapshot, require_nonempty = FALSE,
                                          response_columns = NULL)
   if (is.list(normalized_data) && "data" %in% names(normalized_data)) {
     normalized_data <- normalized_data$data
@@ -320,25 +320,25 @@ run_plan <- function(
   complete_stage(started)
 
   started <- Sys.time()
-  verification <- .rcm_prepare_verified(verified, verified_user, snapshot, plan)
+  verification <- .verification_prepare_contexts(verified, verified_user, snapshot, plan)
   complete_stage(started)
 
   started <- Sys.time()
   metadata <- tibble::as_tibble(snapshot$metadata)
   id_field <- snapshot$project$record_id_field %||% as.character(metadata$field_name[[1L]])
-  field_dictionary <- .rcm_run_field_dictionary(metadata)
-  detection <- .rcm_run_detection_plan(
+  field_dictionary <- .metadata_build_field_dictionary(metadata)
+  detection <- .instrument_started_build_detection_plan(
     metadata,
     plan$instruments,
     id_field,
     field_dictionary = field_dictionary
   )
-  .rcm_run_require_response_columns(normalized_data,
+  .run_plan_require_response_columns(normalized_data,
     unlist(detection$export_fields, use.names = FALSE), "instrument start detection")
   complete_stage(started)
 
   started <- Sys.time()
-  field_plan <- .rcm_run_field_plan(
+  field_plan <- .field_complete_build_field_plan(
     metadata,
     plan$instruments,
     required_fields,
@@ -347,20 +347,20 @@ run_plan <- function(
     strict_exclude_types = !exclude_types_was_missing,
     field_dictionary = field_dictionary
   )
-  .rcm_run_require_response_columns(normalized_data,
+  .run_plan_require_response_columns(normalized_data,
     unlist(field_plan$export_fields, use.names = FALSE), "field-complete assessment")
-  branch_fields <- .rcm_run_branch_export_fields(
+  branch_fields <- .run_plan_resolve_branch_fields(
     metadata,
     field_plan$branching_logic,
     field_dictionary = field_dictionary
   )
-  .rcm_run_require_response_columns(normalized_data, branch_fields,
+  .run_plan_require_response_columns(normalized_data, branch_fields,
                                     "branching logic evaluation")
   complete_stage(started)
 
   started <- Sys.time()
   targets <- tibble::as_tibble(plan$assessible_targets)
-  joins <- .rcm_run_join_targets(targets, normalized_data,
+  joins <- .assessible_target_join_records(targets, normalized_data,
                                  isTRUE(snapshot$project$longitudinal))
   complete_stage(started)
 
@@ -391,7 +391,7 @@ run_plan <- function(
   missing_target_without_repeat <- !has_repeat_instance & event_gate_pass &
     !joins$target_present
   instrument_status[missing_target_without_repeat] <- "failed"
-  instrument_status <- .rcm_run_instrument_started(
+  instrument_status <- .instrument_started_evaluate_targets(
     targets = targets,
     target_row = joins$target_row,
     upstream_pass = upstream_pass,
@@ -402,7 +402,7 @@ run_plan <- function(
   complete_stage(started)
 
   started <- Sys.time()
-  assessment <- .rcm_run_assess_targets(
+  assessment <- .field_complete_assess_targets(
     targets = targets,
     target_row = joins$target_row,
     instrument_status = instrument_status,
@@ -424,7 +424,7 @@ run_plan <- function(
   started <- Sys.time()
   overrides <- 0L
   if (nrow(field_rows)) {
-    apply <- .rcm_run_verification_matches(
+    apply <- .verification_match_fields(
       field_rows,
       targets,
       verification$contexts
@@ -460,8 +460,8 @@ run_plan <- function(
     fields_failed = as.integer(fields_failed),
     field_applicability_reason = field_reason
   )
-  summary <- .rcm_run_summary(targets, target_results)
-  missing_rows <- .rcm_run_missing(
+  summary <- .summary_build_rows(targets, target_results)
+  missing_rows <- .missing_build_rows(
     targets,
     target_results,
     field_rows,
@@ -480,7 +480,7 @@ run_plan <- function(
     missing = missing_rows, verification = verification$audit,
     diagnostics = diagnostics,
     details = if (isTRUE(details)) {
-      .rcm_run_check_rows(targets, target_results, field_rows)
+      .details_build_check_rows(targets, target_results, field_rows)
     } else {
       NULL
     }
@@ -491,138 +491,31 @@ run_plan <- function(
   out
 }
 
-.rcm_run_logical <- function(x, argument) {
+.run_plan_normalize_logical_argument <- function(x, argument) {
   if (!is.logical(x) || length(x) != 1L || is.na(x)) {
-    .rcm_plan_abort(paste0("`", argument, "` must be TRUE or FALSE."), "argument")
+    .condition_signal_error(paste0("`", argument, "` must be TRUE or FALSE."), "argument")
   }
   invisible(x)
 }
 
-.rcm_run_character_vector <- function(x, argument) {
+.run_plan_normalize_character_argument <- function(x, argument) {
   if (is.null(x) || (is.character(x) && !length(x))) return(character())
   if (!is.character(x)) {
-    .rcm_plan_abort(paste0("`", argument, "` must be NULL or a character vector."), "argument")
+    .condition_signal_error(paste0("`", argument, "` must be NULL or a character vector."), "argument")
   }
   if (any(is.na(x) | !nzchar(x) | x != trimws(x))) {
-    .rcm_plan_abort(paste0("`", argument, "` must contain nonblank, unpadded values."), "argument")
+    .condition_signal_error(paste0("`", argument, "` must contain nonblank, unpadded values."), "argument")
   }
-  if (anyDuplicated(x)) .rcm_plan_abort(paste0("`", argument, "` cannot contain duplicates."), "argument")
+  if (anyDuplicated(x)) .condition_signal_error(paste0("`", argument, "` cannot contain duplicates."), "argument")
   x
 }
 
-.rcm_run_field_dictionary <- function(metadata) {
-  field_names <- as.character(metadata$field_name)
-  duplicated_fields <- unique(field_names[duplicated(field_names)])
-  if (length(duplicated_fields)) {
-    .rcm_plan_abort(
-      paste0(
-        "Metadata must define every field exactly once; duplicated field(s): ",
-        paste(duplicated_fields, collapse = ", "),
-        "."
-      ),
-      "project"
-    )
-  }
-
-  derived <- .miss_derive_field_names(metadata)
-  export_fields <- split(
-    as.character(derived$export_field_name),
-    factor(derived$original_field_name, levels = field_names),
-    drop = FALSE
-  )
-
-  list(
-    export_fields = export_fields,
-    choice_map = .miss_build_choice_map(metadata)
-  )
-}
-
-.rcm_run_detection_plan <- function(
-  metadata,
-  instruments,
-  id_field,
-  field_dictionary = NULL
-) {
-  field_dictionary <- field_dictionary %||% .rcm_run_field_dictionary(metadata)
-  rows <- metadata[metadata$form_name %in% instruments &
-    metadata$field_name != id_field & !metadata$field_type %in% c("descriptive", "calc"),
-    , drop = FALSE]
-  result <- stats::setNames(vector("list", length(instruments)), instruments)
-  for (instrument in instruments) {
-    instrument_rows <- rows[rows$form_name == instrument, , drop = FALSE]
-    fields <- unique(unlist(
-      .rcm_run_export_fields(
-        metadata, instrument_rows$field_name, field_dictionary = field_dictionary
-      ),
-      use.names = FALSE
-    ))
-    if (!length(fields)) {
-      .rcm_plan_abort(paste0("Instrument `", instrument,
-        "` has no usable instrument start detection fields."), "project")
-    }
-    result[[instrument]] <- fields
-  }
-  list(export_fields = result)
-}
-
-.rcm_run_field_plan <- function(
-  metadata,
-  instruments,
-  required_fields,
-  ignore_fields,
-  exclude_types,
-  strict_exclude_types = TRUE,
-  field_dictionary = NULL
-) {
-  field_dictionary <- field_dictionary %||% .rcm_run_field_dictionary(metadata)
-  selected <- metadata[metadata$form_name %in% instruments, , drop = FALSE]
-  unknown_ignore <- setdiff(ignore_fields, unique(as.character(selected$field_name)))
-  if (length(unknown_ignore)) {
-    .rcm_plan_abort(paste0("`ignore_fields` contains fields outside the selected instruments: ",
-      paste(unknown_ignore, collapse = ", "), "."), "argument")
-  }
-  if (isTRUE(required_fields) && !"required_field" %in% names(metadata)) {
-    .rcm_plan_abort("`rcon` metadata must contain `required_field` when `required_fields = TRUE`.", "project")
-  }
-  if (isTRUE(required_fields)) selected <- selected[.miss_required_vec(selected$required_field), , drop = FALSE]
-  unknown_types <- setdiff(exclude_types, unique(as.character(selected$field_type)))
-  if (length(unknown_types) && isTRUE(strict_exclude_types)) {
-    .rcm_plan_abort(paste0("`exclude_types` contains types unused by the resolved field policy: ",
-      paste(unknown_types, collapse = ", "), "."), "argument")
-  }
-  selected <- selected[!selected$field_type %in% exclude_types, , drop = FALSE]
-  unused_ignore <- setdiff(ignore_fields, as.character(selected$field_name))
-  if (length(unused_ignore)) {
-    .rcm_plan_abort(paste0("`ignore_fields` contains fields not used by the resolved field policy: ",
-      paste(unused_ignore, collapse = ", "), "."), "argument")
-  }
-  selected <- selected[!selected$field_name %in% ignore_fields, , drop = FALSE]
-  selected$branching_logic <- if ("branching_logic" %in% names(selected))
-    as.character(selected$branching_logic) else rep("", nrow(selected))
-  selected$field_label <- if ("field_label" %in% names(selected))
-    as.character(selected$field_label) else as.character(selected$field_name)
-  selected$export_fields <- .rcm_run_export_fields(
-    metadata,
-    selected$field_name,
-    field_dictionary = field_dictionary
-  )
-  split_rows <- split(selected, selected$form_name)
-  result_rows <- result_exports <- stats::setNames(vector("list", length(instruments)), instruments)
-  for (instrument in instruments) {
-    value <- split_rows[[instrument]]
-    if (is.null(value)) value <- selected[0, , drop = FALSE]
-    result_rows[[instrument]] <- tibble::as_tibble(value)
-    result_exports[[instrument]] <- unique(unlist(value$export_fields, use.names = FALSE))
-  }
-  list(rows = result_rows, export_fields = result_exports,
-       branching_logic = selected$branching_logic)
-}
-.rcm_run_export_fields <- function(metadata, fields, field_dictionary = NULL) {
+.run_plan_resolve_export_fields <- function(metadata, fields, field_dictionary = NULL) {
   fields <- as.character(fields)
-  field_dictionary <- field_dictionary %||% .rcm_run_field_dictionary(metadata)
+  field_dictionary <- field_dictionary %||% .metadata_build_field_dictionary(metadata)
   unknown <- setdiff(fields, names(field_dictionary$export_fields))
   if (length(unknown)) {
-    .rcm_plan_abort(
+    .condition_signal_error(
       paste0("Metadata must define field `", unknown[[1L]], "` exactly once."),
       "project"
     )
@@ -630,760 +523,29 @@ run_plan <- function(
   unname(field_dictionary$export_fields[fields])
 }
 
-.rcm_run_require_response_columns <- function(data, export_fields, purpose) {
+.run_plan_require_response_columns <- function(data, export_fields, purpose) {
   missing_columns <- setdiff(unique(as.character(export_fields)), names(data))
   if (length(missing_columns)) {
-    .rcm_plan_abort(paste0("`data` is missing column(s) required for ", purpose,
+    .condition_signal_error(paste0("`data` is missing column(s) required for ", purpose,
       ": ", paste(missing_columns, collapse = ", "), "."), "schema")
   }
   invisible(data)
 }
 
-.rcm_run_branch_export_fields <- function(
+.run_plan_resolve_branch_fields <- function(
   metadata,
   logic,
   field_dictionary = NULL
 ) {
-  field_dictionary <- field_dictionary %||% .rcm_run_field_dictionary(metadata)
-  refs <- .miss_extract_logic_references(logic)
+  field_dictionary <- field_dictionary %||% .metadata_build_field_dictionary(metadata)
+  refs <- .branching_logic_extract_references(logic)
   if (!nrow(refs)) return(character())
   unknown <- setdiff(refs$field, as.character(metadata$field_name))
   if (length(unknown)) {
-    .rcm_plan_abort(paste0("Branching logic references unknown field(s): ",
+    .condition_signal_error(paste0("Branching logic references unknown field(s): ",
       paste(unknown, collapse = ", "), "."), "project")
   }
-  unique(unlist(.rcm_run_export_fields(
+  unique(unlist(.run_plan_resolve_export_fields(
     metadata, unique(refs$field), field_dictionary = field_dictionary
   ), use.names = FALSE))
-}
-
-.rcm_run_row_groups <- function(data, columns) {
-  n <- nrow(data)
-  if (!n) return(integer())
-  if (!length(columns)) return(rep.int(1L, n))
-
-  values <- unname(as.list(data[, columns, drop = FALSE]))
-  ordering <- do.call(order, c(values, list(na.last = TRUE, method = "radix")))
-  same_as_previous <- rep.int(TRUE, max(0L, n - 1L))
-  if (n > 1L) {
-    previous <- ordering[-n]
-    current <- ordering[-1L]
-    for (value in values) {
-      left <- value[previous]
-      right <- value[current]
-      both_missing <- is.na(left) & is.na(right)
-      both_present <- !is.na(left) & !is.na(right)
-      equal <- both_missing | (both_present & left == right)
-      equal[is.na(equal)] <- FALSE
-      same_as_previous <- same_as_previous & equal
-    }
-  }
-
-  sorted_group <- cumsum(c(TRUE, !same_as_previous))
-  group <- integer(n)
-  group[ordering] <- sorted_group
-  group
-}
-
-.rcm_run_match_rows <- function(needles, haystack, columns) {
-  needle_n <- nrow(needles)
-  haystack_n <- nrow(haystack)
-  if (!needle_n) return(integer())
-  if (!haystack_n) return(rep.int(NA_integer_, needle_n))
-
-  combined <- rbind(
-    as.data.frame(haystack[, columns, drop = FALSE]),
-    as.data.frame(needles[, columns, drop = FALSE])
-  )
-  groups <- .rcm_run_row_groups(combined, columns)
-  match(
-    groups[haystack_n + seq_len(needle_n)],
-    groups[seq_len(haystack_n)]
-  )
-}
-
-.rcm_run_join_targets <- function(targets, data, longitudinal) {
-  target_context <- data.frame(
-    record_id = targets$record_id,
-    event = targets$redcap_event_name,
-    repeat_instrument = targets$repeat_instrument,
-    repeat_instance = targets$repeat_instance,
-    stringsAsFactors = FALSE
-  )
-  data_context <- data.frame(
-    record_id = data$.rcm_record_id,
-    event = data$redcap_event_name,
-    repeat_instrument = data$redcap_repeat_instrument,
-    repeat_instance = data$redcap_repeat_instance,
-    stringsAsFactors = FALSE
-  )
-  target_row <- .rcm_run_match_rows(
-    target_context,
-    data_context,
-    names(target_context)
-  )
-  event_present <- if (isTRUE(longitudinal)) {
-    !is.na(.rcm_run_match_rows(
-      target_context,
-      data_context,
-      c("record_id", "event")
-    ))
-  } else {
-    rep.int(TRUE, nrow(targets))
-  }
-  list(
-    target_row = as.integer(target_row),
-    target_present = !is.na(target_row),
-    event_present = event_present
-  )
-}
-
-.rcm_run_is_missing <- function(x) {
-  missing <- is.na(x)
-  if (is.character(x) || is.factor(x)) missing <- missing | !nzchar(trimws(as.character(x)))
-  if (is.numeric(x)) missing <- missing | is.nan(x)
-  missing
-}
-
-.rcm_run_instrument_started <- function(
-  targets,
-  target_row,
-  upstream_pass,
-  normalized_data,
-  detection_fields,
-  initial_status
-) {
-  status <- initial_status
-  candidates <- which(upstream_pass & !is.na(target_row))
-  if (!length(candidates)) return(status)
-
-  for (instrument in names(detection_fields)) {
-    target_index <- candidates[targets$instrument[candidates] == instrument]
-    if (!length(target_index)) next
-
-    data_index <- target_row[target_index]
-    started <- rep.int(FALSE, length(target_index))
-    for (field in detection_fields[[instrument]]) {
-      value <- normalized_data[[field]][data_index]
-      present <- if (grepl("___", field, fixed = TRUE)) {
-        .miss_checkbox_selected_vec(value)
-      } else {
-        !.rcm_run_is_missing(value)
-      }
-      started <- started | present
-    }
-    status[target_index] <- ifelse(started, "passed", "failed")
-  }
-  status
-}
-
-.rcm_run_empty_field_rows <- function() {
-  tibble::tibble(
-    .target_row = integer(), .field_order = integer(),
-    field_name = character(), field_label = character(), field_type = character(),
-    branching_logic = character(), branch_satisfied = logical(),
-    value_summary = character(), raw_disposition = character(),
-    verification_applied = logical(), effective_disposition = character()
-  )
-}
-
-.rcm_run_checkbox_result <- function(
-  records,
-  row_index,
-  fields,
-  include_summary
-) {
-  n <- length(row_index)
-  selected <- vapply(fields, function(field) {
-    .miss_checkbox_selected_vec(records[[field]][row_index])
-  }, logical(n))
-  if (is.null(dim(selected))) {
-    selected <- matrix(selected, nrow = n, ncol = length(fields))
-  }
-  passed <- rowSums(selected, na.rm = TRUE) > 0L
-  if (!isTRUE(include_summary)) {
-    return(list(passed = passed, value_summary = rep.int(NA_character_, n)))
-  }
-
-  value_summary <- rep.int("", n)
-  for (i in seq_along(fields)) {
-    hit <- selected[, i]
-    if (!any(hit)) next
-    existing <- nzchar(value_summary[hit])
-    value_summary[hit] <- ifelse(
-      existing,
-      paste0(value_summary[hit], ", ", fields[[i]]),
-      fields[[i]]
-    )
-  }
-  list(passed = passed, value_summary = value_summary)
-}
-
-.rcm_run_assess_targets <- function(
-  targets,
-  target_row,
-  instrument_status,
-  normalized_data,
-  metadata,
-  field_plan,
-  field_dictionary,
-  branch_fields,
-  instruments,
-  retain_passed_fields
-) {
-  target_n <- nrow(targets)
-  field_status <- rep.int("not reached", target_n)
-  fields_assessed <- integer(target_n)
-  fields_failed <- integer(target_n)
-  field_reason <- rep.int(NA_character_, target_n)
-  pieces <- list()
-  piece_n <- 0L
-  compiled_branches <- new.env(hash = TRUE, parent = emptyenv())
-  project <- list(id_col = ".rcm_record_id", system_fields = .miss_system_fields())
-
-  for (instrument in instruments) {
-    active_targets <- which(
-      targets$instrument == instrument & instrument_status == "passed"
-    )
-    if (!length(active_targets)) next
-
-    instrument_fields <- field_plan$rows[[instrument]]
-    if (!nrow(instrument_fields)) {
-      field_status[active_targets] <- "not applicable"
-      field_reason[active_targets] <- "no fields remain after field policy"
-      next
-    }
-
-    source_rows <- target_row[active_targets]
-    if (anyNA(source_rows)) {
-      .rcm_plan_abort(
-        "A target that passed instrument start could not be matched to its physical row.",
-        "schema"
-      )
-    }
-    needed_columns <- unique(c(
-      ".rcm_record_id",
-      unname(unlist(project$system_fields, use.names = FALSE)),
-      branch_fields,
-      unlist(instrument_fields$export_fields, use.names = FALSE)
-    ))
-    records <- normalized_data[source_rows, needed_columns, drop = FALSE]
-    branch_cache <- .miss_new_branch_cache(
-      records = records,
-      lookup_records = normalized_data,
-      project = project
-    )
-
-    for (field_index in seq_len(nrow(instrument_fields))) {
-      logic <- as.character(instrument_fields$branching_logic[[field_index]])
-      branch_satisfied <- tryCatch({
-        branch_plan <- NULL
-        if (!.miss_is_blank_scalar(logic)) {
-          if (!exists(logic, envir = compiled_branches, inherits = FALSE)) {
-            assign(
-              logic,
-              .miss_compile_branch_logic(logic),
-              envir = compiled_branches
-            )
-          }
-          branch_plan <- get(logic, envir = compiled_branches, inherits = FALSE)
-        }
-        .miss_branch_satisfied(
-          logic = logic,
-          branch_plan = branch_plan,
-          branch_cache = branch_cache,
-          records = records,
-          lookup_records = normalized_data,
-          meta = metadata,
-          choice_map = field_dictionary$choice_map,
-          project = project
-        )
-      }, error = function(error) {
-        .rcm_plan_abort(
-          paste0(
-            "Could not evaluate REDCap branching logic `",
-            logic,
-            "`: ",
-            conditionMessage(error)
-          ),
-          "project"
-        )
-      })
-      applicable_rows <- which(branch_satisfied)
-      if (!length(applicable_rows)) next
-
-      target_index <- active_targets[applicable_rows]
-      export_fields <- instrument_fields$export_fields[[field_index]]
-      field_type <- as.character(instrument_fields$field_type[[field_index]])
-      if (identical(field_type, "checkbox")) {
-        outcome <- .rcm_run_checkbox_result(
-          records,
-          applicable_rows,
-          export_fields,
-          include_summary = retain_passed_fields
-        )
-        passed <- outcome$passed
-        value_summary <- outcome$value_summary
-      } else {
-        value <- records[[export_fields[[1L]]]][applicable_rows]
-        passed <- !.rcm_run_is_missing(value)
-        value_summary <- if (isTRUE(retain_passed_fields)) {
-          .miss_chr_vec(value)
-        } else {
-          rep.int(NA_character_, length(value))
-        }
-      }
-
-      fields_assessed[target_index] <- fields_assessed[target_index] + 1L
-      failed_targets <- target_index[!passed]
-      fields_failed[failed_targets] <- fields_failed[failed_targets] + 1L
-
-      retain <- if (isTRUE(retain_passed_fields)) {
-        rep.int(TRUE, length(passed))
-      } else {
-        !passed
-      }
-      if (!any(retain)) next
-
-      raw_disposition <- ifelse(passed[retain], "passed", "failed")
-      piece_n <- piece_n + 1L
-      pieces[[piece_n]] <- tibble::tibble(
-        .target_row = as.integer(target_index[retain]),
-        .field_order = rep.int(as.integer(field_index), sum(retain)),
-        field_name = rep.int(
-          as.character(instrument_fields$field_name[[field_index]]), sum(retain)
-        ),
-        field_label = rep.int(
-          as.character(instrument_fields$field_label[[field_index]]), sum(retain)
-        ),
-        field_type = rep.int(field_type, sum(retain)),
-        branching_logic = rep.int(logic, sum(retain)),
-        branch_satisfied = rep.int(TRUE, sum(retain)),
-        value_summary = value_summary[retain],
-        raw_disposition = raw_disposition,
-        verification_applied = rep.int(FALSE, sum(retain)),
-        effective_disposition = raw_disposition
-      )
-    }
-
-    assessed <- fields_assessed[active_targets] > 0L
-    assessed_targets <- active_targets[assessed]
-    field_status[assessed_targets] <- ifelse(
-      fields_failed[assessed_targets] > 0L,
-      "failed",
-      "passed"
-    )
-    not_applicable <- active_targets[!assessed]
-    field_status[not_applicable] <- "not applicable"
-    field_reason[not_applicable] <- "no fields apply after branching logic"
-  }
-
-  field_rows <- if (!piece_n) {
-    .rcm_run_empty_field_rows()
-  } else {
-    dplyr::bind_rows(pieces)
-  }
-  if (nrow(field_rows)) {
-    field_rows <- field_rows[
-      order(field_rows$.target_row, field_rows$.field_order, method = "radix"),
-      ,
-      drop = FALSE
-    ]
-    row.names(field_rows) <- NULL
-  }
-
-  list(
-    field_status = field_status,
-    fields_assessed = as.integer(fields_assessed),
-    fields_failed = as.integer(fields_failed),
-    field_reason = field_reason,
-    field_rows = tibble::as_tibble(field_rows)
-  )
-}
-
-.rcm_run_verification_matches <- function(field_rows, targets, contexts) {
-  matched <- rep.int(FALSE, nrow(field_rows))
-  candidate <- which(field_rows$raw_disposition == "failed")
-  if (!length(candidate) || !nrow(contexts)) return(matched)
-
-  target_index <- field_rows$.target_row[candidate]
-  candidate_context <- data.frame(
-    record_id = targets$record_id[target_index],
-    redcap_event_name = targets$redcap_event_name[target_index],
-    repeat_instrument = targets$repeat_instrument[target_index],
-    repeat_instance = targets$repeat_instance[target_index],
-    field_name = field_rows$field_name[candidate],
-    stringsAsFactors = FALSE
-  )
-  matched[candidate] <- !is.na(.rcm_run_match_rows(
-    candidate_context,
-    contexts,
-    names(candidate_context)
-  ))
-  matched
-}
-
-.rcm_run_public_field_rows <- function(field_rows, targets) {
-  if (!nrow(field_rows)) {
-    return(tibble::tibble(
-      record_id = character(), instrument = character(),
-      redcap_event_name = character(), repeat_instrument = character(),
-      repeat_instance = integer(), target_source = character(),
-      field_name = character(), field_label = character(), field_type = character(),
-      branching_logic = character(), branch_satisfied = logical(),
-      value_summary = character(), raw_disposition = character(),
-      verification_applied = logical(), effective_disposition = character()
-    ))
-  }
-
-  target_index <- field_rows$.target_row
-  tibble::tibble(
-    record_id = targets$record_id[target_index],
-    instrument = targets$instrument[target_index],
-    redcap_event_name = targets$redcap_event_name[target_index],
-    repeat_instrument = targets$repeat_instrument[target_index],
-    repeat_instance = targets$repeat_instance[target_index],
-    target_source = targets$target_source[target_index],
-    field_name = field_rows$field_name,
-    field_label = field_rows$field_label,
-    field_type = field_rows$field_type,
-    branching_logic = field_rows$branching_logic,
-    branch_satisfied = field_rows$branch_satisfied,
-    value_summary = field_rows$value_summary,
-    raw_disposition = field_rows$raw_disposition,
-    verification_applied = field_rows$verification_applied,
-    effective_disposition = field_rows$effective_disposition
-  )
-}
-
-.rcm_run_validation_level <- function(repeat_instance) {
-  ifelse(is.na(repeat_instance), "event:instrument", "event:instrument:instance")
-}
-
-.rcm_run_check_rows <- function(targets, target_results, field_rows) {
-  add_target_checks <- function(check, disposition, reason = NA_character_) {
-    n <- nrow(targets)
-    tibble::tibble(
-      record_id = targets$record_id, instrument = targets$instrument,
-      redcap_event_name = targets$redcap_event_name,
-      repeat_instrument = targets$repeat_instrument,
-      repeat_instance = targets$repeat_instance, target_source = targets$target_source,
-      validation_level = .rcm_run_validation_level(targets$repeat_instance),
-      validation_check = rep(check, n), field_name = rep(NA_character_, n),
-      field_label = rep(NA_character_, n), field_type = rep(NA_character_, n),
-      branching_logic = rep(NA_character_, n), branch_satisfied = rep(NA, n),
-      value_summary = rep(NA_character_, n),
-      raw_disposition = as.character(disposition),
-      verification_applied = rep(FALSE, n),
-      effective_disposition = as.character(disposition),
-      reason = rep(reason, length.out = n)
-    )
-  }
-  event_reason <- rep(NA_character_, nrow(target_results))
-  event_reason[target_results$event_row_started == "not applicable"] <-
-    "not applicable for classic project"
-  repeat_reason <- rep(NA_character_, nrow(target_results))
-  repeat_reason[target_results$repeat_instance_row_started == "not applicable"] <-
-    "not a repeating target"
-  rows <- list(
-    add_target_checks("event-row-started", target_results$event_row_started, event_reason),
-    add_target_checks("repeat-instance-row-started", target_results$repeat_instance_row_started, repeat_reason),
-    add_target_checks("instrument-started", target_results$instrument_started)
-  )
-  field_target_rows <- add_target_checks("field-complete", target_results$field_complete)
-  field_target_rows$reason[target_results$field_complete == "not applicable"] <-
-    target_results$field_applicability_reason[
-      target_results$field_complete == "not applicable"
-    ]
-  rows[[4L]] <- field_target_rows[target_results$field_complete %in%
-    c("not applicable", "not reached"), , drop = FALSE]
-  if (nrow(field_rows)) {
-    public_fields <- .rcm_run_public_field_rows(field_rows, targets)
-    rows[[5L]] <- tibble::tibble(
-      record_id = public_fields$record_id,
-      instrument = public_fields$instrument,
-      redcap_event_name = public_fields$redcap_event_name,
-      repeat_instrument = public_fields$repeat_instrument,
-      repeat_instance = public_fields$repeat_instance,
-      target_source = public_fields$target_source,
-      validation_level = .rcm_run_validation_level(public_fields$repeat_instance),
-      validation_check = "field-complete",
-      field_name = public_fields$field_name,
-      field_label = public_fields$field_label,
-      field_type = public_fields$field_type,
-      branching_logic = public_fields$branching_logic,
-      branch_satisfied = public_fields$branch_satisfied,
-      value_summary = public_fields$value_summary,
-      raw_disposition = public_fields$raw_disposition,
-      verification_applied = public_fields$verification_applied,
-      effective_disposition = public_fields$effective_disposition,
-      reason = NA_character_
-    )
-  }
-  dplyr::bind_rows(rows)
-}
-
-.rcm_run_summary <- function(targets, target_results) {
-  empty <- tibble::tibble(
-    redcap_event_name = character(), instrument = character(),
-    repeat_instrument = character(), repeat_instance = integer(),
-    validation_level = character(), validation_check = character(),
-    status = character(), reason = character(), assessed = integer(),
-    passed = integer(), failed = integer(), pass_rate = double(),
-    fail_rate = double()
-  )
-  if (!nrow(targets)) return(empty)
-
-  context_columns <- c(
-    "redcap_event_name", "instrument", "repeat_instrument", "repeat_instance"
-  )
-  raw_group <- .rcm_run_row_groups(targets, context_columns)
-  context_group <- match(raw_group, unique(raw_group))
-  group_n <- length(unique(context_group))
-  first <- match(seq_len(group_n), context_group)
-  group_size <- tabulate(context_group, nbins = group_n)
-
-  first_reason <- function(reason) {
-    result <- rep.int(NA_character_, group_n)
-    available <- !is.na(reason)
-    if (!any(available)) return(result)
-    position <- match(seq_len(group_n), context_group[available])
-    hit <- !is.na(position)
-    result[hit] <- reason[available][position[hit]]
-    result
-  }
-  sum_by_context <- function(value) {
-    as.integer(rowsum(
-      as.integer(value),
-      context_group,
-      reorder = FALSE
-    )[, 1L])
-  }
-  build_summary <- function(
-    check,
-    disposition,
-    reason,
-    assessed = NULL,
-    passed = NULL,
-    failed = NULL
-  ) {
-    if (is.null(assessed)) {
-      passed <- tabulate(
-        context_group[disposition == "passed"],
-        nbins = group_n
-      )
-      failed <- tabulate(
-        context_group[disposition == "failed"],
-        nbins = group_n
-      )
-      assessed <- passed + failed
-    }
-    not_applicable <- tabulate(
-      context_group[disposition == "not applicable"],
-      nbins = group_n
-    ) == group_size
-    group_reason <- first_reason(reason)
-    group_reason[!not_applicable] <- NA_character_
-
-    tibble::tibble(
-      redcap_event_name = targets$redcap_event_name[first],
-      instrument = targets$instrument[first],
-      repeat_instrument = targets$repeat_instrument[first],
-      repeat_instance = targets$repeat_instance[first],
-      validation_level = .rcm_run_validation_level(
-        targets$repeat_instance[first]
-      ),
-      validation_check = rep.int(check, group_n),
-      status = ifelse(not_applicable, "not applicable", "assessed"),
-      reason = group_reason,
-      assessed = as.integer(assessed),
-      passed = as.integer(passed),
-      failed = as.integer(failed),
-      pass_rate = ifelse(assessed == 0L, NA_real_, passed / assessed),
-      fail_rate = ifelse(assessed == 0L, NA_real_, failed / assessed),
-      .context_group = seq_len(group_n)
-    )
-  }
-
-  event_reason <- ifelse(
-    target_results$event_row_started == "not applicable",
-    "not applicable for classic project",
-    NA_character_
-  )
-  repeat_reason <- ifelse(
-    target_results$repeat_instance_row_started == "not applicable",
-    "not a repeating target",
-    NA_character_
-  )
-  field_assessed <- sum_by_context(target_results$fields_assessed)
-  field_failed <- sum_by_context(target_results$fields_failed)
-
-  result <- dplyr::bind_rows(
-    build_summary(
-      "event-row-started",
-      target_results$event_row_started,
-      event_reason
-    ),
-    build_summary(
-      "repeat-instance-row-started",
-      target_results$repeat_instance_row_started,
-      repeat_reason
-    ),
-    build_summary(
-      "instrument-started",
-      target_results$instrument_started,
-      rep.int(NA_character_, nrow(targets))
-    ),
-    build_summary(
-      "field-complete",
-      target_results$field_complete,
-      target_results$field_applicability_reason,
-      assessed = field_assessed,
-      passed = field_assessed - field_failed,
-      failed = field_failed
-    )
-  )
-  result <- result[order(
-    result$.context_group,
-    match(
-      result$validation_check,
-      .redcapmissing_validation_checks()
-    ),
-    method = "radix"
-  ),
-    setdiff(names(result), ".context_group"),
-    drop = FALSE
-  ]
-  row.names(result) <- NULL
-  tibble::as_tibble(result)
-}
-
-.rcm_run_add_urls <- function(rows, rcon, snapshot) {
-  rows$url <- rep(NA_character_, nrow(rows))
-  if (!nrow(rows)) return(rows)
-
-  instance_url <- tryCatch(rcon$url, error = function(e) NULL)
-  if (is.function(instance_url)) {
-    instance_url <- tryCatch(instance_url(), error = function(e) NULL)
-  }
-  version_method <- tryCatch(rcon$version, error = function(e) NULL)
-  version <- if (is.function(version_method)) {
-    tryCatch(version_method(), error = function(e) NULL)
-  } else {
-    version_method
-  }
-  if (length(instance_url) != 1L || length(version) != 1L) return(rows)
-  instance_url <- as.character(instance_url)
-  version <- as.character(version)
-  if (
-    is.na(instance_url) || !nzchar(trimws(instance_url)) ||
-      is.na(version) || !nzchar(trimws(version))
-  ) {
-    return(rows)
-  }
-
-  event_id <- rep(NA_character_, nrow(rows))
-  complete <- !is.na(rows$record_id) & nzchar(rows$record_id) &
-    !is.na(rows$instrument) & nzchar(rows$instrument)
-  if (isTRUE(snapshot$project$longitudinal)) {
-    event_index <- match(
-      rows$redcap_event_name,
-      snapshot$events$redcap_event_name
-    )
-    event_id <- as.character(snapshot$events$event_id[event_index])
-    complete <- complete & !is.na(event_id) & nzchar(event_id)
-  }
-  if (!any(complete)) return(rows)
-
-  base_url <- sub("/api(/|)$", "", instance_url)
-  rows$url[complete] <- sprintf(
-    "%s/redcap_v%s/DataEntry/index.php?pid=%s&page=%s&id=%s",
-    base_url,
-    version,
-    snapshot$project$project_id,
-    rows$instrument[complete],
-    rows$record_id[complete]
-  )
-  if (isTRUE(snapshot$project$longitudinal)) {
-    rows$url[complete] <- paste0(
-      rows$url[complete],
-      "&event_id=",
-      event_id[complete]
-    )
-  }
-  rows
-}
-.rcm_run_missing <- function(
-  targets,
-  target_results,
-  field_rows,
-  rcon,
-  snapshot
-) {
-  empty <- tibble::tibble(
-    record_id = character(), redcap_event_name = character(),
-    repeat_instrument = character(), repeat_instance = integer(),
-    validation_context = character(), instrument = character(),
-    validation_check = character(), field_name = character(),
-    field_label = character(), field_type = character(),
-    branching_logic = character(), url = character()
-  )
-  target_failure <- function(check, disposition) {
-    index <- which(disposition == "failed")
-    if (!length(index)) return(NULL)
-    tibble::tibble(
-      record_id = targets$record_id[index],
-      redcap_event_name = targets$redcap_event_name[index],
-      repeat_instrument = targets$repeat_instrument[index],
-      repeat_instance = targets$repeat_instance[index],
-      instrument = targets$instrument[index],
-      validation_check = rep.int(check, length(index)),
-      field_name = rep.int(NA_character_, length(index)),
-      field_label = rep.int(NA_character_, length(index)),
-      field_type = rep.int(NA_character_, length(index)),
-      branching_logic = rep.int(NA_character_, length(index))
-    )
-  }
-
-  pieces <- list(
-    target_failure("event-row-started", target_results$event_row_started),
-    target_failure(
-      "repeat-instance-row-started",
-      target_results$repeat_instance_row_started
-    ),
-    target_failure("instrument-started", target_results$instrument_started)
-  )
-  effective_failure <- which(field_rows$effective_disposition == "failed")
-  if (length(effective_failure)) {
-    public_fields <- .rcm_run_public_field_rows(
-      field_rows[effective_failure, , drop = FALSE],
-      targets
-    )
-    pieces[[4L]] <- tibble::tibble(
-      record_id = public_fields$record_id,
-      redcap_event_name = public_fields$redcap_event_name,
-      repeat_instrument = public_fields$repeat_instrument,
-      repeat_instance = public_fields$repeat_instance,
-      instrument = public_fields$instrument,
-      validation_check = rep.int("field-complete", nrow(public_fields)),
-      field_name = public_fields$field_name,
-      field_label = public_fields$field_label,
-      field_type = public_fields$field_type,
-      branching_logic = public_fields$branching_logic
-    )
-  }
-
-  rows <- dplyr::bind_rows(pieces)
-  if (!nrow(rows)) return(empty)
-  rows <- .rcm_run_add_urls(rows, rcon, snapshot)
-  rows$validation_context <- .miss_validation_context_vec(
-    rows$redcap_event_name,
-    rows$repeat_instance
-  )
-  rows <- rows[, c(
-    "record_id", "redcap_event_name", "repeat_instrument", "repeat_instance",
-    "validation_context", "instrument", "validation_check", "field_name",
-    "field_label", "field_type", "branching_logic", "url"
-  ), drop = FALSE]
-  tibble::as_tibble(rows)
 }

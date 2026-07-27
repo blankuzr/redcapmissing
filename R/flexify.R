@@ -44,8 +44,8 @@
 #'
 #' @export
 flexify <- function(x) {
-  .redcapmissing_check_flexify_input(x)
-  .redcapmissing_check_packages("flextable", "flexify()")
+  .flexify_validate_input(x)
+  .flex_require_packages("flextable", "flexify()")
 
   labels <- attr(x, "redcapmissing_labels", exact = TRUE)
   if (!is.list(labels)) {
@@ -55,8 +55,8 @@ flexify <- function(x) {
   flex_data <- x |>
     dplyr::ungroup() |>
     tibble::as_tibble()
-  flex_data <- .redcapmissing_flexify_drop_blank_repeat_columns(flex_data)
-  flex_data <- .redcapmissing_flexify_label_values(flex_data, labels)
+  flex_data <- .flexify_drop_blank_repeat_columns(flex_data)
+  flex_data <- .flexify_apply_labels(flex_data, labels)
 
   out <- flextable::flextable(
     data = flex_data,
@@ -65,11 +65,11 @@ flexify <- function(x) {
   out <- flextable::set_header_labels(
     out,
     values = as.list(
-      .redcapmissing_flexify_header_labels()[names(flex_data)]
+      .flexify_build_header_labels()[names(flex_data)]
     )
   )
-  out <- .redcapmissing_flexify_format_cells(out, flex_data)
-  out <- .redcapmissing_flexify_format_urls(out, flex_data)
+  out <- .flexify_format_cells(out, flex_data)
+  out <- .flexify_format_urls(out, flex_data)
 
   out |>
     flextable::align(align = "left", part = "all") |>
@@ -80,7 +80,7 @@ flexify <- function(x) {
 
 # Internal helpers ---------------------------------------------------------
 
-.redcapmissing_check_flexify_input <- function(x) {
+.flexify_validate_input <- function(x) {
   if (!inherits(x, "tbl_df")) {
     stop(
       "`x` must be a tibble returned by `get_summary()` or `get_missing()`.",
@@ -103,14 +103,14 @@ flexify <- function(x) {
     stop("Column names in `x` must be unique.", call. = FALSE)
   }
 
-  summary_columns <- .redcapmissing_get_summary_columns()
-  missing_columns <- .redcapmissing_get_missing_columns()
+  summary_columns <- .summary_list_columns()
+  missing_columns <- .missing_list_columns()
   allowed_columns <- union(summary_columns, missing_columns)
   unknown_columns <- setdiff(column_names, allowed_columns)
   if (length(unknown_columns) > 0) {
     stop(
       "`x` contains unsupported column(s): ",
-      .redcapmissing_flexify_list_columns(unknown_columns),
+      .flexify_detect_list_columns(unknown_columns),
       ". Columns must come from `get_summary()` or `get_missing()`.",
       call. = FALSE
     )
@@ -125,7 +125,7 @@ flexify <- function(x) {
     )
   }
 
-  expected_types <- .redcapmissing_flexify_column_types()[column_names]
+  expected_types <- .flexify_list_column_types()[column_names]
   actual_types <- vapply(x, typeof, character(1))
   wrong_type <- actual_types != expected_types
   if (any(wrong_type)) {
@@ -149,14 +149,14 @@ flexify <- function(x) {
   invisible(x)
 }
 
-.redcapmissing_flexify_column_types <- function() {
+.flexify_list_column_types <- function() {
   summary_types <- vapply(
-    .redcapmissing_get_summary_prototype(),
+    .summary_build_prototype(),
     typeof,
     character(1)
   )
   missing_types <- vapply(
-    .redcapmissing_get_missing_prototype(),
+    .missing_build_prototype(),
     typeof,
     character(1)
   )
@@ -167,18 +167,18 @@ flexify <- function(x) {
   )
 }
 
-.redcapmissing_flexify_list_columns <- function(x) {
+.flexify_detect_list_columns <- function(x) {
   paste0("`", x, "`", collapse = ", ")
 }
 
-.redcapmissing_flexify_drop_blank_repeat_columns <- function(x) {
+.flexify_drop_blank_repeat_columns <- function(x) {
   repeat_columns <- c("repeat_instrument", "repeat_instance")
   if (!all(repeat_columns %in% names(x)) || ncol(x) <= length(repeat_columns)) {
     return(x)
   }
 
-  repeat_blank <- all(.miss_is_blank_vec(x$repeat_instrument)) &&
-    all(.miss_is_blank_vec(x$repeat_instance))
+  repeat_blank <- all(.schema_detect_blank_values(x$repeat_instrument)) &&
+    all(.schema_detect_blank_values(x$repeat_instance))
   if (!repeat_blank) {
     return(x)
   }
@@ -186,7 +186,7 @@ flexify <- function(x) {
   x[, setdiff(names(x), repeat_columns), drop = FALSE]
 }
 
-.redcapmissing_flexify_label_values <- function(x, labels) {
+.flexify_apply_labels <- function(x, labels) {
   event_labels <- labels$events %||% character()
   instrument_labels <- labels$instruments %||% character()
   if (!is.character(event_labels)) {
@@ -197,28 +197,28 @@ flexify <- function(x) {
   }
 
   if ("redcap_event_name" %in% names(x)) {
-    x$redcap_event_name <- .redcapmissing_flex_label_values(
+    x$redcap_event_name <- .flex_apply_labels(
       x$redcap_event_name,
       event_labels
     )
   }
   if ("instrument" %in% names(x)) {
-    x$instrument <- .redcapmissing_flex_label_values(x$instrument, instrument_labels)
+    x$instrument <- .flex_apply_labels(x$instrument, instrument_labels)
   }
   if ("repeat_instrument" %in% names(x)) {
-    x$repeat_instrument <- .redcapmissing_flex_label_values(
+    x$repeat_instrument <- .flex_apply_labels(
       x$repeat_instrument,
       instrument_labels
     )
   }
   if ("validation_check" %in% names(x)) {
-    x$validation_check <- .redcapmissing_flex_labels(x$validation_check)
+    x$validation_check <- .registry_build_flex_labels(x$validation_check)
   }
 
   x
 }
 
-.redcapmissing_flexify_header_labels <- function() {
+.flexify_build_header_labels <- function() {
   c(
     record_id = "Record ID",
     redcap_event_name = "Event",
@@ -243,7 +243,7 @@ flexify <- function(x) {
   )
 }
 
-.redcapmissing_flexify_format_cells <- function(x, data) {
+.flexify_format_cells <- function(x, data) {
   character_columns <- names(data)[
     vapply(data, typeof, character(1)) == "character"
   ]
@@ -261,7 +261,7 @@ flexify <- function(x) {
   rate_columns <- intersect(c("pass_rate", "fail_rate"), names(data))
   if (length(rate_columns) > 0) {
     rate_formatters <- rep(
-      list(.redcapmissing_flexify_format_rate),
+      list(.flexify_format_rate),
       length(rate_columns)
     )
     names(rate_formatters) <- rate_columns
@@ -271,7 +271,7 @@ flexify <- function(x) {
   x
 }
 
-.redcapmissing_flexify_format_rate <- function(x) {
+.flexify_format_rate <- function(x) {
   out <- rep("", length(x))
   present <- !is.na(x)
   out[present] <- paste0(
@@ -281,12 +281,12 @@ flexify <- function(x) {
   out
 }
 
-.redcapmissing_flexify_format_urls <- function(x, data) {
+.flexify_format_urls <- function(x, data) {
   if (!"url" %in% names(data) || nrow(data) == 0) {
     return(x)
   }
 
-  has_url <- !.miss_is_blank_vec(data$url)
+  has_url <- !.schema_detect_blank_values(data$url)
   if (!any(has_url)) {
     return(x)
   }
@@ -300,4 +300,35 @@ flexify <- function(x) {
       flextable::hyperlink_text(x = url_values, url = url_values)
     )
   )
+}
+
+
+.flex_require_packages <- function(packages, context) {
+  missing_packages <- packages[
+    !vapply(packages, requireNamespace, logical(1), quietly = TRUE)
+  ]
+  if (length(missing_packages) > 0) {
+    stop(
+      "Install the following package(s) before using `",
+      context,
+      "`: ",
+      paste(missing_packages, collapse = ", "),
+      call. = FALSE
+    )
+  }
+  invisible(packages)
+}
+
+.flex_apply_labels <- function(values, labels) {
+  values <- .schema_normalize_character_vector(values)
+  labels <- labels %||% character()
+  if (is.null(names(labels))) {
+    names(labels) <- rep("", length(labels))
+  }
+
+  out <- unname(labels[values])
+  use_raw <- is.na(out) | .schema_detect_blank_values(out)
+  out[use_raw] <- values[use_raw]
+  out[.schema_detect_blank_values(values)] <- ""
+  out
 }

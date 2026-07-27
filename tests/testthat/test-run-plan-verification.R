@@ -1007,10 +1007,10 @@ test_that("verification preparation batches many native field contexts", {
   )
   evidence <- evidence[rev(seq_len(nrow(evidence))), , drop = FALSE]
 
-  prepared <- .rcm_prepare_verified(
+  prepared <- .verification_prepare_contexts(
     verified = evidence,
     verified_user = "alice",
-    snapshot = .rcm_project_snapshot(rcon),
+    snapshot = .project_structure_build_snapshot(rcon),
     plan = plan
   )
 

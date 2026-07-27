@@ -72,7 +72,7 @@ test_that("retired monolithic and form formatter APIs are not exported", {
 
 test_that("context validation levels use instrument terminology", {
   expect_identical(
-    .redcapmissing_context_validation_level(
+    .registry_resolve_validation_level(
       c("event-row-started", "repeat-instance-row-started"),
       c(NA_character_, "2")
     ),

@@ -64,11 +64,11 @@ flex_event_instruments.redcapmissing <- function(
   missing_threshold = 0.10,
   ...
 ) {
-  .redcapmissing_check_report(x)
-  .redcapmissing_flex_event_instruments_check_threshold(missing_threshold)
-  .redcapmissing_check_packages(c("flextable", "glue"), "flex_event_instruments()")
+  .report_validate_object(x)
+  .flex_event_instruments_validate_threshold(missing_threshold)
+  .flex_require_packages(c("flextable", "glue"), "flex_event_instruments()")
 
-  parts <- .redcapmissing_flex_event_instruments_build(
+  parts <- .flex_event_instruments_build_table(
     x = x,
     missing_threshold = missing_threshold
   )
@@ -102,12 +102,12 @@ flex_event_instruments.redcapmissing <- function(
 
 # Internal helpers ---------------------------------------------------------
 
-.redcapmissing_flex_event_instruments_build <- function(
+.flex_event_instruments_build_table <- function(
   x,
   missing_threshold = 0.10
 ) {
-  .redcapmissing_flex_event_instruments_check_threshold(missing_threshold)
-  targets <- .redcapmissing_flex_event_instruments_targets(x)
+  .flex_event_instruments_validate_threshold(missing_threshold)
+  targets <- .flex_event_instruments_build_targets(x)
   project <- x$plan$project %||% list()
   event_values <- unique(targets$redcap_event_name)
   instrument_values <- unique(c(
@@ -115,11 +115,11 @@ flex_event_instruments.redcapmissing <- function(
     targets$repeat_instrument[!is.na(targets$repeat_instrument)]
   ))
   labels <- list(
-    events = .redcapmissing_resolve_labels(
+    events = .report_resolve_labels(
       project$event_labels,
       event_values[!is.na(event_values)]
     ),
-    instruments = .redcapmissing_resolve_labels(
+    instruments = .report_resolve_labels(
       project$instrument_labels,
       instrument_values
     )
@@ -138,10 +138,10 @@ flex_event_instruments.redcapmissing <- function(
   contexts <- unique(targets[context_columns])
 
   if (!nrow(targets)) {
-    out <- .redcapmissing_flex_event_instruments_empty(has_repeat)
+    out <- .flex_event_instruments_build_empty_table(has_repeat)
   } else {
     context_count <- nrow(contexts)
-    context_groups <- .redcapmissing_flex_event_instruments_group_id(
+    context_groups <- .flex_event_instruments_build_group_id(
       dplyr::bind_rows(contexts, targets[context_columns])
     )
     context_id <- match(
@@ -192,14 +192,14 @@ flex_event_instruments.redcapmissing <- function(
     repeat_context <- !is.na(contexts$repeat_instance) |
       !is.na(contexts$repeat_instrument)
 
-    instrument_rows <- .redcapmissing_flex_event_instruments_row(
+    instrument_rows <- .flex_event_instruments_build_row(
       row_type = rep("instrument", context_count),
       event = rep("", context_count),
-      instrument = .redcapmissing_flex_event_instruments_label(
+      instrument = .flex_event_instruments_resolve_label(
         contexts$instrument,
         labels$instruments
       ),
-      repeat_instrument = .redcapmissing_flex_event_instruments_label(
+      repeat_instrument = .flex_event_instruments_resolve_label(
         contexts$repeat_instrument,
         labels$instruments
       ),
@@ -210,21 +210,21 @@ flex_event_instruments.redcapmissing <- function(
       ),
       n = ifelse(
         repeat_context,
-        .redcapmissing_flex_event_instruments_format_fraction(
+        .flex_event_instruments_format_fraction(
           repeat_passed,
           repeat_assessed
         ),
         ""
       ),
-      incomplete = .redcapmissing_flex_event_instruments_format_fraction(
+      incomplete = .flex_event_instruments_format_fraction(
         context_incomplete,
         context_denominator
       ),
-      not_started = .redcapmissing_flex_event_instruments_format_fraction(
+      not_started = .flex_event_instruments_format_fraction(
         context_not_started,
         context_denominator
       ),
-      threshold = .redcapmissing_flex_event_instruments_format_fraction(
+      threshold = .flex_event_instruments_format_fraction(
         context_threshold,
         context_denominator
       ),
@@ -238,7 +238,7 @@ flex_event_instruments.redcapmissing <- function(
     record_event_columns <- c("record_id", "redcap_event_name")
     record_events <- unique(targets[record_event_columns])
     record_event_count <- nrow(record_events)
-    record_event_groups <- .redcapmissing_flex_event_instruments_group_id(
+    record_event_groups <- .flex_event_instruments_build_group_id(
       dplyr::bind_rows(record_events, targets[record_event_columns])
     )
     record_event_id <- match(
@@ -289,16 +289,16 @@ flex_event_instruments.redcapmissing <- function(
     event_assessed[no_applicable_event_gate] <-
       event_record_count[no_applicable_event_gate]
 
-    event_rows <- .redcapmissing_flex_event_instruments_row(
+    event_rows <- .flex_event_instruments_build_row(
       row_type = rep("event", event_count),
-      event = .redcapmissing_flex_event_instruments_event_label(
+      event = .flex_event_instruments_resolve_event_label(
         event_values,
         labels
       ),
       instrument = rep("", event_count),
       repeat_instrument = rep("", event_count),
       repeat_instance = rep("", event_count),
-      n = .redcapmissing_flex_event_instruments_format_fraction(
+      n = .flex_event_instruments_format_fraction(
         event_passed,
         event_assessed
       ),
@@ -321,7 +321,7 @@ flex_event_instruments.redcapmissing <- function(
     out$.row_order <- NULL
   }
 
-  out <- .redcapmissing_flex_event_instruments_add_all(out, has_repeat)
+  out <- .flex_event_instruments_add_all_rows(out, has_repeat)
 
   display_columns <- c("Event", "Instrument")
   if (has_repeat) {
@@ -340,11 +340,11 @@ flex_event_instruments.redcapmissing <- function(
     row_type = out$row_type,
     display_columns = display_columns,
     missing_threshold_heading =
-      .redcapmissing_flex_event_instruments_threshold_heading(missing_threshold)
+      .flex_event_instruments_build_threshold_heading(missing_threshold)
   )
 }
 
-.redcapmissing_flex_event_instruments_targets <- function(x) {
+.flex_event_instruments_build_targets <- function(x) {
   required <- c(
     "record_id", "instrument", "redcap_event_name", "repeat_instrument",
     "repeat_instance", "target_source", "event_row_started",
@@ -389,7 +389,7 @@ flex_event_instruments.redcapmissing <- function(
   targets
 }
 
-.redcapmissing_flex_event_instruments_group_id <- function(x) {
+.flex_event_instruments_build_group_id <- function(x) {
   x <- as.data.frame(x, stringsAsFactors = FALSE)
   row_count <- nrow(x)
   if (!row_count) return(integer())
@@ -414,24 +414,24 @@ flex_event_instruments.redcapmissing <- function(
   group_id
 }
 
-.redcapmissing_flex_event_instruments_event_label <- function(event, labels) {
-  out <- .redcapmissing_flex_event_instruments_label(event, labels$events)
+.flex_event_instruments_resolve_event_label <- function(event, labels) {
+  out <- .flex_event_instruments_resolve_label(event, labels$events)
   out[is.na(event)] <- "Single event"
   out
 }
 
-.redcapmissing_flex_event_instruments_label <- function(value, labels) {
-  .redcapmissing_flex_label_values(value, labels)
+.flex_event_instruments_resolve_label <- function(value, labels) {
+  .flex_apply_labels(value, labels)
 }
 
-.redcapmissing_flex_event_instruments_check_threshold <- function(x) {
+.flex_event_instruments_validate_threshold <- function(x) {
   if (!is.numeric(x) || length(x) != 1L || is.na(x) || !is.finite(x) || x < 0 || x > 1) {
     stop("`missing_threshold` must be one finite number from 0 through 1.", call. = FALSE)
   }
   invisible(x)
 }
 
-.redcapmissing_flex_event_instruments_threshold_heading <- function(x) {
+.flex_event_instruments_build_threshold_heading <- function(x) {
   percent <- format(x * 100, scientific = FALSE, trim = TRUE, digits = 15)
   if (grepl(".", percent, fixed = TRUE)) {
     percent <- sub("0+$", "", percent)
@@ -444,11 +444,11 @@ flex_event_instruments.redcapmissing <- function(
   }
 }
 
-.redcapmissing_flex_event_instruments_format_stats <- function(x) {
-  .redcapmissing_flex_event_instruments_format_fraction(x$passed, x$assessed)
+.flex_event_instruments_format_statistics <- function(x) {
+  .flex_event_instruments_format_fraction(x$passed, x$assessed)
 }
 
-.redcapmissing_flex_event_instruments_format_fraction <- function(count, denominator) {
+.flex_event_instruments_format_fraction <- function(count, denominator) {
   count <- as.integer(count)
   denominator <- as.integer(denominator)
   percent <- numeric(length(denominator))
@@ -457,8 +457,8 @@ flex_event_instruments.redcapmissing <- function(
   paste0(count, "/", denominator, " (", percent, "%)")
 }
 
-.redcapmissing_flex_event_instruments_empty <- function(has_repeat) {
-  .redcapmissing_flex_event_instruments_row(
+.flex_event_instruments_build_empty_table <- function(has_repeat) {
+  .flex_event_instruments_build_row(
     row_type = character(), event = character(), instrument = character(),
     repeat_instrument = character(), repeat_instance = character(), n = character(),
     incomplete = character(), not_started = character(), threshold = character(),
@@ -467,19 +467,19 @@ flex_event_instruments.redcapmissing <- function(
   )
 }
 
-.redcapmissing_flex_event_instruments_add_all <- function(x, has_repeat) {
+.flex_event_instruments_add_all_rows <- function(x, has_repeat) {
   instrument_rows <- x$row_type == "instrument"
   denominator <- sum(x$.denominator[instrument_rows])
-  all_row <- .redcapmissing_flex_event_instruments_row(
+  all_row <- .flex_event_instruments_build_row(
     row_type = "all", event = "All", instrument = "",
     repeat_instrument = "", repeat_instance = "", n = "",
-    incomplete = .redcapmissing_flex_event_instruments_format_fraction(
+    incomplete = .flex_event_instruments_format_fraction(
       sum(x$.incomplete_count[instrument_rows]), denominator
     ),
-    not_started = .redcapmissing_flex_event_instruments_format_fraction(
+    not_started = .flex_event_instruments_format_fraction(
       sum(x$.not_started_count[instrument_rows]), denominator
     ),
-    threshold = .redcapmissing_flex_event_instruments_format_fraction(
+    threshold = .flex_event_instruments_format_fraction(
       sum(x$.threshold_count[instrument_rows]), denominator
     ),
     has_repeat = has_repeat,
@@ -491,7 +491,7 @@ flex_event_instruments.redcapmissing <- function(
   dplyr::bind_rows(all_row, x)
 }
 
-.redcapmissing_flex_event_instruments_row <- function(
+.flex_event_instruments_build_row <- function(
   row_type,
   event,
   instrument,

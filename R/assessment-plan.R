@@ -150,29 +150,29 @@
 #' @export
 plan_from_data <- function(data, rcon, instruments, extended_schedule = NULL) {
   if (missing(data) || is.null(data)) {
-    .rcm_plan_abort("`data` is required and cannot be `NULL`.", "argument")
+    .condition_signal_error("`data` is required and cannot be `NULL`.", "argument")
   }
   if (missing(rcon) || is.null(rcon)) {
-    .rcm_plan_abort("`rcon` is required and cannot be `NULL`.", "argument")
+    .condition_signal_error("`rcon` is required and cannot be `NULL`.", "argument")
   }
   if (missing(instruments) || is.null(instruments)) {
-    .rcm_plan_abort("`instruments` is required and cannot be `NULL`.", "argument")
+    .condition_signal_error("`instruments` is required and cannot be `NULL`.", "argument")
   }
-  snapshot <- .rcm_project_snapshot(rcon)
-  instruments <- .rcm_selected_instruments(instruments, snapshot)
-  data <- .rcm_normalize_data(data, snapshot, require_nonempty = TRUE)
-  observed <- .rcm_observed_targets(data, snapshot, instruments)
+  snapshot <- .project_structure_build_snapshot(rcon)
+  instruments <- .schedule_validate_instruments(instruments, snapshot)
+  data <- .record_normalize_export(data, snapshot, require_nonempty = TRUE)
+  observed <- .assessible_target_build_observed(data, snapshot, instruments)
   extended <- if (is.null(extended_schedule)) {
-    .rcm_empty_targets()
+    .assessible_target_build_prototype()
   } else {
-    schedule <- .rcm_normalize_schedule(
+    schedule <- .schedule_normalize_rows(
       extended_schedule, "extended", snapshot, instruments, data
     )
-    .rcm_scheduled_targets(schedule, snapshot, data, "extended")
+    .assessible_target_build_scheduled(schedule, snapshot, data, "extended")
   }
-  targets <- .rcm_merge_targets(observed, extended, "from_data")
-  targets <- .rcm_order_targets(targets, snapshot, instruments)
-  .rcm_new_plan("from_data", instruments, targets, snapshot)
+  targets <- .assessible_target_merge_sources(observed, extended, "from_data")
+  targets <- .assessible_target_order_rows(targets, snapshot, instruments)
+  .plan_build_object("from_data", instruments, targets, snapshot)
 }
 
 #' Construct an explicit REDCap assessment plan
@@ -243,26 +243,26 @@ plan_from_data <- function(data, rcon, instruments, extended_schedule = NULL) {
 #' @export
 plan_explicit <- function(data, rcon, instruments, explicit_schedule) {
   if (missing(data) || is.null(data)) {
-    .rcm_plan_abort("`data` is required and cannot be `NULL`.", "argument")
+    .condition_signal_error("`data` is required and cannot be `NULL`.", "argument")
   }
   if (missing(rcon) || is.null(rcon)) {
-    .rcm_plan_abort("`rcon` is required and cannot be `NULL`.", "argument")
+    .condition_signal_error("`rcon` is required and cannot be `NULL`.", "argument")
   }
   if (missing(instruments) || is.null(instruments)) {
-    .rcm_plan_abort("`instruments` is required and cannot be `NULL`.", "argument")
+    .condition_signal_error("`instruments` is required and cannot be `NULL`.", "argument")
   }
   if (missing(explicit_schedule) || is.null(explicit_schedule)) {
-    .rcm_plan_abort("`explicit_schedule` is required and cannot be `NULL`.", "argument")
+    .condition_signal_error("`explicit_schedule` is required and cannot be `NULL`.", "argument")
   }
-  snapshot <- .rcm_project_snapshot(rcon)
-  instruments <- .rcm_selected_instruments(instruments, snapshot)
-  data <- .rcm_normalize_data(data, snapshot, require_nonempty = FALSE)
-  schedule <- .rcm_normalize_schedule(
+  snapshot <- .project_structure_build_snapshot(rcon)
+  instruments <- .schedule_validate_instruments(instruments, snapshot)
+  data <- .record_normalize_export(data, snapshot, require_nonempty = FALSE)
+  schedule <- .schedule_normalize_rows(
     explicit_schedule, "explicit", snapshot, instruments, data
   )
-  targets <- .rcm_scheduled_targets(schedule, snapshot, data, "explicit")
-  targets <- .rcm_order_targets(targets, snapshot, instruments)
-  .rcm_new_plan("explicit", instruments, targets, snapshot)
+  targets <- .assessible_target_build_scheduled(schedule, snapshot, data, "explicit")
+  targets <- .assessible_target_order_rows(targets, snapshot, instruments)
+  .plan_build_object("explicit", instruments, targets, snapshot)
 }
 
 #' Print a REDCap missingness assessment plan
@@ -279,7 +279,7 @@ plan_explicit <- function(data, rcon, instruments, explicit_schedule) {
 #' @seealso [plan_from_data()], [plan_explicit()]
 #' @export
 print.redcapmissing_plan <- function(x, ...) {
-  x <- .rcm_validate_plan(x)
+  x <- .plan_validate_object(x)
   cat(
     "<redcapmissing_plan>\n",
     "  Construction: ", x$construction, "\n",
@@ -288,4 +288,158 @@ print.redcapmissing_plan <- function(x, ...) {
     sep = ""
   )
   invisible(x)
+}
+
+
+.plan_build_object <- function(construction, instruments, targets, snapshot) {
+  plan <- structure(
+    list(
+      schema_version = 1L,
+      construction = construction,
+      instruments = instruments,
+      assessible_targets = targets,
+      project = snapshot$project,
+      structure_fingerprint = snapshot$structure_fingerprint
+    ),
+    class = "redcapmissing_plan"
+  )
+  .plan_validate_object(plan, snapshot)
+}
+
+.plan_validate_object <- function(plan, snapshot = NULL) {
+  expected_names <- c(
+    "schema_version", "construction", "instruments",
+    "assessible_targets", "project", "structure_fingerprint"
+  )
+  if (!inherits(plan, "redcapmissing_plan") || !is.list(plan) || !identical(names(plan), expected_names)) {
+    .condition_signal_error("`plan` is not a valid `redcapmissing_plan` representation.", "plan")
+  }
+  if (!identical(plan$schema_version, 1L) ||
+      !is.character(plan$construction) ||
+      length(plan$construction) != 1 ||
+      !plan$construction %in% c("from_data", "explicit")) {
+    .condition_signal_error("`plan` has an unsupported schema version or construction type.", "plan")
+  }
+  if (!is.character(plan$instruments) || !length(plan$instruments) || anyNA(plan$instruments) ||
+      any(plan$instruments == "") || any(trimws(plan$instruments) != plan$instruments) ||
+      anyDuplicated(plan$instruments)) {
+    .condition_signal_error("`plan$instruments` is malformed.", "plan")
+  }
+  valid_label_map <- function(x) {
+    is.character(x) && !anyNA(x) &&
+      (!length(x) || (
+        !is.null(names(x)) && !anyNA(names(x)) &&
+          all(names(x) != "") &&
+          all(trimws(names(x)) == names(x)) &&
+          !anyDuplicated(names(x)) &&
+          identical(names(x), sort(names(x)))
+      ))
+  }
+  if (!is.list(plan$project) ||
+      !identical(
+        names(plan$project),
+        c("project_id", "record_id_field", "longitudinal", "event_labels", "instrument_labels")
+      ) ||
+      !is.character(plan$project$project_id) || length(plan$project$project_id) != 1 ||
+      is.na(plan$project$project_id) || plan$project$project_id == "" ||
+      trimws(plan$project$project_id) != plan$project$project_id ||
+      !is.character(plan$project$record_id_field) || length(plan$project$record_id_field) != 1 ||
+      is.na(plan$project$record_id_field) || plan$project$record_id_field == "" ||
+      trimws(plan$project$record_id_field) != plan$project$record_id_field ||
+      !is.logical(plan$project$longitudinal) || length(plan$project$longitudinal) != 1 ||
+      is.na(plan$project$longitudinal) ||
+      !valid_label_map(plan$project$event_labels) ||
+      !valid_label_map(plan$project$instrument_labels) ||
+      (!plan$project$longitudinal && length(plan$project$event_labels)) ||
+      (plan$project$longitudinal && !length(plan$project$event_labels)) ||
+      length(setdiff(plan$instruments, names(plan$project$instrument_labels)))) {
+    .condition_signal_error("`plan$project` is malformed.", "plan")
+  }
+  if (!is.character(plan$structure_fingerprint) || length(plan$structure_fingerprint) != 1 ||
+      is.na(plan$structure_fingerprint) ||
+      !grepl("^[0-9a-f]{64}$", plan$structure_fingerprint)) {
+    .condition_signal_error("`plan$structure_fingerprint` is malformed.", "plan")
+  }
+  targets <- plan$assessible_targets
+  target_names <- c(
+    "record_id", "instrument", "redcap_event_name",
+    "repeat_instrument", "repeat_instance", "target_source"
+  )
+  valid_schema <- is.data.frame(targets) && identical(names(targets), target_names) &&
+    is.character(targets$record_id) && is.character(targets$instrument) &&
+    is.character(targets$redcap_event_name) && is.character(targets$repeat_instrument) &&
+    is.integer(targets$repeat_instance) && is.character(targets$target_source)
+  if (!valid_schema) .condition_signal_error("`plan$assessible_targets` has an invalid schema.", "plan")
+  if (nrow(targets)) {
+    valid_sources <- if (identical(plan$construction, "explicit")) "explicit" else c("observed", "extended", "observed+extended")
+    event_invalid <- if (isTRUE(plan$project$longitudinal)) {
+      is.na(targets$redcap_event_name) |
+        targets$redcap_event_name == "" |
+        trimws(targets$redcap_event_name) != targets$redcap_event_name |
+        !targets$redcap_event_name %in% names(plan$project$event_labels)
+    } else {
+      !is.na(targets$redcap_event_name)
+    }
+    repeat_name_invalid <- !is.na(targets$repeat_instrument) & (
+      targets$repeat_instrument == "" |
+        trimws(targets$repeat_instrument) != targets$repeat_instrument |
+        targets$repeat_instrument != targets$instrument
+    )
+    repeat_shape_invalid <-
+      (is.na(targets$repeat_instance) & !is.na(targets$repeat_instrument)) |
+      (!is.na(targets$repeat_instance) & targets$repeat_instance < 1L)
+    bad <- is.na(targets$record_id) | targets$record_id == "" |
+      trimws(targets$record_id) != targets$record_id |
+      is.na(targets$instrument) | !targets$instrument %in% plan$instruments |
+      event_invalid | repeat_name_invalid | repeat_shape_invalid |
+      is.na(targets$target_source) | !targets$target_source %in% valid_sources
+    if (any(bad) || .record_detect_duplicate_rows(
+      targets, .assessible_target_list_identity_columns()
+    )) {
+      .condition_signal_error("`plan$assessible_targets` contains invalid or duplicate targets.", "plan")
+    }
+  }
+  if (!is.null(snapshot)) {
+    if (!identical(plan$project, snapshot$project) ||
+        !identical(plan$structure_fingerprint, snapshot$structure_fingerprint)) {
+      .condition_signal_error("`plan` and `rcon` do not represent the same unchanged project structure.", "plan")
+    }
+    if (length(setdiff(plan$instruments, snapshot$instrument_order))) {
+      .condition_signal_error("`plan` contains unavailable instruments.", "plan")
+    }
+    target_order <- .assessible_target_compute_order(
+      targets,
+      snapshot,
+      plan$instruments
+    )
+    if (!identical(target_order, seq_len(nrow(targets)))) {
+      .condition_signal_error("`plan$assessible_targets` is not in deterministic target order.", "plan")
+    }
+    if (nrow(targets)) {
+      candidate <- tibble::tibble(
+        instrument = targets$instrument,
+        redcap_event_name = targets$redcap_event_name,
+        repeat_mode = .record_resolve_repeat_mode(
+          targets$repeat_instrument,
+          targets$repeat_instance
+        )
+      )
+      allowed <- snapshot$allowable_crossings[
+        , c("instrument", "redcap_event_name", "repeat_mode"),
+        drop = FALSE
+      ]
+      allowed$.allowed <- TRUE
+      matched <- merge(
+        as.data.frame(candidate),
+        as.data.frame(allowed),
+        by = c("instrument", "redcap_event_name", "repeat_mode"),
+        all.x = TRUE,
+        sort = FALSE
+      )
+      if (anyNA(matched$.allowed)) {
+        .condition_signal_error("`plan` contains a target disallowed by current project structure.", "plan")
+      }
+    }
+  }
+  plan
 }

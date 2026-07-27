@@ -496,7 +496,7 @@ test_that("instrument detection uses the complete independent field set", {
     run_plan_metadata(),
     meta_row("calculated_field", "baseline_form", field_type = "calc")
   )
-  detection <- redcapmissing:::.rcm_run_detection_plan(
+  detection <- redcapmissing:::.instrument_started_build_detection_plan(
     metadata,
     "baseline_form",
     "record_id"
@@ -1407,10 +1407,10 @@ test_that("run_plan evaluates shared branching plans across record vectors", {
   data$conditional_note <- ""
   plan <- plan_from_data(data, rcon, "baseline_form")
 
-  original_compile <- redcapmissing:::.miss_compile_branch_logic
+  original_compile <- redcapmissing:::.branching_logic_compile_expression
   compiled <- character()
   testthat::local_mocked_bindings(
-    .miss_compile_branch_logic = function(logic) {
+    .branching_logic_compile_expression = function(logic) {
       compiled <<- c(compiled, logic)
       original_compile(logic)
     },
@@ -1448,7 +1448,7 @@ test_that("compact execution does not construct detailed validation rows", {
   plan <- plan_from_data(data, rcon, "baseline_form")
 
   testthat::local_mocked_bindings(
-    .rcm_run_check_rows = function(...) {
+    .details_build_check_rows = function(...) {
       stop("detailed validation rows were constructed", call. = FALSE)
     },
     .package = "redcapmissing"

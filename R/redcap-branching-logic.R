@@ -1,6 +1,60 @@
-## Internal helpers: branching logic --------------------------------------
+# REDCap branching-logic parsing, resolution, and evaluation.
 
-.miss_branch_satisfied <- function(
+.branching_logic_extract_references <- function(logic) {
+  logic <- .schema_normalize_character_vector(logic)
+  logic <- logic[!.schema_detect_blank_values(logic)]
+  if (!length(logic)) {
+    return(tibble::tibble(
+      logic = character(), event = character(),
+      field = character(), choice = character()
+    ))
+  }
+
+  rows <- list()
+  for (value in logic) {
+    event_pattern <- "\\[([^\\]]+)\\]\\[([^\\]]+)\\]"
+    event_matches <- gregexpr(event_pattern, value, perl = TRUE)[[1]]
+    if (!identical(event_matches[[1]], -1L)) {
+      refs <- regmatches(value, list(event_matches))[[1]]
+      for (ref in refs) {
+        bits <- regmatches(ref, regexec(event_pattern, ref, perl = TRUE))[[1]]
+        parsed <- .branching_logic_parse_reference(bits[[3]])
+        rows[[length(rows) + 1L]] <- tibble::tibble(
+          logic = value,
+          event = bits[[2]],
+          field = parsed$field,
+          choice = parsed$choice %||% NA_character_
+        )
+      }
+    }
+
+    same_value <- gsub(event_pattern, "", value, perl = TRUE)
+    same_pattern <- "\\[([^\\]]+)\\]"
+    same_matches <- gregexpr(same_pattern, same_value, perl = TRUE)[[1]]
+    if (!identical(same_matches[[1]], -1L)) {
+      refs <- regmatches(same_value, list(same_matches))[[1]]
+      for (ref in refs) {
+        parsed <- .branching_logic_parse_reference(gsub("^\\[|\\]$", "", ref))
+        rows[[length(rows) + 1L]] <- tibble::tibble(
+          logic = value,
+          event = NA_character_,
+          field = parsed$field,
+          choice = parsed$choice %||% NA_character_
+        )
+      }
+    }
+  }
+
+  if (!length(rows)) {
+    return(tibble::tibble(
+      logic = character(), event = character(),
+      field = character(), choice = character()
+    ))
+  }
+  unique(dplyr::bind_rows(rows))
+}
+
+.branching_logic_evaluate_rows <- function(
   logic,
   branch_plan = NULL,
   branch_cache = NULL,
@@ -10,16 +64,16 @@
   choice_map,
   project
 ) {
-  if (.miss_is_blank_scalar(logic)) {
+  if (.schema_detect_blank_value(logic)) {
     return(rep(TRUE, nrow(records)))
   }
 
-  branch_plan <- branch_plan %||% .miss_compile_branch_logic(logic)
+  branch_plan <- branch_plan %||% .branching_logic_compile_expression(logic)
   expr <- branch_plan$expr
   env <- new.env(parent = baseenv())
 
   env$.v <- function(event, field, choice = NULL) {
-    .miss_branch_value(
+    .branching_logic_resolve_value(
       records = records,
       lookup_records = lookup_records,
       event = event,
@@ -35,13 +89,13 @@
     grepl(pattern, x, fixed = TRUE)
   }
   env$isblank <- function(x) {
-    .miss_is_blank_vec(x)
+    .schema_detect_blank_values(x)
   }
   env$notblank <- function(x) {
-    !.miss_is_blank_vec(x)
+    !.schema_detect_blank_values(x)
   }
   env$datediff <- function(date1, date2, units = "d", dateformat = "ymd", ...) {
-    .miss_datediff(date1 = date1, date2 = date2, units = units)
+    .branching_logic_compute_date_difference(date1 = date1, date2 = date2, units = units)
   }
   env$.redcap_if <- function(condition, yes, no) {
     ifelse(condition, yes, no)
@@ -67,12 +121,12 @@
   !is.na(value) & value
 }
 
-.miss_compile_branch_logic <- function(logic) {
-  if (.miss_is_blank_scalar(logic)) {
+.branching_logic_compile_expression <- function(logic) {
+  if (.schema_detect_blank_value(logic)) {
     return(list(logic = logic, expr = NULL, parsed_expr = NULL))
   }
 
-  expr <- .miss_logic_to_r(logic)
+  expr <- .branching_logic_translate_expression(logic)
   list(
     logic = logic,
     expr = expr,
@@ -80,9 +134,9 @@
   )
 }
 
-.miss_logic_to_r <- function(logic) {
-  logic <- .miss_replace_refs(logic)
-  quoted <- .miss_protect_quotes(logic)
+.branching_logic_translate_expression <- function(logic) {
+  logic <- .branching_logic_replace_references(logic)
+  quoted <- .branching_logic_protect_quoted_values(logic)
   expr <- quoted$text
 
   expr <- gsub("<>", "!=", expr, fixed = TRUE)
@@ -97,46 +151,46 @@
   expr <- gsub("\\bor\\b", "|", expr, perl = TRUE, ignore.case = TRUE)
   expr <- gsub("(?<![!<>=])=(?!=)", "==", expr, perl = TRUE)
 
-  .miss_restore_quotes(expr, quoted$values)
+  .branching_logic_restore_quoted_values(expr, quoted$values)
 }
 
-.miss_replace_refs <- function(logic) {
+.branching_logic_replace_references <- function(logic) {
   event_ref <- "\\[([^\\]]+)\\]\\[([^\\]]+)\\]"
   logic <- stringr::str_replace_all(logic, event_ref, function(x) {
     bits <- stringr::str_match(x, event_ref)
-    .miss_format_ref_calls(refs = bits[, 3], events = bits[, 2])
+    .branching_logic_format_reference_calls(refs = bits[, 3], events = bits[, 2])
   })
 
   same_ref <- "\\[([^\\]]+)\\]"
   stringr::str_replace_all(logic, same_ref, function(x) {
     bits <- stringr::str_match(x, same_ref)
-    .miss_format_ref_calls(refs = bits[, 2])
+    .branching_logic_format_reference_calls(refs = bits[, 2])
   })
 }
 
-.miss_format_ref_calls <- function(refs, events = NULL) {
+.branching_logic_format_reference_calls <- function(refs, events = NULL) {
   refs <- as.character(refs)
-  parsed <- lapply(refs, .miss_parse_ref)
+  parsed <- lapply(refs, .branching_logic_parse_reference)
   fields <- vapply(
     parsed,
-    function(ref) .miss_quote(ref$field),
+    function(ref) .branching_logic_quote_string(ref$field),
     character(1)
   )
   choices <- vapply(
     parsed,
-    function(ref) .miss_quote(ref$choice),
+    function(ref) .branching_logic_quote_string(ref$choice),
     character(1)
   )
   events <- if (is.null(events)) {
     rep("NULL", length(refs))
   } else {
-    vapply(as.character(events), .miss_quote, character(1))
+    vapply(as.character(events), .branching_logic_quote_string, character(1))
   }
 
   paste0(".v(", events, ", ", fields, ", ", choices, ")")
 }
 
-.miss_parse_ref <- function(ref) {
+.branching_logic_parse_reference <- function(ref) {
   match <- regexec("^([^()]+?)(?:\\((.*)\\))?$", ref, perl = TRUE)
   bits <- regmatches(ref, match)[[1]]
   if (length(bits) == 0) {
@@ -147,7 +201,7 @@
   list(field = bits[[2]], choice = choice)
 }
 
-.miss_branch_value <- function(
+.branching_logic_resolve_value <- function(
   records,
   lookup_records,
   event,
@@ -158,11 +212,11 @@
   project,
   branch_cache = NULL
 ) {
-  field_type <- .miss_field_type(meta = meta, field = field)
+  field_type <- .branching_logic_resolve_field_type(meta = meta, field = field)
 
   if (!is.null(choice) || identical(field_type, "checkbox")) {
     if (is.null(choice)) {
-      child_fields <- .miss_derive_field_names(meta[
+      child_fields <- .metadata_expand_field_names(meta[
         meta$field_name == field,
         ,
         drop = FALSE
@@ -170,7 +224,7 @@
       selected <- vapply(
         child_fields,
         function(child) {
-          .miss_checkbox_selected_vec(.miss_branch_raw_value(
+          .branching_logic_detect_selected_checkbox(.branching_logic_resolve_raw_value(
             records = records,
             lookup_records = lookup_records,
             event = event,
@@ -187,8 +241,8 @@
       return(as.integer(rowSums(selected, na.rm = TRUE) > 0))
     }
 
-    child <- paste0(field, "___", .miss_choice_suffix(choice))
-    return(as.integer(.miss_checkbox_selected_vec(.miss_branch_raw_value(
+    child <- paste0(field, "___", .branching_logic_format_choice_suffix(choice))
+    return(as.integer(.branching_logic_detect_selected_checkbox(.branching_logic_resolve_raw_value(
       records = records,
       lookup_records = lookup_records,
       event = event,
@@ -198,7 +252,7 @@
     ))))
   }
 
-  raw <- .miss_branch_raw_value(
+  raw <- .branching_logic_resolve_raw_value(
     records = records,
     lookup_records = lookup_records,
     event = event,
@@ -207,7 +261,7 @@
     branch_cache = branch_cache
   )
 
-  .miss_normalize_value(
+  .branching_logic_normalize_value(
     value = raw,
     field = field,
     meta = meta,
@@ -215,7 +269,7 @@
   )
 }
 
-.miss_branch_raw_value <- function(
+.branching_logic_resolve_raw_value <- function(
   records,
   lookup_records,
   event,
@@ -224,14 +278,14 @@
   branch_cache = NULL
 ) {
   if (is.null(event)) {
-    return(.miss_col_vec(records, field))
+    return(.schema_extract_column_vector(records, field))
   }
-  cached <- .miss_branch_cache_get(branch_cache, event = event, field = field)
+  cached <- .branching_logic_get_cached_value(branch_cache, event = event, field = field)
   if (!is.null(cached)) {
     return(cached)
   }
 
-  event_index <- .miss_branch_event_index(
+  event_index <- .branching_logic_match_event_rows(
     branch_cache = branch_cache,
     records = records,
     lookup_records = lookup_records,
@@ -241,7 +295,7 @@
   if (!any(!is.na(event_index$source_row)) ||
       !field %in% names(lookup_records)) {
     value <- rep(NA_character_, nrow(records))
-    .miss_branch_cache_set(
+    .branching_logic_set_cached_value(
       branch_cache,
       event = event,
       field = field,
@@ -252,8 +306,8 @@
 
   value <- rep(NA_character_, nrow(records))
   hit <- !is.na(event_index$source_row)
-  value[hit] <- .miss_chr_vec(lookup_records[[field]][event_index$source_row[hit]])
-  .miss_branch_cache_set(
+  value[hit] <- .schema_normalize_character_vector(lookup_records[[field]][event_index$source_row[hit]])
+  .branching_logic_set_cached_value(
     branch_cache,
     event = event,
     field = field,
@@ -262,14 +316,14 @@
   value
 }
 
-.miss_new_branch_cache <- function(records, lookup_records, project) {
+.branching_logic_build_cache <- function(records, lookup_records, project) {
   env <- new.env(hash = TRUE, parent = emptyenv())
   env$values <- new.env(hash = TRUE, parent = emptyenv())
   env$event_indices <- new.env(hash = TRUE, parent = emptyenv())
   env
 }
 
-.miss_branch_cache_get <- function(branch_cache, event, field) {
+.branching_logic_get_cached_value <- function(branch_cache, event, field) {
   if (is.null(branch_cache) || length(event) != 1L || is.na(event) ||
       length(field) != 1L || is.na(field)) return(NULL)
 
@@ -283,7 +337,7 @@
   get(field, envir = event_cache, inherits = FALSE)
 }
 
-.miss_branch_cache_set <- function(branch_cache, event, field, value) {
+.branching_logic_set_cached_value <- function(branch_cache, event, field, value) {
   if (is.null(branch_cache) || length(event) != 1L || is.na(event) ||
       length(field) != 1L || is.na(field)) return(invisible(value))
 
@@ -299,7 +353,7 @@
   invisible(value)
 }
 
-.miss_branch_event_index <- function(
+.branching_logic_match_event_rows <- function(
   branch_cache,
   records,
   lookup_records,
@@ -332,8 +386,8 @@
     event_value <- as.character(lookup_records[[event_col]])
     event_rows <- which(!is.na(event_value) & event_value == event)
     if (length(event_rows)) {
-      query_id <- .miss_chr_vec(records[[id_col]])
-      source_id <- .miss_chr_vec(lookup_records[[id_col]][event_rows])
+      query_id <- .schema_normalize_character_vector(records[[id_col]])
+      source_id <- .schema_normalize_character_vector(lookup_records[[id_col]][event_rows])
       repeat_instance <- if (repeat_instance_col %in% names(lookup_records)) {
         lookup_records[[repeat_instance_col]][event_rows]
       } else {
@@ -415,9 +469,9 @@
   result
 }
 
-.miss_normalize_value <- function(value, field, meta, choice_map) {
-  value <- .miss_chr_vec(value)
-  blank <- .miss_is_blank_vec(value)
+.branching_logic_normalize_value <- function(value, field, meta, choice_map) {
+  value <- .schema_normalize_character_vector(value)
+  blank <- .schema_detect_blank_values(value)
 
   if (!all(c("field_name", "code", "label") %in% names(choice_map))) {
     choice_map <- tibble::tibble(
@@ -438,7 +492,7 @@
     return(out)
   }
 
-  if (.miss_numeric_field(meta = meta, field = field)) {
+  if (.branching_logic_detect_numeric_field(meta = meta, field = field)) {
     out <- suppressWarnings(as.numeric(value))
     out[blank] <- NA_real_
     return(out)
@@ -448,7 +502,7 @@
   value
 }
 
-.miss_numeric_field <- function(meta, field) {
+.branching_logic_detect_numeric_field <- function(meta, field) {
   idx <- which(meta$field_name == field)
   if (length(idx) == 0) {
     return(FALSE)
@@ -456,97 +510,41 @@
   validation <- if (
     "text_validation_type_or_show_slider_number" %in% names(meta)
   ) {
-    .miss_chr(meta$text_validation_type_or_show_slider_number[[idx[[1]]]])
+    .schema_normalize_character_scalar(meta$text_validation_type_or_show_slider_number[[idx[[1]]]])
   } else {
     ""
   }
-  field_type <- .miss_chr(meta$field_type[[idx[[1]]]])
+  field_type <- .schema_normalize_character_scalar(meta$field_type[[idx[[1]]]])
   validation %in%
     c("number", "integer", "float", "int") ||
     field_type %in% c("calc")
 }
 
-.miss_field_type <- function(meta, field) {
+.branching_logic_resolve_field_type <- function(meta, field) {
   idx <- which(meta$field_name == field)
   if (length(idx) == 0) {
     return(NA_character_)
   }
-  .miss_chr(meta$field_type[[idx[[1]]]])
+  .schema_normalize_character_scalar(meta$field_type[[idx[[1]]]])
 }
 
-.miss_col_vec <- function(records, column) {
-  if (is.null(column) || !column %in% names(records)) {
-    return(rep(NA_character_, nrow(records)))
-  }
-  records[[column]]
+.branching_logic_detect_selected_checkbox <- function(value) {
+  value <- tolower(.schema_normalize_character_vector(value))
+  !.schema_detect_blank_values(value) & !value %in% c("0", "unchecked", "false", "no")
 }
 
-.miss_chr_vec <- function(x) {
-  if (length(x) == 0) {
-    return(character())
-  }
-  if (is.character(x)) {
-    return(x)
-  }
-  if (is.factor(x)) {
-    x <- as.character(x)
-  }
-  if (inherits(x, c("Date", "POSIXct", "POSIXlt"))) {
-    return(as.character(x))
-  }
-  if (is.list(x)) {
-    return(vapply(x, .miss_chr, character(1)))
-  }
-  out <- as.character(x)
-  if (anyNA(x)) {
-    out[is.na(x)] <- NA_character_
-  }
-  out
-}
-
-.miss_checkbox_selected_vec <- function(value) {
-  value <- tolower(.miss_chr_vec(value))
-  !.miss_is_blank_vec(value) & !value %in% c("0", "unchecked", "false", "no")
-}
-
-.miss_is_blank_vec <- function(x) {
-  if (length(x) == 0) {
-    return(logical())
-  }
-  isNAorBlank(.miss_chr_vec(x))
-}
-
-.miss_is_blank_scalar <- function(x) {
-  if (length(x) == 0) {
-    return(TRUE)
-  }
-  .miss_is_blank_vec(x)[[1]]
-}
-
-.miss_required_vec <- function(x) {
-  required <- tolower(trimws(.miss_chr_vec(x)))
-  !.miss_is_blank_vec(required) & required %in% c("y", "yes", "true", "1")
-}
-
-.miss_chr <- function(x) {
-  if (length(x) == 0 || is.null(x) || is.na(x[[1]])) {
-    return(NA_character_)
-  }
-  as.character(x[[1]])
-}
-
-.miss_choice_suffix <- function(code) {
+.branching_logic_format_choice_suffix <- function(code) {
   gsub("[[:punct:]]", "_", trimws(as.character(code)))
 }
 
-.miss_quote <- function(x) {
+.branching_logic_quote_string <- function(x) {
   if (is.null(x) || length(x) == 0 || is.na(x)) {
     return("NULL")
   }
   paste0("\"", gsub("([\\\\\"])", "\\\\\\1", x, perl = TRUE), "\"")
 }
 
-.miss_protect_quotes <- function(x) {
+.branching_logic_protect_quoted_values <- function(x) {
   matches <- gregexpr(
     "'([^'\\\\]|\\\\.)*'|\"([^\"\\\\]|\\\\.)*\"",
     x,
@@ -562,7 +560,7 @@
   list(text = x, values = stats::setNames(values, placeholders))
 }
 
-.miss_restore_quotes <- function(x, values) {
+.branching_logic_restore_quoted_values <- function(x, values) {
   if (length(values) == 0) {
     return(x)
   }
@@ -573,12 +571,12 @@
   x
 }
 
-.miss_datediff <- function(date1, date2, units = "d") {
-  blank <- .miss_is_blank_vec(date1) | .miss_is_blank_vec(date2)
+.branching_logic_compute_date_difference <- function(date1, date2, units = "d") {
+  blank <- .schema_detect_blank_values(date1) | .schema_detect_blank_values(date2)
   diff_days <- as.numeric(as.Date(date2) - as.Date(date1))
   diff_days[blank] <- NA_real_
 
-  units <- tolower(.miss_chr(units))
+  units <- tolower(.schema_normalize_character_scalar(units))
   switch(
     units,
     d = diff_days,

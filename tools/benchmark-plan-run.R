@@ -27,6 +27,10 @@ if (!requireNamespace("pkgload", quietly = TRUE)) {
 }
 pkgload::load_all(".", quiet = TRUE, export_all = FALSE)
 
+.benchmark_connection <- function(x) {
+  structure(x, class = c("redcapApiConnection", "redcapConnection"))
+}
+
 .benchmark_env_integer <- function(name, default) {
   value <- Sys.getenv(name, unset = "")
   if (!nzchar(value)) return(as.integer(default))
@@ -182,12 +186,12 @@ collect_memory <- .benchmark_env_logical("REDCAPMISSING_BENCH_MEMORY")
     form_name = character(),
     stringsAsFactors = FALSE
   )
-  rcon <- list(
+  rcon <- .benchmark_connection(list(
     metadata = function() metadata,
     instruments = function() instrument_table,
     projectInformation = function() project,
     repeatInstrumentEvent = function() repeat_configuration
-  )
+  ))
 
   verification <- NULL
   if (isTRUE(specification$verified)) {
@@ -304,7 +308,7 @@ collect_memory <- .benchmark_env_logical("REDCAPMISSING_BENCH_MEMORY")
     form_name = character(),
     stringsAsFactors = FALSE
   )
-  rcon <- list(
+  rcon <- .benchmark_connection(list(
     metadata = function() metadata,
     instruments = function() instruments,
     projectInformation = function() project,
@@ -312,7 +316,7 @@ collect_memory <- .benchmark_env_logical("REDCAPMISSING_BENCH_MEMORY")
     events = function() events,
     mapping = function() mapping,
     repeatInstrumentEvent = function() repeats
-  )
+  ))
 
   data <- data.frame(
     record_id = rep(record_ids, each = 2L),
@@ -434,7 +438,7 @@ collect_memory <- .benchmark_env_logical("REDCAPMISSING_BENCH_MEMORY")
     form_name = "diary",
     stringsAsFactors = FALSE
   )
-  rcon <- list(
+  rcon <- .benchmark_connection(list(
     metadata = function() metadata,
     instruments = function() instrument_table,
     projectInformation = function() project,
@@ -442,7 +446,7 @@ collect_memory <- .benchmark_env_logical("REDCAPMISSING_BENCH_MEMORY")
     events = function() events,
     mapping = function() mapping,
     repeatInstrumentEvent = function() repeats
-  )
+  ))
   baseline_one <- data.frame(
     record_id = arm_one_ids,
     redcap_event_name = "baseline_arm_1",
@@ -620,8 +624,8 @@ collect_memory <- .benchmark_env_logical("REDCAPMISSING_BENCH_MEMORY")
   verification_elapsed <- NA_real_
   if (isTRUE(specification$verified)) {
     verification_elapsed <- system.time({
-      snapshot <- redcapmissing:::.rcm_project_snapshot(case$rcon)
-      prepared <- redcapmissing:::.rcm_prepare_verified(
+      snapshot <- redcapmissing:::.project_structure_build_snapshot(case$rcon)
+      prepared <- redcapmissing:::.verification_prepare_contexts(
         case$verification,
         "benchmark-user",
         snapshot,
@@ -892,7 +896,7 @@ collect_memory <- .benchmark_env_logical("REDCAPMISSING_BENCH_MEMORY")
     report <- .benchmark_formatter_report(specification$records, context_count)
     invisible(.benchmark_measure(
       function() {
-        redcapmissing:::.redcapmissing_flex_event_instruments_build(report)
+        redcapmissing:::.flex_event_instruments_build_table(report)
       },
       collect_memory = collect_memory
     ))
@@ -901,7 +905,7 @@ collect_memory <- .benchmark_env_logical("REDCAPMISSING_BENCH_MEMORY")
     for (iteration in seq_len(specification$iterations)) {
       measured <- .benchmark_measure(
         function() {
-          redcapmissing:::.redcapmissing_flex_event_instruments_build(report)
+          redcapmissing:::.flex_event_instruments_build_table(report)
         },
         collect_memory
       )

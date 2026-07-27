@@ -1,6 +1,6 @@
 test_that("startup message includes banner and release metadata", {
   build_message <- getFromNamespace(
-    ".redcapmissing_startup_build_message",
+    ".startup_build_message",
     "redcapmissing"
   )
 
@@ -36,7 +36,7 @@ test_that("startup message includes branch spectrum ANSI styling", {
   on.exit(options(old_options), add = TRUE)
 
   build_message <- getFromNamespace(
-    ".redcapmissing_startup_build_message",
+    ".startup_build_message",
     "redcapmissing"
   )
 
@@ -78,7 +78,7 @@ test_that("startup message includes branch spectrum ANSI styling", {
 
 test_that("startup version helper resolves package versions safely", {
   get_version <- getFromNamespace(
-    ".redcapmissing_startup_get_version",
+    ".startup_get_version",
     "redcapmissing"
   )
 

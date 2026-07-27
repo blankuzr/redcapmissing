@@ -39,11 +39,11 @@ flexify_missing_fixture <- function() {
 }
 
 test_that("flexify accepts exact summary and missing accessor schemas", {
-  expect_silent(.redcapmissing_check_flexify_input(flexify_summary_fixture()))
-  expect_silent(.redcapmissing_check_flexify_input(flexify_missing_fixture()))
+  expect_silent(.flexify_validate_input(flexify_summary_fixture()))
+  expect_silent(.flexify_validate_input(flexify_missing_fixture()))
 
   expect_identical(
-    .redcapmissing_flexify_column_types()[c("instrument", "repeat_instance", "status", "reason")],
+    .flexify_list_column_types()[c("instrument", "repeat_instance", "status", "reason")],
     c(instrument = "character", repeat_instance = "integer", status = "character", reason = "character")
   )
 })
@@ -51,21 +51,21 @@ test_that("flexify accepts exact summary and missing accessor schemas", {
 test_that("flexify uses instrument labels and current validation labels", {
   input <- flexify_summary_fixture()
   labels <- attr(input, "redcapmissing_labels")
-  transformed <- .redcapmissing_flexify_label_values(input, labels)
+  transformed <- .flexify_apply_labels(input, labels)
 
   expect_identical(transformed$redcap_event_name, "Baseline")
   expect_identical(transformed$instrument, "Baseline instrument")
   expect_identical(transformed$validation_check, "Field complete")
-  expect_identical(.redcapmissing_flexify_header_labels()[["instrument"]], "Instrument")
-  expect_identical(.redcapmissing_flexify_header_labels()[["status"]], "Status")
-  expect_identical(.redcapmissing_flexify_header_labels()[["reason"]], "Reason")
-  expect_false("form" %in% names(.redcapmissing_flexify_header_labels()))
+  expect_identical(.flexify_build_header_labels()[["instrument"]], "Instrument")
+  expect_identical(.flexify_build_header_labels()[["status"]], "Status")
+  expect_identical(.flexify_build_header_labels()[["reason"]], "Reason")
+  expect_false("form" %in% names(.flexify_build_header_labels()))
 })
 
 test_that("flexify drops jointly absent repeat columns without mutating input", {
   input <- flexify_summary_fixture()
   original <- input
-  result <- .redcapmissing_flexify_drop_blank_repeat_columns(input)
+  result <- .flexify_drop_blank_repeat_columns(input)
 
   expect_false("repeat_instrument" %in% names(result))
   expect_false("repeat_instance" %in% names(result))
@@ -75,15 +75,15 @@ test_that("flexify drops jointly absent repeat columns without mutating input", 
 test_that("flexify rejects retired columns and columns from different schemas", {
   input <- flexify_summary_fixture()
   input$form <- input$instrument
-  expect_error(.redcapmissing_check_flexify_input(input), "unsupported column")
+  expect_error(.flexify_validate_input(input), "unsupported column")
 
   input <- flexify_summary_fixture()
   input$field_name <- NA_character_
-  expect_error(.redcapmissing_check_flexify_input(input), "use columns from one accessor schema")
+  expect_error(.flexify_validate_input(input), "use columns from one accessor schema")
 
   input <- flexify_summary_fixture()
   input$repeat_instance <- as.character(input$repeat_instance)
-  expect_error(.redcapmissing_check_flexify_input(input), "storage types")
+  expect_error(.flexify_validate_input(input), "storage types")
 })
 
 test_that("flexify returns a presentation table with N/A rates blank", {

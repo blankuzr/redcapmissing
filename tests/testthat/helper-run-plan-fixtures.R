@@ -103,9 +103,9 @@ empty_diagnostics_fixture <- function() {
 complete_report_fixture <- function(
   plan,
   target_results = empty_target_results_fixture(),
-  summary = .redcapmissing_get_summary_prototype(),
-  missing = .redcapmissing_get_missing_prototype(),
-  verification = .rcm_verification_audit(),
+  summary = .summary_build_prototype(),
+  missing = .missing_build_prototype(),
+  verification = .verification_build_audit(),
   diagnostics = empty_diagnostics_fixture(),
   details = NULL
 ) {

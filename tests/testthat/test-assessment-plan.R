@@ -277,7 +277,7 @@ test_that("a typed empty explicit schedule assesses nothing", {
   )
   plan <- plan_explicit(data, rcon, "demographics", schedule)
   expect_s3_class(plan, "redcapmissing_plan")
-  expect_identical(plan$assessible_targets, redcapmissing:::.rcm_empty_targets())
+  expect_identical(plan$assessible_targets, redcapmissing:::.assessible_target_build_prototype())
   expect_error(
     plan_explicit(data, rcon, "demographics", NULL),
     class = "redcapmissing_error_argument"
@@ -402,8 +402,8 @@ test_that("fingerprint table normalization ignores row and column order", {
   reordered <- original[2:1, c("first", "second")]
 
   expect_identical(
-    redcapmissing:::.rcm_fingerprint_table(original),
-    redcapmissing:::.rcm_fingerprint_table(reordered)
+    redcapmissing:::.structure_fingerprint_encode_table(original),
+    redcapmissing:::.structure_fingerprint_encode_table(reordered)
   )
 })
 
@@ -426,18 +426,18 @@ test_that("project fingerprints are stable to table row order with explicit reco
   shuffled$events <- function() original_events[rev(seq_len(nrow(original_events))), ]
   shuffled$mapping <- function() original_mapping[rev(seq_len(nrow(original_mapping))), ]
 
-  first <- redcapmissing:::.rcm_project_snapshot(rcon)
-  second <- redcapmissing:::.rcm_project_snapshot(shuffled)
+  first <- redcapmissing:::.project_structure_build_snapshot(rcon)
+  second <- redcapmissing:::.project_structure_build_snapshot(shuffled)
   expect_identical(first$project, second$project)
   expect_identical(first$structure_fingerprint, second$structure_fingerprint)
   fingerprint_input <- list(
     project = first$project,
-    metadata = redcapmissing:::.rcm_fingerprint_table(first$metadata),
-    instruments = redcapmissing:::.rcm_fingerprint_table(first$instruments),
-    arms = redcapmissing:::.rcm_fingerprint_table(first$arms),
-    events = redcapmissing:::.rcm_fingerprint_table(first$events),
-    mapping = redcapmissing:::.rcm_fingerprint_table(first$mapping),
-    repeat_configuration = redcapmissing:::.rcm_fingerprint_table(first$repeat_configuration)
+    metadata = redcapmissing:::.structure_fingerprint_encode_table(first$metadata),
+    instruments = redcapmissing:::.structure_fingerprint_encode_table(first$instruments),
+    arms = redcapmissing:::.structure_fingerprint_encode_table(first$arms),
+    events = redcapmissing:::.structure_fingerprint_encode_table(first$events),
+    mapping = redcapmissing:::.structure_fingerprint_encode_table(first$mapping),
+    repeat_configuration = redcapmissing:::.structure_fingerprint_encode_table(first$repeat_configuration)
   )
   expect_identical(
     first$structure_fingerprint,
@@ -450,7 +450,7 @@ test_that("project fingerprints are stable to table row order with explicit reco
   second_plan <- plan_from_data(data, shuffled, c("diary", "notes"))
   expect_identical(first_plan, second_plan)
   expect_silent(
-    redcapmissing:::.rcm_validate_plan(first_plan, second)
+    redcapmissing:::.plan_validate_object(first_plan, second)
   )
   expect_s3_class(
     run_plan(
@@ -474,10 +474,10 @@ test_that("fingerprints distinguish missing values and structured delimiter valu
   literal_metadata <- missing_metadata
   literal_metadata$fingerprint_value[[1L]] <- "<NA>"
 
-  missing_snapshot <- redcapmissing:::.rcm_project_snapshot(
+  missing_snapshot <- redcapmissing:::.project_structure_build_snapshot(
     .plan_fake_rcon(metadata = missing_metadata)
   )
-  literal_snapshot <- redcapmissing:::.rcm_project_snapshot(
+  literal_snapshot <- redcapmissing:::.project_structure_build_snapshot(
     .plan_fake_rcon(metadata = literal_metadata)
   )
   expect_false(identical(
@@ -496,19 +496,19 @@ test_that("fingerprints distinguish missing values and structured delimiter valu
     paste0("b", separator, "c")
   )
 
-  first_snapshot <- redcapmissing:::.rcm_project_snapshot(
+  first_snapshot <- redcapmissing:::.project_structure_build_snapshot(
     .plan_fake_rcon(
       metadata = first_metadata,
       record_id_field = "record_id"
     )
   )
-  second_snapshot <- redcapmissing:::.rcm_project_snapshot(
+  second_snapshot <- redcapmissing:::.project_structure_build_snapshot(
     .plan_fake_rcon(
       metadata = second_metadata,
       record_id_field = "record_id"
     )
   )
-  shuffled_snapshot <- redcapmissing:::.rcm_project_snapshot(
+  shuffled_snapshot <- redcapmissing:::.project_structure_build_snapshot(
     .plan_fake_rcon(
       metadata = first_metadata[rev(seq_len(nrow(first_metadata))), ],
       record_id_field = "record_id"
@@ -530,14 +530,14 @@ test_that("plan validation rejects hand edits and changed project structure", {
   malformed <- plan
   malformed$assessible_targets <- malformed$assessible_targets[c(1, 1), ]
   expect_error(
-    redcapmissing:::.rcm_validate_plan(malformed),
+    redcapmissing:::.plan_validate_object(malformed),
     class = "redcapmissing_error_plan"
   )
   changed <- .plan_fake_rcon(project_id = 99L)
   expect_error(
-    redcapmissing:::.rcm_validate_plan(
+    redcapmissing:::.plan_validate_object(
       plan,
-      redcapmissing:::.rcm_project_snapshot(changed)
+      redcapmissing:::.project_structure_build_snapshot(changed)
     ),
     class = "redcapmissing_error_plan"
   )
@@ -788,7 +788,7 @@ test_that("empty schedules require complete ordered schemas and allowed storage"
     redcap_event_name = character(), repeat_instance = numeric()
   )
   explicit_plan <- plan_explicit(empty_data, rcon, "demographics", valid_explicit)
-  expect_identical(explicit_plan$assessible_targets, redcapmissing:::.rcm_empty_targets())
+  expect_identical(explicit_plan$assessible_targets, redcapmissing:::.assessible_target_build_prototype())
   absent_explicit <- tibble::tibble(
     record_id = "not_exported",
     instrument = "demographics",
@@ -1105,7 +1105,7 @@ test_that("plan project label maps are complete and protected", {
 
   for (candidate in malformed) {
     expect_error(
-      redcapmissing:::.rcm_validate_plan(candidate),
+      redcapmissing:::.plan_validate_object(candidate),
       class = "redcapmissing_error_plan"
     )
   }
@@ -1166,7 +1166,7 @@ test_that("plan validation rejects malformed components and target invariants", 
   for (name in names(malformed)) {
     failed <- inherits(
       tryCatch(
-        redcapmissing:::.rcm_validate_plan(malformed[[name]]),
+        redcapmissing:::.plan_validate_object(malformed[[name]]),
         error = identity
       ),
       "redcapmissing_error_plan"
@@ -1190,16 +1190,16 @@ test_that("plan validation rejects malformed components and target invariants", 
   )
   empty_plan$construction <- factor("explicit")
   expect_error(
-    redcapmissing:::.rcm_validate_plan(empty_plan),
+    redcapmissing:::.plan_validate_object(empty_plan),
     class = "redcapmissing_error_plan"
   )
 
-  snapshot <- redcapmissing:::.rcm_project_snapshot(rcon)
+  snapshot <- redcapmissing:::.project_structure_build_snapshot(rcon)
   disallowed <- plan
   disallowed$assessible_targets$repeat_instrument <- "demographics"
   disallowed$assessible_targets$repeat_instance <- 1L
   expect_error(
-    redcapmissing:::.rcm_validate_plan(disallowed, snapshot),
+    redcapmissing:::.plan_validate_object(disallowed, snapshot),
     class = "redcapmissing_error_plan"
   )
 })
@@ -1276,7 +1276,7 @@ test_that("target construction excludes unselected and unmapped physical rows", 
   rcon <- .plan_longitudinal_rcon()
   data <- .plan_longitudinal_data()[c(1, 3), ]
   plan <- plan_from_data(data, rcon, "notes")
-  expect_identical(plan$assessible_targets, redcapmissing:::.rcm_empty_targets())
+  expect_identical(plan$assessible_targets, redcapmissing:::.assessible_target_build_prototype())
 })
 
 test_that("explicit omissions exclude observed crossings and absent selected instruments", {
@@ -1294,7 +1294,7 @@ test_that("explicit omissions exclude observed crossings and absent selected ins
 
   empty <- schedule[0, ]
   empty_plan <- plan_explicit(data, rcon, c("notes", "demographics"), empty)
-  expect_identical(empty_plan$assessible_targets, redcapmissing:::.rcm_empty_targets())
+  expect_identical(empty_plan$assessible_targets, redcapmissing:::.assessible_target_build_prototype())
 })
 
 test_that("unknown and unmapped schedule crossings fail before intersection", {
@@ -1346,7 +1346,7 @@ test_that("numeric identifiers and fingerprints are option independent", {
   expect_identical(second$assessible_targets$record_id, "100000")
   expect_identical(first$structure_fingerprint, second$structure_fingerprint)
 
-  special <- redcapmissing:::.rcm_numeric_character(c(
+  special <- redcapmissing:::.schema_format_numeric(c(
     NA_real_, NaN, Inf, -Inf, 0, -0
   ))
   expect_identical(
@@ -1354,7 +1354,7 @@ test_that("numeric identifiers and fingerprints are option independent", {
     c("NA", "NaN", "Inf", "-Inf", "0", "0")
   )
   extrema <- c(.Machine$double.xmax, -.Machine$double.xmax)
-  normalized_extrema <- redcapmissing:::.rcm_numeric_character(extrema)
+  normalized_extrema <- redcapmissing:::.schema_format_numeric(extrema)
   expect_identical(
     as.numeric(normalized_extrema),
     extrema
@@ -1499,7 +1499,7 @@ test_that("all public condition subclasses inherit from package base classes", {
       error = identity
     ),
     plan = tryCatch(
-      redcapmissing:::.rcm_validate_plan(malformed_plan),
+      redcapmissing:::.plan_validate_object(malformed_plan),
       error = identity
     ),
     verification = tryCatch(

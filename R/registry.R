@@ -39,7 +39,7 @@
 #'
 #' @export
 registry <- function() {
-  .redcapmissing_new_registry(.redcapmissing_registry_data())
+  .registry_build_object(.registry_get_table())
 }
 
 #' Print the validation registry
@@ -71,24 +71,24 @@ print.redcapmissing_registry <- function(x, ...) {
 
   stream <- stdout()
   cli::cat_line(
-    .redcapmissing_registry_style("header")(
+    .registry_resolve_style("header")(
       cli::style_bold("validation registry")
     ),
     file = stream
   )
   cli::cat_line(
-    .redcapmissing_registry_style("muted")(
+    .registry_resolve_style("muted")(
       paste0(n_checks, " checks; ", n_levels, " levels")
     ),
     file = stream
   )
-  .redcapmissing_registry_print_table(display, stream = stream)
+  .registry_print_table(display, stream = stream)
   invisible(x)
 }
 
 # Internal helpers ---------------------------------------------------------
 
-.redcapmissing_registry_data <- local({
+.registry_get_table <- local({
   checks <- c(
     "event-row-started",
     "repeat-instance-row-started",
@@ -125,13 +125,13 @@ print.redcapmissing_registry <- function(x, ...) {
   function() data
 })
 
-.redcapmissing_new_registry <- function(x) {
+.registry_build_object <- function(x) {
   class(x) <- c("redcapmissing_registry", class(x))
   x
 }
 
-.redcapmissing_registry_row <- function(validation_check, validation_level = NULL) {
-  registry <- .redcapmissing_registry_data()
+.registry_build_row <- function(validation_check, validation_level = NULL) {
+  registry <- .registry_get_table()
   out <- registry[registry$validation_check == validation_check, , drop = FALSE]
   if (!is.null(validation_level)) {
     out <- out[out$validation_level == validation_level, , drop = FALSE]
@@ -149,16 +149,16 @@ print.redcapmissing_registry <- function(x, ...) {
   out
 }
 
-.redcapmissing_validation_checks <- function() {
-  unique(.redcapmissing_registry_data()$validation_check)
+.registry_list_validation_checks <- function() {
+  unique(.registry_get_table()$validation_check)
 }
 
 
-.redcapmissing_context_validation_level <- function(
+.registry_resolve_validation_level <- function(
   validation_check,
   repeat_instance = NULL
 ) {
-  repeat_instance <- .miss_chr_vec(repeat_instance %||% character())
+  repeat_instance <- .schema_normalize_character_vector(repeat_instance %||% character())
   n <- max(length(validation_check), length(repeat_instance))
   if (n == 0) {
     return(character())
@@ -166,14 +166,14 @@ print.redcapmissing_registry <- function(x, ...) {
   level <- rep("event:instrument", n)
   if (length(repeat_instance) > 0) {
     repeat_instance <- rep(repeat_instance, length.out = n)
-    has_repeat <- !.miss_is_blank_vec(repeat_instance)
+    has_repeat <- !.schema_detect_blank_values(repeat_instance)
     level[has_repeat] <- "event:instrument:instance"
   }
   level
 }
 
-.redcapmissing_flex_labels <- function(validation_check) {
-  registry <- .redcapmissing_registry_data()
+.registry_build_flex_labels <- function(validation_check) {
+  registry <- .registry_get_table()
   registry <- registry[!duplicated(registry$validation_check), , drop = FALSE]
   flex_label <- registry$flex_label[
     match(validation_check, registry$validation_check)
@@ -182,7 +182,7 @@ print.redcapmissing_registry <- function(x, ...) {
   flex_label
 }
 
-.redcapmissing_registry_print_table <- function(x, stream = stdout()) {
+.registry_print_table <- function(x, stream = stdout()) {
   x <- x[order(x$validation_order, x$validation_level), , drop = FALSE]
   display_width <- function(header, values) {
     max(nchar(c(header, as.character(values)), type = "width"), na.rm = TRUE)
@@ -199,15 +199,15 @@ print.redcapmissing_registry <- function(x, ...) {
   names(widths) <- c("level", "check", "condition")
 
   cli::cat_line(
-    .redcapmissing_registry_style("border")(.redcapmissing_registry_rule(widths)),
+    .registry_resolve_style("border")(.registry_build_rule(widths)),
     file = stream
   )
   cli::cat_line(
-    .redcapmissing_registry_print_row(names(widths), widths, header = TRUE),
+    .registry_print_row(names(widths), widths, header = TRUE),
     file = stream
   )
   cli::cat_line(
-    .redcapmissing_registry_style("border")(.redcapmissing_registry_rule(widths)),
+    .registry_resolve_style("border")(.registry_build_rule(widths)),
     file = stream
   )
 
@@ -226,7 +226,7 @@ print.redcapmissing_registry <- function(x, ...) {
         condition_lines[[line]]
       )
       cli::cat_line(
-        .redcapmissing_registry_print_row(
+        .registry_print_row(
           values,
           widths,
           record = x[row, , drop = FALSE]
@@ -237,12 +237,12 @@ print.redcapmissing_registry <- function(x, ...) {
   }
 
   cli::cat_line(
-    .redcapmissing_registry_style("border")(.redcapmissing_registry_rule(widths)),
+    .registry_resolve_style("border")(.registry_build_rule(widths)),
     file = stream
   )
 }
 
-.redcapmissing_registry_rule <- function(widths) {
+.registry_build_rule <- function(widths) {
   paste0(
     "+",
     paste(vapply(widths, function(width) {
@@ -252,9 +252,9 @@ print.redcapmissing_registry <- function(x, ...) {
   )
 }
 
-.redcapmissing_registry_print_row <- function(values, widths, header = FALSE, record = NULL) {
+.registry_print_row <- function(values, widths, header = FALSE, record = NULL) {
   cells <- mapply(
-    .redcapmissing_registry_cell,
+    .registry_format_cell,
     values,
     widths,
     names(widths),
@@ -263,40 +263,40 @@ print.redcapmissing_registry <- function(x, ...) {
     USE.NAMES = FALSE
   )
   row <- paste0(
-    .redcapmissing_registry_style("border")("| "),
-    paste(cells, collapse = .redcapmissing_registry_style("border")(" | ")),
-    .redcapmissing_registry_style("border")(" |")
+    .registry_resolve_style("border")("| "),
+    paste(cells, collapse = .registry_resolve_style("border")(" | ")),
+    .registry_resolve_style("border")(" |")
   )
   row
 }
 
-.redcapmissing_registry_cell <- function(value, width, column, header = FALSE, record = NULL) {
-  value <- .redcapmissing_pad(value, width)
+.registry_format_cell <- function(value, width, column, header = FALSE, record = NULL) {
+  value <- .registry_pad_value(value, width)
   if (isTRUE(header)) {
     return(cli::style_bold(cli::col_white(value)))
   }
 
   switch(
     column,
-    "level" = .redcapmissing_registry_level_color(record$validation_level, value),
+    "level" = .registry_resolve_level_color(record$validation_level, value),
     "check" = cli::col_cyan(value),
-    "condition" = .redcapmissing_registry_style("text")(value),
+    "condition" = .registry_resolve_style("text")(value),
     value
   )
 }
 
-.redcapmissing_registry_level_color <- function(level, value) {
+.registry_resolve_level_color <- function(level, value) {
   switch(
     level,
 
-    "event:instrument" = .redcapmissing_registry_style("level")(value),
+    "event:instrument" = .registry_resolve_style("level")(value),
     "event:instrument:instance" = cli::col_magenta(value),
     value
   )
 }
 
 
-.redcapmissing_registry_style <- function(element) {
+.registry_resolve_style <- function(element) {
   switch(
     element,
     "header" = cli::make_ansi_style("#1d4ed8"),
@@ -309,7 +309,7 @@ print.redcapmissing_registry <- function(x, ...) {
 }
 
 
-.redcapmissing_pad <- function(value, width) {
+.registry_pad_value <- function(value, width) {
   value <- as.character(value)
   value[is.na(value)] <- ""
   too_wide <- nchar(value, type = "width") > width

@@ -53,7 +53,7 @@ test_that("get_missing exposes normalized typed structural values", {
     as.list(formals(get_missing)),
     alist(report = , validation_check = NULL, events = NULL, instruments = NULL)
   )
-  expect_identical(names(result), .redcapmissing_get_missing_columns())
+  expect_identical(names(result), .missing_list_columns())
   expect_identical(
     unname(vapply(result, typeof, character(1))),
     c(rep("character", 3), "integer", rep("character", 8))

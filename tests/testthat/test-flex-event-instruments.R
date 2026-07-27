@@ -60,7 +60,7 @@ test_that("flex_event_instruments replaces the retired form API", {
 })
 
 test_that("event and instrument data is computed from target_results", {
-  parts <- .redcapmissing_flex_event_instruments_build(
+  parts <- .flex_event_instruments_build_table(
     flex_event_instruments_report(),
     missing_threshold = 0.10
   )
@@ -85,7 +85,7 @@ test_that("event and instrument data is computed from target_results", {
 })
 
 test_that("missing threshold comparison is strict below one", {
-  result <- .redcapmissing_flex_event_instruments_build(
+  result <- .flex_event_instruments_build_table(
     flex_event_instruments_report(),
     missing_threshold = 0.5
   )$data
@@ -95,18 +95,18 @@ test_that("missing threshold comparison is strict below one", {
     "3/5 (60%)"
   )
   expect_identical(
-    .redcapmissing_flex_event_instruments_threshold_heading(1),
+    .flex_event_instruments_build_threshold_heading(1),
     "Instrument = 100% Missing"
   )
 })
 
 test_that("integer and double one use identical missing threshold semantics", {
   report <- flex_event_instruments_report()
-  integer_parts <- .redcapmissing_flex_event_instruments_build(
+  integer_parts <- .flex_event_instruments_build_table(
     report,
     missing_threshold = 1L
   )
-  double_parts <- .redcapmissing_flex_event_instruments_build(
+  double_parts <- .flex_event_instruments_build_table(
     report,
     missing_threshold = 1
   )
@@ -125,7 +125,7 @@ test_that("integer and double one use identical missing threshold semantics", {
 test_that("event and instrument formatter validates its public threshold", {
   for (value in list(NA_real_, Inf, -0.1, 1.1, numeric(), c(0.1, 0.2), "0.1")) {
     expect_error(
-      .redcapmissing_flex_event_instruments_build(
+      .flex_event_instruments_build_table(
         flex_event_instruments_report(),
         missing_threshold = value
       ),
@@ -138,14 +138,14 @@ test_that("event and instrument formatter rejects malformed target results", {
   report <- flex_event_instruments_report()
   report$target_results$repeat_instance <- as.character(report$target_results$repeat_instance)
   expect_error(
-    .redcapmissing_flex_event_instruments_build(report),
+    .flex_event_instruments_build_table(report),
     "storage types"
   )
 
   report <- flex_event_instruments_report()
   report$target_results$instrument_started[[1]] <- "indeterminate"
   expect_error(
-    .redcapmissing_flex_event_instruments_build(report),
+    .flex_event_instruments_build_table(report),
     "unsupported check statuses"
   )
 })
@@ -192,7 +192,7 @@ test_that("aggregates many target contexts accurately", {
     "repeat_instance", "target_source"
   )]
 
-  result <- .redcapmissing_flex_event_instruments_build(report)$data
+  result <- .flex_event_instruments_build_table(report)$data
 
   expect_identical(
     result$row_type,
@@ -215,7 +215,7 @@ test_that("event aggregation detects conflicting record and event gates", {
   report$target_results$event_row_started[[3L]] <- "failed"
 
   expect_error(
-    .redcapmissing_flex_event_instruments_build(report),
+    .flex_event_instruments_build_table(report),
     "Conflicting event-row-started"
   )
 })
@@ -234,7 +234,7 @@ test_that("classic event gates remain fully due when not applicable", {
     "repeat_instance", "target_source"
   )]
 
-  result <- .redcapmissing_flex_event_instruments_build(report)$data
+  result <- .flex_event_instruments_build_table(report)$data
 
   expect_identical(result$Event, c("All", "Single event", ""))
   expect_identical(result$N, c("", "2/2 (100%)", ""))

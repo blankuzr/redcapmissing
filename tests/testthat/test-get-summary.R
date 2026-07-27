@@ -56,7 +56,7 @@ test_that("get_summary exposes the exact typed plan and run schema", {
     as.list(formals(get_summary)),
     alist(report = , validation_check = NULL, events = NULL, instruments = NULL)
   )
-  expect_identical(names(result), .redcapmissing_get_summary_columns())
+  expect_identical(names(result), .summary_list_columns())
   expect_identical(
     unname(vapply(result, typeof, character(1))),
     c(rep("character", 3), "integer", rep("character", 4), rep("integer", 3), rep("double", 2))

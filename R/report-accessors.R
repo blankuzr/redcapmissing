@@ -59,27 +59,115 @@ get_summary <- function(
   events = NULL,
   instruments = NULL
 ) {
-  .redcapmissing_check_report(report, arg = "report")
-  .redcapmissing_check_summary_rows(report$summary)
+  .report_validate_object(report, arg = "report")
+  .summary_validate_rows(report$summary)
 
-  filters <- .redcapmissing_resolve_accessor_filters(
+  filters <- .report_resolve_filters(
     report = report,
     validation_check = validation_check,
     events = events,
     instruments = instruments
   )
-  summary_rows <- .redcapmissing_filter_accessor_rows(
+  summary_rows <- .report_filter_rows(
     rows = report$summary,
     filters = filters
   )
   out <- tibble::as_tibble(summary_rows)
 
-  .redcapmissing_attach_labels(out, report)
+  .report_attach_labels(out, report)
 }
 
-# Internal schema helpers -------------------------------------------------
+#' Get unresolved missing rows from a REDCap missingness report
+#'
+#' `get_missing()` returns effective unresolved failures stored by [run_plan()].
+#' Rows successfully overridden by verification are omitted. Filters select rows
+#' from the stored missing component. Assessment results and denominators remain
+#' those computed by [run_plan()].
+#'
+#' @inheritParams get_summary
+#'
+#' @return A tibble with exactly these columns and storage types:
+#'
+#' | Column | Storage and meaning |
+#' |---|---|
+#' | `record_id` | Character normalized record ID |
+#' | `redcap_event_name` | Character raw event name; `NA_character_` in classic projects |
+#' | `repeat_instrument` | Character raw repeating instrument; otherwise `NA_character_` |
+#' | `repeat_instance` | Integer exact instance; otherwise `NA_integer_` |
+#' | `validation_context` | Character display context for the event/repeat location |
+#' | `instrument` | Character raw instrument name |
+#' | `validation_check` | Character validation check code from [registry()] |
+#' | `field_name`, `field_label`, `field_type`, `branching_logic` | Character field context; typed missing for target level check failures |
+#' | `url` | Character REDCap data entry URL when it can be constructed; otherwise `NA_character_` |
+#'
+#' Structural absence is represented by typed missing values. The tibble has a
+#' `redcapmissing_labels` attribute containing named character vectors `events`
+#' and `instruments` for presentation; raw
+#' values remain in the returned data and are used for filtering.
+#'
+#' @examples
+#' \dontrun{
+#' # report and instruments are caller supplied.
+#' get_missing(report)
+#' get_missing(report, validation_check = "field-complete")
+#' get_missing(report, instruments = instruments)
+#' }
+#'
+#' @seealso [get_summary()], [run_plan()], [registry()], [flexify()]
+#'
+#' @export
+get_missing <- function(
+  report,
+  validation_check = NULL,
+  events = NULL,
+  instruments = NULL
+) {
+  .report_validate_object(report, arg = "report")
+  .missing_validate_rows(report$missing)
 
-.redcapmissing_get_summary_columns <- function() {
+  filters <- .report_resolve_filters(
+    report = report,
+    validation_check = validation_check,
+    events = events,
+    instruments = instruments
+  )
+  missing_rows <- .report_filter_rows(
+    rows = report$missing,
+    filters = filters
+  )
+  out <- tibble::as_tibble(missing_rows)
+
+  .report_attach_labels(out, report)
+}
+
+.report_validate_object <- function(x, arg = "x") {
+  if (!inherits(x, "redcapmissing")) {
+    .condition_signal_error(
+      paste0(
+        "`", arg,
+        "` must be a `redcapmissing` object created by `run_plan()`."
+      ),
+      "argument"
+    )
+  }
+  expected_names <- c(
+    "plan", "target_results", "summary", "missing", "verification",
+    "diagnostics", "details"
+  )
+  if (!is.list(x) || !identical(names(x), expected_names)) {
+    .condition_signal_error(
+      paste0(
+        "`", arg, "` must contain exactly: ",
+        paste(expected_names, collapse = ", "), "."
+      ),
+      "schema"
+    )
+  }
+  .plan_validate_object(x$plan)
+  invisible(x)
+}
+
+.summary_list_columns <- function() {
   c(
     "redcap_event_name",
     "instrument",
@@ -97,7 +185,7 @@ get_summary <- function(
   )
 }
 
-.redcapmissing_get_summary_prototype <- function() {
+.summary_build_prototype <- function() {
   tibble::tibble(
     redcap_event_name = character(),
     instrument = character(),
@@ -115,13 +203,13 @@ get_summary <- function(
   )
 }
 
-.redcapmissing_check_summary_rows <- function(summary_rows) {
-  .redcapmissing_check_report_rows(
+.summary_validate_rows <- function(summary_rows) {
+  .report_validate_component_rows(
     rows = summary_rows,
-    expected = .redcapmissing_get_summary_prototype(),
+    expected = .summary_build_prototype(),
     component = "summary"
   )
-  invalid_checks <- setdiff(unique(summary_rows$validation_check), .redcapmissing_validation_checks())
+  invalid_checks <- setdiff(unique(summary_rows$validation_check), .registry_list_validation_checks())
   if (length(invalid_checks) > 0L) {
     stop("`report$summary` contains unknown validation check codes.", call. = FALSE)
   }
@@ -132,7 +220,54 @@ get_summary <- function(
   invisible(summary_rows)
 }
 
-.redcapmissing_check_report_rows <- function(rows, expected, component) {
+.missing_list_columns <- function() {
+  c(
+    "record_id",
+    "redcap_event_name",
+    "repeat_instrument",
+    "repeat_instance",
+    "validation_context",
+    "instrument",
+    "validation_check",
+    "field_name",
+    "field_label",
+    "field_type",
+    "branching_logic",
+    "url"
+  )
+}
+
+.missing_build_prototype <- function() {
+  tibble::tibble(
+    record_id = character(),
+    redcap_event_name = character(),
+    repeat_instrument = character(),
+    repeat_instance = integer(),
+    validation_context = character(),
+    instrument = character(),
+    validation_check = character(),
+    field_name = character(),
+    field_label = character(),
+    field_type = character(),
+    branching_logic = character(),
+    url = character()
+  )
+}
+
+.missing_validate_rows <- function(missing_rows) {
+  .report_validate_component_rows(
+    rows = missing_rows,
+    expected = .missing_build_prototype(),
+    component = "missing"
+  )
+  invalid_checks <- setdiff(unique(missing_rows$validation_check), .registry_list_validation_checks())
+  if (length(invalid_checks) > 0L) {
+    stop("`report$missing` contains unknown validation check codes.", call. = FALSE)
+  }
+  invisible(missing_rows)
+}
+
+.report_validate_component_rows <- function(rows, expected, component) {
   expected_names <- names(expected)
   if (!is.data.frame(rows) || !identical(names(rows), expected_names)) {
     stop(
@@ -156,34 +291,32 @@ get_summary <- function(
   invisible(rows)
 }
 
-# Internal filter helpers -------------------------------------------------
-
-.redcapmissing_resolve_accessor_filters <- function(
+.report_resolve_filters <- function(
   report,
   validation_check,
   events,
   instruments
 ) {
   list(
-    validation_check = .redcapmissing_resolve_accessor_filter(
+    validation_check = .report_resolve_filter(
       values = validation_check,
       arg = "validation_check",
-      valid_values = .redcapmissing_validation_checks()
+      valid_values = .registry_list_validation_checks()
     ),
-    events = .redcapmissing_resolve_accessor_filter(
+    events = .report_resolve_filter(
       values = events,
       arg = "events",
-      valid_values = .redcapmissing_report_scope_values(report, "events")
+      valid_values = .report_list_scope_values(report, "events")
     ),
-    instruments = .redcapmissing_resolve_accessor_filter(
+    instruments = .report_resolve_filter(
       values = instruments,
       arg = "instruments",
-      valid_values = .redcapmissing_report_scope_values(report, "instruments")
+      valid_values = .report_list_scope_values(report, "instruments")
     )
   )
 }
 
-.redcapmissing_resolve_accessor_filter <- function(values, arg, valid_values) {
+.report_resolve_filter <- function(values, arg, valid_values) {
   if (is.null(values)) {
     return(NULL)
   }
@@ -210,7 +343,7 @@ get_summary <- function(
   values
 }
 
-.redcapmissing_report_scope_values <- function(report, scope) {
+.report_list_scope_values <- function(report, scope) {
   plan <- report$plan %||% list()
   targets <- plan$assessible_targets
 
@@ -235,7 +368,7 @@ get_summary <- function(
   unique(values[!is.na(values) & values != ""])
 }
 
-.redcapmissing_filter_accessor_rows <- function(rows, filters) {
+.report_filter_rows <- function(rows, filters) {
   keep <- rep(TRUE, nrow(rows))
   if (!is.null(filters$validation_check)) {
     keep <- keep & rows$validation_check %in% filters$validation_check
@@ -250,11 +383,9 @@ get_summary <- function(
   rows[keep, , drop = FALSE]
 }
 
-# Internal presentation metadata helpers ---------------------------------
-
-.redcapmissing_attach_labels <- function(x, report) {
+.report_attach_labels <- function(x, report) {
   project <- report$plan$project %||% list()
-  events <- .redcapmissing_report_scope_values(report, "events")
+  events <- .report_list_scope_values(report, "events")
   if (is.character(project$event_labels) && !is.null(names(project$event_labels))) {
     labelled_events <- names(project$event_labels)
     events <- c(
@@ -262,11 +393,11 @@ get_summary <- function(
       events[!events %in% labelled_events]
     )
   }
-  instruments <- .redcapmissing_report_scope_values(report, "instruments")
+  instruments <- .report_list_scope_values(report, "instruments")
 
   attr(x, "redcapmissing_labels") <- list(
-    events = .redcapmissing_resolve_labels(project$event_labels, events),
-    instruments = .redcapmissing_resolve_labels(
+    events = .report_resolve_labels(project$event_labels, events),
+    instruments = .report_resolve_labels(
       project$instrument_labels,
       instruments
     )
@@ -274,7 +405,7 @@ get_summary <- function(
   x
 }
 
-.redcapmissing_resolve_labels <- function(labels, values) {
+.report_resolve_labels <- function(labels, values) {
   fallback <- stats::setNames(values, values)
   if (!is.character(labels) || is.null(names(labels))) {
     return(fallback)

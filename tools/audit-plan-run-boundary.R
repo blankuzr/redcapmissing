@@ -55,6 +55,7 @@ add_failure <- function(message) {
 }
 
 definitions <- list()
+assignment_names <- character()
 .audit_add_definition <- function(name, function_expression, path, expression) {
   definitions[[length(definitions) + 1L]] <<- list(
     name = name,
@@ -79,29 +80,32 @@ definitions <- list()
   }
 
   if (call_name %in% c("<-", "=") && length(expression) == 3L &&
-      is.symbol(expression[[2L]]) &&
-      .audit_function_literal(expression[[3L]])) {
-    .audit_add_definition(
-      as.character(expression[[2L]]), expression[[3L]], path, expression
-    )
+      is.symbol(expression[[2L]])) {
+    name <- as.character(expression[[2L]])
+    assignment_names <<- c(assignment_names, name)
+    if (.audit_function_literal(expression[[3L]])) {
+      .audit_add_definition(name, expression[[3L]], path, expression)
+    }
     return(invisible(NULL))
   }
 
   if (identical(call_name, "->") && length(expression) == 3L &&
-      .audit_function_literal(expression[[2L]]) &&
       is.symbol(expression[[3L]])) {
-    .audit_add_definition(
-      as.character(expression[[3L]]), expression[[2L]], path, expression
-    )
+    name <- as.character(expression[[3L]])
+    assignment_names <<- c(assignment_names, name)
+    if (.audit_function_literal(expression[[2L]])) {
+      .audit_add_definition(name, expression[[2L]], path, expression)
+    }
     return(invisible(NULL))
   }
 
   if (identical(call_name, "assign") && length(expression) >= 3L &&
-      is.character(expression[[2L]]) && length(expression[[2L]]) == 1L &&
-      .audit_function_literal(expression[[3L]])) {
-    .audit_add_definition(
-      expression[[2L]], expression[[3L]], path, expression
-    )
+      is.character(expression[[2L]]) && length(expression[[2L]]) == 1L) {
+    name <- expression[[2L]]
+    assignment_names <<- c(assignment_names, name)
+    if (.audit_function_literal(expression[[3L]])) {
+      .audit_add_definition(name, expression[[3L]], path, expression)
+    }
   }
   invisible(NULL)
 }
@@ -113,6 +117,7 @@ for (path in source_files) {
 }
 
 definition_names <- vapply(definitions, `[[`, character(1), "name")
+assignment_names <- unique(assignment_names)
 .audit_definition_locations <- function(index) {
   vapply(index, function(i) {
     line <- definitions[[i]]$line
@@ -223,23 +228,87 @@ if (length(retired_helper_calls)) {
 }
 
 legacy_engine_paths <- source_files[
-  basename(source_files) %in% c("missing-engine.R", "find-missing.R")
+  basename(source_files) %in% c(
+    "missing-engine.R",
+    "find-missing.R",
+    "plan-structure.R",
+    "missing-branching.R",
+    "redcap-evaluation-helpers.R",
+    "redcapmissing-checks.R",
+    "reporting-helpers.R",
+    "get-missing.R",
+    "run-plan-verified.R",
+    "run-plan-results.R",
+    "run-plan-target-results.R",
+    "run-plan-diagnostics.R"
+  )
 ]
 if (length(legacy_engine_paths)) {
   add_failure(paste0(
-    "Former assessment pipeline file restored: ",
+    "Retired or prohibited assessment source file found: ",
     paste(basename(legacy_engine_paths), collapse = ", ")
   ))
 }
 
-core_files <- source_files[basename(source_files) %in% c(
-  "plan-structure.R",
+required_contract_files <- c(
+  "assessment-plan.R",
+  "conditions.R",
+  "internal-operators.R",
+  "plan-assessible-targets.R",
+  "plan-schedules.R",
+  "plan-structure-fingerprint.R",
+  "redcap-branching-logic.R",
+  "redcap-metadata.R",
+  "redcap-project-structure.R",
+  "redcap-records.R",
+  "report-accessors.R",
   "run-plan.R",
-  "run-plan-verified.R",
-  "missing-branching.R"
-)]
+  "run-plan-details.R",
+  "run-plan-field-complete.R",
+  "run-plan-instrument-started.R",
+  "run-plan-missing.R",
+  "run-plan-summary.R",
+  "run-plan-target-matching.R",
+  "run-plan-verification.R",
+  "schema-normalization.R"
+)
+missing_contract_files <- setdiff(
+  required_contract_files,
+  basename(source_files)
+)
+if (length(missing_contract_files)) {
+  add_failure(paste0(
+    "Required cohesive contract file missing: ",
+    paste(missing_contract_files, collapse = ", ")
+  ))
+}
+
+invalid_filenames <- basename(source_files)[
+  !grepl("^[a-z0-9]+(?:-[a-z0-9]+)*\\.R$", basename(source_files))
+]
+if (length(invalid_filenames)) {
+  add_failure(paste0(
+    "R source filename is not lowercase hyphenated: ",
+    paste(invalid_filenames, collapse = ", ")
+  ))
+}
+
+vague_filenames <- basename(source_files)[
+  grepl(
+    "(?:^|-)(helpers?|utils?|results?)(?:-|\\.)|^fingerprint\\.R$|^evaluation\\.R$",
+    basename(source_files),
+    perl = TRUE
+  )
+]
+if (length(vague_filenames)) {
+  add_failure(paste0(
+    "Vague or prohibited R source filename found: ",
+    paste(vague_filenames, collapse = ", ")
+  ))
+}
+
 core_text <- paste(vapply(
-  core_files,
+  source_files,
   function(path) paste(readLines(path, warn = FALSE), collapse = "\n"),
   character(1)
 ), collapse = "\n")
@@ -253,6 +322,86 @@ retired_core_patterns <- c(
 for (pattern in names(retired_core_patterns)) {
   if (grepl(pattern, core_text, perl = TRUE)) {
     add_failure(retired_core_patterns[[pattern]])
+  }
+}
+
+legacy_internal_assignments <- grep(
+  "^\\.(rcm|miss|redcapmissing)_",
+  assignment_names,
+  value = TRUE
+)
+if (length(legacy_internal_assignments)) {
+  add_failure(paste0(
+    "Legacy internal assignment name found: ",
+    paste(legacy_internal_assignments, collapse = ", ")
+  ))
+}
+
+legacy_internal_calls <- grep(
+  "^\\.(rcm|miss|redcapmissing)_",
+  called_functions,
+  value = TRUE
+)
+if (length(legacy_internal_calls)) {
+  add_failure(paste0(
+    "Legacy internal helper invoked: ",
+    paste(legacy_internal_calls, collapse = ", ")
+  ))
+}
+
+approved_domains <- c(
+  "condition",
+  "schema",
+  "rcon",
+  "project_structure",
+  "structure_fingerprint",
+  "record",
+  "metadata",
+  "branching_logic",
+  "schedule",
+  "assessible_target",
+  "plan",
+  "run_plan",
+  "instrument_started",
+  "field_complete",
+  "verification",
+  "details",
+  "summary",
+  "missing",
+  "report",
+  "registry",
+  "flex",
+  "flexify",
+  "flex_event_instruments",
+  "startup"
+)
+approved_domains <- approved_domains[
+  order(nchar(approved_domains), decreasing = TRUE)
+]
+internal_assignment_names <- assignment_names[
+  startsWith(assignment_names, ".") &
+    !assignment_names %in% c(".onLoad", ".onAttach", ".onDetach", ".onUnload")
+]
+
+for (name in internal_assignment_names) {
+  domain <- approved_domains[vapply(
+    approved_domains,
+    function(candidate) startsWith(name, paste0(".", candidate, "_")),
+    logical(1)
+  )]
+  if (!length(domain)) {
+    add_failure(paste0(
+      "Internal assignment does not use an approved domain: ", name
+    ))
+    next
+  }
+
+  prefix <- paste0(".", domain[[1L]], "_")
+  suffix <- substring(name, nchar(prefix) + 1L)
+  if (!grepl("^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$", suffix, perl = TRUE)) {
+    add_failure(paste0(
+      "Internal assignment must use .<domain>_<verb>_<object>: ", name
+    ))
   }
 }
 

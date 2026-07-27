@@ -28,7 +28,7 @@ flex_html <- function(x) {
       call. = FALSE
     )
   }
-  .redcapmissing_check_packages(c("flextable", "htmltools"), "flex_html()")
+  .flex_require_packages(c("flextable", "htmltools"), "flex_html()")
 
   rendered_tags <- flextable::htmltools_value(x) |>
     htmltools::renderTags()

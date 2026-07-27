@@ -11,7 +11,7 @@ Each row names the source of executable evidence.
 | API-02 | Validation checks are `event-row-started`, `repeat-instance-row-started`, `instrument-started`, and `field-complete`. | `test-registry.R` |
 | API-03 | Report columns, filters, labels, headings, and metrics use `instrument` or `instruments`. | `test-get-summary.R`, `test-get-missing.R`, `test-flexify.R`, `test-flex-event-instruments.R` |
 | API-04 | `find_missing()` and `flex_event_forms()` are absent from the exports. | `test-registry.R`, `test-flex-event-instruments.R` |
-| API-05 | Errors use the argument, schema, project, schedule, plan, and verification subclasses of `redcapmissing_error`. | `test-assessment-plan.R`, `test-run-plan.R`, `test-run-plan-verified.R` |
+| API-05 | Errors use the argument, schema, project, schedule, plan, and verification subclasses of `redcapmissing_error`. | `test-assessment-plan.R`, `test-run-plan.R`, `test-run-plan-verification.R` |
 | API-06 | An extension into an arm with zero observed records uses `redcapmissing_warning_empty_arm_extension`. | `test-assessment-plan.R` |
 | API-07 | `print(registry())` displays every validation check in full and returns its input invisibly with class unchanged. | `test-registry.R` |
 | API-08 | `registry()` returns exactly `validation_order`, `validation_level`, `validation_check`, `flex_label`, and `description` with the documented storage. | `test-registry.R` |
@@ -74,7 +74,7 @@ Each row names the source of executable evidence.
 | EXPL-05 | Record IDs absent from planner data remain targets. The project type and the target's `redcap_event_name`, `repeat_instrument`, and `repeat_instance` determine the first failed check during `run_plan()`. | `test-assessment-plan.R`, `test-run-plan.R` |
 | EXPL-06 | A record observed in one arm raises an error when scheduled into another arm. | `test-assessment-plan.R` |
 | EXPL-07 | Correctly structured planner data with zero rows supports explicit targets for absent records. | `test-assessment-plan.R` |
-| EXPL-08 | An absent classic target with `repeat_instance = NA_integer_` has both physical row checks marked `"not applicable"` and fails `instrument-started`. Absent longitudinal events and absent repeat instances fail their applicable physical row checks. | `test-run-plan.R`, `test-run-plan-verified.R` |
+| EXPL-08 | An absent classic target with `repeat_instance = NA_integer_` has both physical row checks marked `"not applicable"` and fails `instrument-started`. Absent longitudinal events and absent repeat instances fail their applicable physical row checks. | `test-run-plan.R`, `test-run-plan-verification.R` |
 
 ## `run_plan()` stages and results
 
@@ -84,15 +84,15 @@ Each row names the source of executable evidence.
 | RUN-02 | A newer export with the same project structure uses the plan targets. Added rows create zero new targets. Each absent planned row receives the gate results defined by the project type and its `redcap_event_name`, `repeat_instrument`, and `repeat_instance`. | `test-run-plan.R` |
 | RUN-03 | Diagnostics record the twelve documented stages in order. | `test-run-plan.R` |
 | RUN-04 | Every longitudinal target receives `event-row-started`; classic targets receive status `"not applicable"`. | `test-run-plan.R` |
-| RUN-05 | A target with a positive `repeat_instance` receives `repeat-instance-row-started` after its event check passes; a target with `repeat_instance = NA_integer_` receives status `"not applicable"`. | `test-run-plan.R`, `test-run-plan-verified.R` |
-| RUN-06 | Failed physical row checks give later checks status `"not reached"`; `field-complete` runs after `instrument-started` passes. | `test-run-plan.R`, `test-run-plan-verified.R` |
+| RUN-05 | A target with a positive `repeat_instance` receives `repeat-instance-row-started` after its event check passes; a target with `repeat_instance = NA_integer_` receives status `"not applicable"`. | `test-run-plan.R`, `test-run-plan-verification.R` |
+| RUN-06 | Failed physical row checks give later checks status `"not reached"`; `field-complete` runs after `instrument-started` passes. | `test-run-plan.R`, `test-run-plan-verification.R` |
 | RUN-07 | `target_results` has one row per target, four check status columns, field counts, source, and reason. | `test-run-plan.R`, `test-flex-event-instruments.R` |
 | RUN-08 | `summary` has the documented columns and types, status and reason, and `NA_real_` rates for unassessed checks. | `test-run-plan.R`, `test-get-summary.R` |
-| RUN-09 | `missing` contains effective unresolved failures with typed structural missing values. | `test-run-plan.R`, `test-run-plan-verified.R`, `test-get-missing.R` |
-| RUN-10 | `verification` contains counts for verification processing. | `test-run-plan.R`, `test-run-plan-verified.R` |
-| RUN-11 | `details = TRUE` stores field rows with raw and effective dispositions, verification status, branching status, reason, and `value_summary`. | `test-run-plan.R`, `test-run-plan-verified.R` |
+| RUN-09 | `missing` contains effective unresolved failures with typed structural missing values. | `test-run-plan.R`, `test-run-plan-verification.R`, `test-get-missing.R` |
+| RUN-10 | `verification` contains counts for verification processing. | `test-run-plan.R`, `test-run-plan-verification.R` |
+| RUN-11 | `details = TRUE` stores field rows with raw and effective dispositions, verification status, branching status, reason, and `value_summary`. | `test-run-plan.R`, `test-run-plan-verification.R` |
 | RUN-12 | Ordinary assessed field values are character in `details$value_summary`; checkbox values list selected exported checkbox child column names. | `test-run-plan.R` |
-| RUN-13 | `details = FALSE` returns `details = NULL`. Both detail settings have equal targets, summaries, missing rows, and verification counts. | `test-run-plan.R`, `test-run-plan-verified.R` |
+| RUN-13 | `details = FALSE` returns `details = NULL`. Both detail settings have equal targets, summaries, missing rows, and verification counts. | `test-run-plan.R`, `test-run-plan-verification.R` |
 | RUN-14 | Report components exclude source data, supplied verification rows, API tokens, and the live connection. | `test-run-plan.R` |
 | RUN-15 | Reports with all passes, all failures, zero targets, inapplicable checks, and failed gates retain the documented schemas and counts. | `test-run-plan.R` |
 
@@ -120,15 +120,15 @@ Each row names the source of executable evidence.
 
 | ID | Behavior checked | Evidence |
 |---|---|---|
-| VER-01 | `verified` and `verified_user` are supplied together. Two `NULL` values disable verification. | `test-run-plan-verified.R` |
-| VER-02 | `verified` requires the nine documented columns. Extra columns are ignored. A complete data frame with zero rows is valid. | `test-run-plan-verified.R` |
-| VER-03 | Every verification row is validated before filtering by username or status. | `test-run-plan-verified.R` |
-| VER-04 | Event and repeat values accept typed missing values when their dimensions are inapplicable. | `test-run-plan-verified.R` |
-| VER-05 | Documented character timestamps and finite `POSIXct` values become UTC. Character timestamps lacking a zone use UTC. | `test-run-plan-verified.R` |
-| VER-06 | Username and status matching is exact and sensitive to letter case. | `test-run-plan-verified.R` |
-| VER-07 | The latest row for each selected username and field context is used. Identical latest ties collapse and conflicting latest ties raise an error. | `test-run-plan-verified.R` |
-| VER-08 | `"VERIFIED"` changes an assessed failed `field-complete` row. Targets, gates, instrument start, passing fields, and fields removed by policy or branching keep their prior results. | `test-run-plan-verified.R` |
-| VER-09 | Verification input order leaves results unchanged. Zero matching rows produce audit counts. | `test-run-plan-verified.R` |
+| VER-01 | `verified` and `verified_user` are supplied together. Two `NULL` values disable verification. | `test-run-plan-verification.R` |
+| VER-02 | `verified` requires the nine documented columns. Extra columns are ignored. A complete data frame with zero rows is valid. | `test-run-plan-verification.R` |
+| VER-03 | Every verification row is validated before filtering by username or status. | `test-run-plan-verification.R` |
+| VER-04 | Event and repeat values accept typed missing values when their dimensions are inapplicable. | `test-run-plan-verification.R` |
+| VER-05 | Documented character timestamps and finite `POSIXct` values become UTC. Character timestamps lacking a zone use UTC. | `test-run-plan-verification.R` |
+| VER-06 | Username and status matching is exact and sensitive to letter case. | `test-run-plan-verification.R` |
+| VER-07 | The latest row for each selected username and field context is used. Identical latest ties collapse and conflicting latest ties raise an error. | `test-run-plan-verification.R` |
+| VER-08 | `"VERIFIED"` changes an assessed failed `field-complete` row. Targets, gates, instrument start, passing fields, and fields removed by policy or branching keep their prior results. | `test-run-plan-verification.R` |
+| VER-09 | Verification input order leaves results unchanged. Zero matching rows produce audit counts. | `test-run-plan-verification.R` |
 
 ## Accessors, formatters, and progress
 
