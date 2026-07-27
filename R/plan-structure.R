@@ -31,6 +31,25 @@
   warning(condition)
 }
 
+.rcm_validate_rcon_class <- function(rcon) {
+  supported_classes <- c("redcapApiConnection", "redcapOfflineConnection")
+  is_supported <- any(vapply(
+    supported_classes,
+    function(class) inherits(rcon, class),
+    logical(1)
+  ))
+  if (!is_supported) {
+    .rcm_plan_abort(
+      paste0(
+        "`rcon` must inherit from `redcapApiConnection` or ",
+        "`redcapOfflineConnection`."
+      ),
+      "project"
+    )
+  }
+  invisible(rcon)
+}
+
 .rcm_surface <- function(rcon, methods, label, required = TRUE) {
   if (is.null(rcon)) {
     .rcm_plan_abort("Provide a REDCap connection object as `rcon`.", "project")
@@ -519,6 +538,7 @@
 }
 #' @keywords internal
 .rcm_project_snapshot <- function(rcon) {
+  .rcm_validate_rcon_class(rcon)
   metadata <- .rcm_surface(rcon, "metadata", "project metadata")
   .rcm_required_columns(metadata, c("field_name", "form_name", "field_type"), "rcon$metadata()")
   if (!nrow(metadata)) .rcm_plan_abort("`rcon$metadata()` cannot be empty.", "project")

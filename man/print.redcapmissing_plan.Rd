@@ -16,8 +16,8 @@
 }
 \description{
 The display contains the construction type, number of selected instruments,
-and number of Assessible targets. Record IDs and individual targets remain in
-\code{x$assessible_targets}.
+and number of \code{assessible_targets} rows. Record IDs and individual targets
+remain in \code{x$assessible_targets}.
 }
 \seealso{
 \code{\link[=plan_from_data]{plan_from_data()}}, \code{\link[=plan_explicit]{plan_explicit()}}

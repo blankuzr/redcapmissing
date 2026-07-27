@@ -14,7 +14,10 @@ response row containing only blanks remains observed. Every supplied column
 must use ordinary atomic vector storage; list or matrix columns are
 rejected. \code{rcon} supplies the name of the record ID column.}
 
-\item{rcon}{A REDCap connection object exposing project information,
+\item{rcon}{A \code{redcapAPI} connection inheriting from
+\code{redcapApiConnection}, as created by \code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, or
+\code{redcapOfflineConnection}, as created by \code{\link[redcapAPI:offlineConnection]{redcapAPI::offlineConnection()}}
+or \code{\link[redcapAPI:readPreservedProject]{redcapAPI::readPreservedProject()}}. It must expose project information,
 metadata, instruments, and applicable arms, events, mappings, and repeat
 configuration. A missing repeat configuration surface is an error; an
 explicit empty surface represents a project with no repeats. Constructors
@@ -34,16 +37,16 @@ arm; in a classic project it adds the crossing for every observed record.
 A validated \code{redcapmissing_plan} as described in \strong{Returned plan}.
 }
 \description{
-\code{plan_from_data()} identifies Assessible targets by intersecting REDCap
+\code{plan_from_data()} identifies \code{assessible_targets} by intersecting REDCap
 instrument/event/repeat crossings allowed by \code{rcon} with crossings observed
 in \code{data} or added through \code{extended_schedule}. An absent extension row
 leaves observed targets unchanged.
 }
-\section{Assessible target rule}{
+\section{\code{assessible_targets} rule}{
 
 \code{plan_from_data()} implements:
 
-\if{html}{\out{<div class="sourceCode text">}}\preformatted{Assessible targets =
+\if{html}{\out{<div class="sourceCode text">}}\preformatted{assessible_targets =
   crossings allowed by rcon
   INTERSECT
   (crossings observed in data UNION extended_schedule crossings)

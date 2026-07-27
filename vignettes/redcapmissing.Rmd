@@ -18,7 +18,7 @@ library(redcapmissing)
 `redcapmissing` separates target selection from assessment:
 
 1. `plan_from_data()` or `plan_explicit()` selects the record, event,
-   instrument, and repeat instance crossings that are Assessible.
+   instrument, and repeat instance crossings stored in `assessible_targets`.
 2. `run_plan()` evaluates the physical rows, instruments, and fields for the
    targets stored in the plan.
 
@@ -31,15 +31,18 @@ The examples assume that the caller has supplied these objects:
 
 | Object | Required for | Contents |
 |---|---|---|
-| `rcon` | Every constructor and `run_plan()` | A `redcapAPI::redcapConnection()` or supported object that can read the project structures used by the three functions and the records exported for `data`. |
+| `rcon` | Every constructor and `run_plan()` | A `redcapAPI` object inheriting from `redcapApiConnection` or `redcapOfflineConnection` that represents the project used for `data`. |
 | `instruments` | Both constructors | A character vector of raw REDCap instrument names. |
 | `records` | Both constructors and `run_plan()` | Records exported from the project represented by `rcon`. |
 | `extended_schedule` | Optional use of `plan_from_data()` | A table with the exact three column schema described below. |
 | `explicit_schedule` | `plan_explicit()` | A table with the exact four column schema described below. |
 | `verified` and `verified_user` | Optional use of `run_plan()` | A verification table and the exact username whose rows may apply. |
 
-Use `redcapAPI::unlockREDCap()` with its encrypted keyring when available. Otherwise
-create `rcon` from a token obtained at run time. Keep the token only in memory and
+`redcapApiConnection` objects are returned by `redcapAPI::redcapConnection()`;
+`redcapOfflineConnection` objects are returned by
+`redcapAPI::offlineConnection()` or `redcapAPI::readPreservedProject()`. For an
+online connection, use `redcapAPI::unlockREDCap()` with its encrypted keyring
+when available, or obtain a token at run time. Keep the token only in memory and
 exclude it from R source, rendered documents, logs, and saved workspaces.
 
 ## Export records
@@ -88,7 +91,7 @@ project structure from `rcon`.
 `plan_from_data()` applies this rule:
 
 ```text
-Assessible targets =
+assessible_targets =
   allowable crossings described by rcon
   INTERSECT
   (
@@ -144,14 +147,14 @@ one `redcapmissing_warning_empty_arm_extension` warning and contributes no
 targets. Each row contributes only the instance named in that row.
 
 An omitted crossing receives the observed planning rule. Any allowable
-crossing observed in `data` remains Assessible.
+crossing observed in `data` remains in `assessible_targets`.
 
 ## Plan from `explicit_schedule`
 
 `plan_explicit()` applies this rule:
 
 ```text
-Assessible targets =
+assessible_targets =
   allowable crossings described by rcon
   INTERSECT
   crossings in explicit_schedule
@@ -316,7 +319,7 @@ checks receive `"not applicable"`.
 | 2 | `"Validate and normalize verification"` |
 | 3 | `"Resolve instrument-start fields"` |
 | 4 | `"Resolve field-complete fields"` |
-| 5 | `"Join Assessible targets to physical rows"` |
+| 5 | `"Join assessible_targets to physical rows"` |
 | 6 | `"Run event-row-started"` |
 | 7 | `"Run repeat-instance-row-started"` |
 | 8 | `"Run instrument-started"` |
@@ -330,6 +333,12 @@ checks receive `"not applicable"`.
 Check statuses are `"passed"`, `"failed"`, `"not applicable"`, and
 `"not reached"`. Validation levels are `"event:instrument"` and
 `"event:instrument:instance"`.
+
+`registry()` documents these validation checks in five columns:
+`validation_order` is the check sequence; `validation_level` is the value stored
+in report rows; `validation_check` is the exact report and filter code;
+`flex_label` is the label used by `flexify()`; and `description` states the pass
+condition for an assessed check.
 
 | Target context | `event-row-started` | `repeat-instance-row-started` |
 |---|---|---|
@@ -382,7 +391,7 @@ available to `instrument-started`. When the policy leaves no fields,
 | Output | Value |
 |---|---|
 | status | `"not applicable"` |
-| reason | `"no assessible fields after field policy"` |
+| reason | `"no fields remain after field policy"` |
 | counts | Zero. |
 | rates | `NA_real_`. |
 
@@ -407,7 +416,7 @@ A target whose selected fields all have false branching logic receives:
 | Output | Value |
 |---|---|
 | `field_complete` | `"not applicable"` |
-| `field_applicability_reason` | `"no assessible fields after branching logic"` |
+| `field_applicability_reason` | `"no fields apply after branching logic"` |
 | field counts | Zero. |
 
 A checkbox root passes `field-complete` when at least one exported child column
@@ -521,7 +530,7 @@ Absent row rules are:
 | Component | Contents |
 |---|---|
 | `plan` | The validated `redcapmissing_plan` used for assessment. |
-| `target_results` | One row per Assessible target, with source, four check statuses, field counts, and `field_applicability_reason`. |
+| `target_results` | One row per `assessible_targets` row, with source, four check statuses, field counts, and `field_applicability_reason`. |
 | `summary` | Counts and rates grouped by event, instrument, repeat context, validation level, and validation check. |
 | `missing` | Effective failures that remain unresolved after verification. |
 | `verification` | Counts named `enabled`, `verified_user`, `input_rows`, `user_rows`, `latest_user_rows`, `verified_rows`, and `overrides_applied`. |
@@ -560,8 +569,8 @@ For an assessed field, `branch_satisfied` is `TRUE`. Target check rows store
 |---|---|
 | `event-row-started` | `"not applicable for classic project"` |
 | `repeat-instance-row-started` | `"not a repeating target"` |
-| `field-complete` after field selection | `"no assessible fields after field policy"` |
-| `field-complete` after branching logic | `"no assessible fields after branching logic"` |
+| `field-complete` after field selection | `"no fields remain after field policy"` |
+| `field-complete` after branching logic | `"no fields apply after branching logic"` |
 
 Other detail rows store `NA_character_` in `reason`.
 
@@ -593,9 +602,10 @@ flex_event_instruments(report)
 flex_html(flexify(get_missing(report)))
 ```
 
-Accessor filters match exact values and respect case. Their optional `label`
-attribute contains named `events` and `instruments` character vectors for
-display. See `?get_summary`, `?get_missing`, `?flex_event_instruments`, and
+Accessor filters match exact values and respect case. Their
+`redcapmissing_labels` attribute contains named `events` and `instruments`
+character vectors for display. See `?get_summary`, `?get_missing`,
+`?flex_event_instruments`, and
 `?flex_html` for their specific arguments and return classes.
 
 ## Errors and recovery

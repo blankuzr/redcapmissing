@@ -48,6 +48,7 @@ test_that("flex_html renders formatted missing rows for multiple instruments", {
     ),
     repeatInstrumentEvent = function() tibble::tibble()
   )
+  rcon <- redcap_api_connection_fixture(rcon)
 
   plan <- plan_from_data(
     records,

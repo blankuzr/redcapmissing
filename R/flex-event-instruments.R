@@ -8,7 +8,8 @@
 #'
 #' @details
 #' Metrics are computed from `x$target_results`, which has one row per
-#' Assessible target. `x$plan$assessible_targets` defines every denominator.
+#' `assessible_targets` row. `x$plan$assessible_targets` defines every
+#' denominator.
 #' Instrument metrics display `N/D (%)`. Event header `N (started/due)` values
 #' count unique record and event contexts: the numerator has a passed
 #' `event-row-started` check and the denominator has an assessed event gate.

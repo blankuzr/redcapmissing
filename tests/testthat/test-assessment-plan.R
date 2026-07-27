@@ -29,7 +29,7 @@
     is_longitudinal = as.integer(longitudinal)
   )
   if (!is.null(record_id_field)) info$record_id_field <- record_id_field
-  list(
+  connection <- list(
     metadata = function() metadata,
     instruments = function() instruments,
     projectInformation = function() info,
@@ -39,6 +39,7 @@
     repeatInstrumentEvent = function() repeats,
     exportRecords = function(...) stop("constructors must not export records")
   )
+  redcap_api_connection_fixture(connection)
 }
 
 .plan_longitudinal_rcon <- function(repeats = NULL) {
@@ -100,6 +101,17 @@ test_that("plan constructors expose the exact public signatures", {
   expect_identical(
     names(formals(plan_explicit)),
     c("data", "rcon", "instruments", "explicit_schedule")
+  )
+})
+
+test_that("plan constructors require supported redcapAPI connection classes", {
+  rcon <- .plan_fake_rcon()
+  class(rcon) <- "redcapConnection"
+
+  expect_error(
+    plan_from_data(tibble::tibble(record_id = "1"), rcon, "demographics"),
+    regexp = "redcapApiConnection.*redcapOfflineConnection",
+    class = "redcapmissing_error_project"
   )
 })
 

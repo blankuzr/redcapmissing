@@ -328,7 +328,9 @@
   plan_groups <- target_groups[seq_len(target_count)]
   verified_groups <- target_groups[target_count + seq_len(nrow(row_target_context))]
   if (any(!verified_groups %in% plan_groups)) {
-    .rcm_verified_abort("`verified` contains a field context that is not an Assessible target.")
+    .rcm_verified_abort(
+      "`verified` contains a field context that is not in `assessible_targets`."
+    )
   }
   rows$.field_group <- .rcm_verified_group_id(tibble::tibble(
     record_id = rows$record,

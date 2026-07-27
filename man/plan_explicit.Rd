@@ -12,7 +12,10 @@ plan_explicit(data, rcon, instruments, explicit_schedule)
 empty data frame is allowed. Every supplied column must use ordinary
 atomic vector storage. Structural normalization follows \code{\link[=plan_from_data]{plan_from_data()}}.}
 
-\item{rcon}{A REDCap connection object exposing project information,
+\item{rcon}{A \code{redcapAPI} connection inheriting from
+\code{redcapApiConnection}, as created by \code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, or
+\code{redcapOfflineConnection}, as created by \code{\link[redcapAPI:offlineConnection]{redcapAPI::offlineConnection()}}
+or \code{\link[redcapAPI:readPreservedProject]{redcapAPI::readPreservedProject()}}. It must expose project information,
 metadata, instruments, and applicable arms, events, mappings, and repeat
 configuration. A missing repeat configuration surface is an error; an
 explicit empty surface represents a project with no repeats. Constructors
@@ -25,7 +28,7 @@ project. Their order determines target ordering.}
 \item{explicit_schedule}{A data frame with exactly the columns \code{record_id},
 \code{instrument}, \code{redcap_event_name}, and \code{repeat_instance}, in that order.
 An absent row means do not assess that crossing. A correctly typed empty
-schedule creates a valid plan with no Assessible targets. \code{NULL} and an
+schedule creates a valid plan with no \code{assessible_targets} rows. \code{NULL} and an
 omitted argument are errors.}
 }
 \value{
@@ -39,11 +42,11 @@ repeat instance crossings declared by \code{explicit_schedule}, after validating
 that each crossing is allowed by \code{rcon}. A schedule row may identify a record
 absent from \code{data}; that absence is evaluated later by \code{\link[=run_plan]{run_plan()}}.
 }
-\section{Assessible target rule}{
+\section{\code{assessible_targets} rule}{
 
 \code{plan_explicit()} implements:
 
-\if{html}{\out{<div class="sourceCode text">}}\preformatted{Assessible targets =
+\if{html}{\out{<div class="sourceCode text">}}\preformatted{assessible_targets =
   crossings allowed by rcon
   INTERSECT
   explicit_schedule crossings

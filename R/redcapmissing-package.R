@@ -1,6 +1,6 @@
 #' Plan and Run Missingness Assessment for REDCap Exports
 #'
-#' Construct a set of Assessible REDCap targets, then evaluate physical rows,
+#' Construct `assessible_targets` for REDCap, then evaluate physical rows,
 #' instrument start, branching logic, and field completeness against a record
 #' export. Exported functions use *instrument* for raw REDCap instrument names.
 #'
@@ -42,14 +42,17 @@
 #' Extensions into arms with zero observed records use the
 #' `redcapmissing_warning_empty_arm_extension` warning.
 #'
-#' An online workflow uses `redcapAPI::redcapConnection()` and
-#' `redcapAPI::exportRecordsTyped()`. Keep REDCap API tokens outside source,
-#' logs, reports, and saved R objects.
+#' Supported `rcon` objects inherit from `redcapApiConnection`, created by
+#' [redcapAPI::redcapConnection()], or `redcapOfflineConnection`, created by
+#' [redcapAPI::offlineConnection()] or [redcapAPI::readPreservedProject()].
+#' Online workflows commonly use [redcapAPI::exportRecordsTyped()]. Keep REDCap
+#' API tokens outside source, logs, reports, and saved R objects.
 #'
 #' @seealso [plan_from_data()], [plan_explicit()], [run_plan()],
 #'   [get_summary()], [get_missing()], [registry()], [flexify()],
 #'   [flex_event_instruments()], [flex_html()],
-#'   [redcapAPI::redcapConnection()], [redcapAPI::exportRecordsTyped()]
+#'   [redcapAPI::redcapConnection()], [redcapAPI::offlineConnection()],
+#'   [redcapAPI::exportRecordsTyped()]
 #' @importFrom redcapAPI isNAorBlank
 #' @keywords internal
 "_PACKAGE"

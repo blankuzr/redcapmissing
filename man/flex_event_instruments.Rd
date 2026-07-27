@@ -29,7 +29,8 @@ above a selected threshold.
 }
 \details{
 Metrics are computed from \code{x$target_results}, which has one row per
-Assessible target. \code{x$plan$assessible_targets} defines every denominator.
+\code{assessible_targets} row. \code{x$plan$assessible_targets} defines every
+denominator.
 Instrument metrics display \verb{N/D (\%)}. Event header \code{N (started/due)} values
 count unique record and event contexts: the numerator has a passed
 \code{event-row-started} check and the denominator has an assessed event gate.

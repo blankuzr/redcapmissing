@@ -1,3 +1,7 @@
+redcap_api_connection_fixture <- function(x) {
+  structure(x, class = c("redcapApiConnection", "redcapConnection"))
+}
+
 meta_row <- function(
   field_name,
   form_name,
@@ -38,7 +42,7 @@ fake_rcon <- function(
     )
   }
 
-  list(
+  connection <- list(
     url = url,
     metadata = function() metadata,
     instruments = function() instruments,
@@ -49,6 +53,7 @@ fake_rcon <- function(
     projectInformation = function() project_information,
     version = function() version
   )
+  redcap_api_connection_fixture(connection)
 }
 
 baseline_form_meta <- function() {

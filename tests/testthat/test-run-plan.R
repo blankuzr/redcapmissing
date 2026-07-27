@@ -54,7 +54,7 @@ test_that("run_plan exposes the exact plan execution API and report schemas", {
     "Validate and normalize verification",
     "Resolve instrument-start fields",
     "Resolve field-complete fields",
-    "Join Assessible targets to physical rows",
+    "Join assessible_targets to physical rows",
     "Run event-row-started",
     "Run repeat-instance-row-started",
     "Run instrument-started",
@@ -222,7 +222,7 @@ test_that("an empty field policy reports not applicable", {
   expect_identical(result$target_results$fields_failed, 0L)
   expect_identical(
     result$target_results$field_applicability_reason,
-    "no assessible fields after field policy"
+    "no fields remain after field policy"
   )
   field_summary <- result$summary[result$summary$validation_check == "field-complete", ]
   expect_identical(field_summary$status, "not applicable")
@@ -254,7 +254,7 @@ test_that("fields closed by branching report not applicable", {
   expect_identical(result$target_results$fields_failed, 0L)
   expect_identical(
     result$target_results$field_applicability_reason,
-    "no assessible fields after branching logic"
+    "no fields apply after branching logic"
   )
   field_summary <- result$summary[
     result$summary$validation_check == "field-complete",
@@ -262,7 +262,7 @@ test_that("fields closed by branching report not applicable", {
   expect_identical(field_summary$status, "not applicable")
   expect_identical(
     field_summary$reason,
-    "no assessible fields after branching logic"
+    "no fields apply after branching logic"
   )
   expect_identical(
     field_summary[c("assessed", "passed", "failed")],
@@ -323,6 +323,7 @@ test_that("cross event branching uses the matching record and event context", {
       form_name = character()
     )
   )
+  rcon <- redcap_api_connection_fixture(rcon)
   data <- tibble::tibble(
     record_id = c("1", "1"),
     redcap_event_name = c("baseline_arm_1", "followup_arm_1"),
@@ -350,7 +351,7 @@ test_that("cross event branching uses the matching record and event context", {
   expect_identical(closed$target_results$field_complete, "not applicable")
   expect_identical(
     closed$target_results$field_applicability_reason,
-    "no assessible fields after branching logic"
+    "no fields apply after branching logic"
   )
 
   missing_dependency <- data[, names(data) != "trigger", drop = FALSE]
@@ -629,6 +630,7 @@ test_that("checkbox detection requires a selected child", {
       form_name = character()
     )
   )
+  rcon <- redcap_api_connection_fixture(rcon)
   assess_start <- function(first, second) {
     data <- tibble::tibble(
       record_id = "1",
@@ -682,6 +684,7 @@ test_that("selected instruments require at least one usable start detection fiel
       form_name = character()
     )
   )
+  rcon <- redcap_api_connection_fixture(rcon)
   data <- tibble::tibble(
     record_id = "1",
     instructions = "",
@@ -815,6 +818,7 @@ test_that("longitudinal event gates use any physical row in the record and event
       event_name = character(), form_name = character()
     )
   )
+  rcon <- redcap_api_connection_fixture(rcon)
   data <- tibble::tibble(
     record_id = "1",
     redcap_event_name = "baseline_arm_1",
@@ -1015,6 +1019,7 @@ test_that("field details retain target provenance for instruments in one context
     repeatInstrumentEvent = function() repeat_table,
     version = function() "15.0.0"
   )
+  rcon <- redcap_api_connection_fixture(rcon)
   data <- tibble::tibble(record_id = "1", alpha_value = "a", beta_value = "b")
   extension <- tibble::tibble(
     instrument = "alpha", redcap_event_name = NA_character_,
@@ -1064,6 +1069,7 @@ test_that("normalized structural IDs preserve a raw record_id response field", {
       form_name = character()
     )
   )
+  rcon <- redcap_api_connection_fixture(rcon)
   data <- tibble::tibble(
     study_id = "A1",
     record_id = "",
@@ -1274,6 +1280,7 @@ test_that("the default descriptive exclusion is safe when the type is absent", {
       form_name = character()
     )
   )
+  rcon <- redcap_api_connection_fixture(rcon)
   data <- tibble::tibble(record_id = "1", value = "entered")
   plan <- plan_from_data(data, rcon, "baseline_form")
 

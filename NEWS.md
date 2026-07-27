@@ -1,10 +1,26 @@
 # redcapmissing 7.0.0
 
+## 2026-07-27
+
+- Standardized `assessible_targets` as the only name for the plan target table
+  across code, diagnostics, documentation, and errors. Field selection and
+  branching now use the clearer reasons `"no fields remain after field policy"`
+  and `"no fields apply after branching logic"`.
+- Limited the documented and validated `rcon` contract to redcapAPI classes
+  `redcapApiConnection` and `redcapOfflineConnection`.
+- Reduced `registry()` to the five columns used by package outputs and
+  presentation: `validation_order`, `validation_level`, `validation_check`,
+  `flex_label`, and `description`. Each `description` is the concise pass
+  condition for an assessed check and drives the printed `condition` column.
+- Added a credential-free synthetic offline plan-to-report example and corrected
+  the documented accessor attribute name to `redcapmissing_labels`.
+
 ## 2026-07-25
 
-- Replaced `find_missing()` with a plan and run workflow. `plan_from_data()` uses Assessible
-  targets observed in an export plus `extended_schedule`; `plan_explicit()` uses
-  `explicit_schedule`; `run_plan()` evaluates the resulting plan.
+- Replaced `find_missing()` with a plan and run workflow. `plan_from_data()`
+  stores observed crossings plus `extended_schedule` crossings in
+  `assessible_targets`; `plan_explicit()` uses `explicit_schedule`; `run_plan()`
+  evaluates the resulting plan.
 - Removed the `forms`, `events`, `records`, `instances`, and `ignore_ids` scope system.
   Removed the compatibility wrapper. Migration requires `plan_from_data()`,
   `plan_explicit()`, and `run_plan()`. Reports, accessors, registry values, and formatters
@@ -15,7 +31,7 @@
   fingerprint. Source records and live REDCap connections remain outside plans.
 - Added `event-row-started`, `repeat-instance-row-started`, `instrument-started`, and
   `field-complete`. `required_fields`, `exclude_types`, and `ignore_fields` affect
-  `field-complete`. A target with zero assessible fields receives status `"not applicable"`.
+  `field-complete`. A target with no fields remaining after policy receives status `"not applicable"`.
 - Replaced the previous data quality history input with the nine required `verified`
   columns and latest timestamp selection. An exact `"VERIFIED"` row can change an assessed
   failed `field-complete` result, and the report stores verification counts.

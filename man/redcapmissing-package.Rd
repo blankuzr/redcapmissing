@@ -6,7 +6,7 @@
 \alias{redcapmissing-package}
 \title{Plan and Run Missingness Assessment for REDCap Exports}
 \description{
-Construct a set of Assessible REDCap targets, then evaluate physical rows,
+Construct \code{assessible_targets} for REDCap, then evaluate physical rows,
 instrument start, branching logic, and field completeness against a record
 export. Exported functions use \emph{instrument} for raw REDCap instrument names.
 }
@@ -49,15 +49,18 @@ argument, schema, project, schedule, plan, and verification failures.
 Extensions into arms with zero observed records use the
 \code{redcapmissing_warning_empty_arm_extension} warning.
 
-An online workflow uses \code{redcapAPI::redcapConnection()} and
-\code{redcapAPI::exportRecordsTyped()}. Keep REDCap API tokens outside source,
-logs, reports, and saved R objects.
+Supported \code{rcon} objects inherit from \code{redcapApiConnection}, created by
+\code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, or \code{redcapOfflineConnection}, created by
+\code{\link[redcapAPI:offlineConnection]{redcapAPI::offlineConnection()}} or \code{\link[redcapAPI:readPreservedProject]{redcapAPI::readPreservedProject()}}.
+Online workflows commonly use \code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}. Keep REDCap
+API tokens outside source, logs, reports, and saved R objects.
 }
 \seealso{
 \code{\link[=plan_from_data]{plan_from_data()}}, \code{\link[=plan_explicit]{plan_explicit()}}, \code{\link[=run_plan]{run_plan()}},
 \code{\link[=get_summary]{get_summary()}}, \code{\link[=get_missing]{get_missing()}}, \code{\link[=registry]{registry()}}, \code{\link[=flexify]{flexify()}},
 \code{\link[=flex_event_instruments]{flex_event_instruments()}}, \code{\link[=flex_html]{flex_html()}},
-\code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}
+\code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:offlineConnection]{redcapAPI::offlineConnection()}},
+\code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}
 }
 \author{
 \strong{Maintainer}: blankuzr \email{blankuzr@users.noreply.github.com}

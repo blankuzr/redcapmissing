@@ -30,7 +30,7 @@ run_plan_rcon <- function(longitudinal = FALSE, repeat_table = NULL) {
     arm_num = 1L, unique_event_name = "baseline_arm_1", form = "baseline_form"
   ) else NULL
   arms <- if (longitudinal) tibble::tibble(arm_num = 1L, name = "Arm 1") else NULL
-  list(
+  connection <- list(
     url = "https://example.test/api/",
     metadata = function() metadata,
     instruments = function() instruments,
@@ -41,6 +41,7 @@ run_plan_rcon <- function(longitudinal = FALSE, repeat_table = NULL) {
     arms = function() arms,
     version = function() "15.0.0"
   )
+  redcap_api_connection_fixture(connection)
 }
 
 run_plan_data <- function(record_id = "1", required_note = "complete",
@@ -127,7 +128,7 @@ run_plan_repeat_event_rcon <- function() {
     meta_row("screen_value", "screening"),
     meta_row("diary_value", "diary", required = "y")
   )
-  list(
+  connection <- list(
     url = "https://example.test/api/",
     metadata = function() metadata,
     instruments = function() tibble::tibble(
@@ -157,6 +158,7 @@ run_plan_repeat_event_rcon <- function() {
     ),
     version = function() "15.0.0"
   )
+  redcap_api_connection_fixture(connection)
 }
 
 run_plan_repeat_event_data <- function() {

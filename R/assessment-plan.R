@@ -1,6 +1,6 @@
 #' Construct an assessment plan from observed REDCap rows
 #'
-#' `plan_from_data()` identifies Assessible targets by intersecting REDCap
+#' `plan_from_data()` identifies `assessible_targets` by intersecting REDCap
 #' instrument/event/repeat crossings allowed by `rcon` with crossings observed
 #' in `data` or added through `extended_schedule`. An absent extension row
 #' leaves observed targets unchanged.
@@ -11,7 +11,10 @@
 #'   response row containing only blanks remains observed. Every supplied column
 #'   must use ordinary atomic vector storage; list or matrix columns are
 #'   rejected. `rcon` supplies the name of the record ID column.
-#' @param rcon A REDCap connection object exposing project information,
+#' @param rcon A `redcapAPI` connection inheriting from
+#'   `redcapApiConnection`, as created by [redcapAPI::redcapConnection()], or
+#'   `redcapOfflineConnection`, as created by [redcapAPI::offlineConnection()]
+#'   or [redcapAPI::readPreservedProject()]. It must expose project information,
 #'   metadata, instruments, and applicable arms, events, mappings, and repeat
 #'   configuration. A missing repeat configuration surface is an error; an
 #'   explicit empty surface represents a project with no repeats. Constructors
@@ -25,11 +28,11 @@
 #'   arm; in a classic project it adds the crossing for every observed record.
 #'   `NULL` and a correctly typed empty table mean observed only planning.
 #'
-#' @section Assessible target rule:
+#' @section `assessible_targets` rule:
 #' `plan_from_data()` implements:
 #'
 #' ```text
-#' Assessible targets =
+#' assessible_targets =
 #'   crossings allowed by rcon
 #'   INTERSECT
 #'   (crossings observed in data UNION extended_schedule crossings)
@@ -187,14 +190,14 @@ plan_from_data <- function(data, rcon, instruments, extended_schedule = NULL) {
 #' @param explicit_schedule A data frame with exactly the columns `record_id`,
 #'   `instrument`, `redcap_event_name`, and `repeat_instance`, in that order.
 #'   An absent row means do not assess that crossing. A correctly typed empty
-#'   schedule creates a valid plan with no Assessible targets. `NULL` and an
+#'   schedule creates a valid plan with no `assessible_targets` rows. `NULL` and an
 #'   omitted argument are errors.
 #'
-#' @section Assessible target rule:
+#' @section `assessible_targets` rule:
 #' `plan_explicit()` implements:
 #'
 #' ```text
-#' Assessible targets =
+#' assessible_targets =
 #'   crossings allowed by rcon
 #'   INTERSECT
 #'   explicit_schedule crossings
@@ -265,8 +268,8 @@ plan_explicit <- function(data, rcon, instruments, explicit_schedule) {
 #' Print a REDCap missingness assessment plan
 #'
 #' The display contains the construction type, number of selected instruments,
-#' and number of Assessible targets. Record IDs and individual targets remain in
-#' `x$assessible_targets`.
+#' and number of `assessible_targets` rows. Record IDs and individual targets
+#' remain in `x$assessible_targets`.
 #'
 #' @param x A `redcapmissing_plan` object.
 #' @param ... Unused.

@@ -15,7 +15,6 @@ physical rows, instrument start, and field completeness for those
 combinations.
 
 <p align="center">
-
 <img src="man/figures/logo.svg" width="160" alt="redcapmissing hex logo" />
 </p>
 
@@ -28,13 +27,72 @@ combinations.
 pak::pak("blankuzr/redcapmissing")
 ```
 
-## Prepare the connection and records
+## First success with a synthetic offline project
 
-The examples assume that `rcon` is a `redcapAPI::redcapConnection()`
-that can read the project structure and records used below.
-`instruments` is a character vector of raw REDCap instrument names. Keep
-API tokens outside source files, console output, reports, and saved R
-objects.
+This credential-free example uses a `redcapOfflineConnection` and a
+small synthetic classic project to construct, run, and inspect a plan.
+
+``` r
+library(redcapmissing)
+
+metadata <- data.frame(
+  field_name = c("record_id", "started", "value"),
+  form_name = "baseline",
+  field_type = "text",
+  field_label = c("Record ID", "Started", "Value"),
+  required_field = c("y", "", "y")
+)
+project_info <- data.frame(
+  project_id = "1",
+  is_longitudinal = "0",
+  has_repeating_instruments_or_events = "0"
+)
+rcon <- suppressWarnings(redcapAPI::offlineConnection(
+  meta_data = metadata,
+  project_info = project_info,
+  repeat_instrument = redcapAPI::REDCAP_REPEAT_INSTRUMENT_STRUCTURE
+))
+records <- data.frame(
+  record_id = c("1", "2"),
+  started = c("yes", "yes"),
+  value = c("complete", "")
+)
+
+plan <- plan_from_data(records, rcon, "baseline")
+report <- run_plan(plan, records, rcon, progress = FALSE)
+knitr::kable(
+  get_summary(report)[, c("validation_check", "status", "failed")]
+)
+```
+
+| validation_check            | status         | failed |
+|:----------------------------|:---------------|-------:|
+| event-row-started           | not applicable |      0 |
+| repeat-instance-row-started | not applicable |      0 |
+| instrument-started          | assessed       |      0 |
+| field-complete              | assessed       |      1 |
+
+``` r
+knitr::kable(
+  get_missing(report)[, c("record_id", "validation_check", "field_name")]
+)
+```
+
+| record_id | validation_check | field_name |
+|:----------|:-----------------|:-----------|
+| 2         | field-complete   | value      |
+
+Both records start the instrument; record `2` then fails
+`field-complete` because its required `value` field is blank.
+
+## Prepare a live connection and records
+
+Supported `rcon` objects inherit from `redcapApiConnection`, returned by
+`redcapAPI::redcapConnection()`, or `redcapOfflineConnection`, returned
+by `redcapAPI::offlineConnection()` or
+`redcapAPI::readPreservedProject()`. `instruments` is a character vector
+of raw REDCap instrument names. Keep API tokens outside source files,
+console output, reports, and saved R objects.
 
 ``` r
 library(redcapmissing)
@@ -108,7 +166,7 @@ an absent classic target with `repeat_instance = NA_integer_` has both
 row checks marked `"not applicable"` and fails `instrument-started`.
 
 Both constructors return a `redcapmissing_plan`. The plan contains the
-selected instruments, Assessible targets, project identity, project
+selected instruments, `assessible_targets`, project identity, project
 structure fingerprint, construction value, and schema version. Source
 records and `rcon` remain outside the plan.
 
@@ -137,13 +195,13 @@ other than the record ID field and fields of type `descriptive` or
 `calc`. Checkbox roots require at least one selected exported child
 column. This detection set is independent of `required_fields`,
 `exclude_types`, and `ignore_fields`. Those three arguments affect
-`field-complete`, in that order. When they leave zero assessible fields,
-`field-complete` has status `"not applicable"` and reason
-`"no assessible fields after field policy"`.
+`field-complete`, in that order. When no fields remain, `field-complete`
+has status `"not applicable"` and reason
+`"no fields remain after field policy"`.
 
 `run_plan()` accepts a newer record export when the REDCap project
 structure matches the stored fingerprint. The plan continues to supply
-its Assessible targets.
+its `assessible_targets`.
 
 ### Verified field failures
 
@@ -169,10 +227,15 @@ applied results.
 ## 3. Inspect results
 
 ``` r
+registry()
 get_summary(report)
 get_missing(report, validation_check = "field-complete")
 get_summary(report, instruments = instruments)
 ```
+
+`registry()` documents the exact check codes, report levels, assessment
+order, presentation labels, and pass conditions used throughout the
+package.
 
 The result contains `plan`, `target_results`, `summary`, `missing`,
 `verification`, `diagnostics`, and `details`. Structural absence uses

@@ -13,7 +13,7 @@ summary_report_fixture <- function() {
       "field-complete"
     ),
     status = c("assessed", "not applicable", "assessed", "assessed"),
-    reason = c(NA_character_, "no assessible fields after field policy", NA_character_, NA_character_),
+    reason = c(NA_character_, "no fields remain after field policy", NA_character_, NA_character_),
     assessed = c(2L, 0L, 2L, 1L),
     passed = c(2L, 0L, 1L, 1L),
     failed = c(0L, 0L, 1L, 0L),
@@ -61,7 +61,7 @@ test_that("get_summary exposes the exact typed plan and run schema", {
     unname(vapply(result, typeof, character(1))),
     c(rep("character", 3), "integer", rep("character", 4), rep("integer", 3), rep("double", 2))
   )
-  expect_identical(result$reason[[2]], "no assessible fields after field policy")
+  expect_identical(result$reason[[2]], "no fields remain after field policy")
   expect_true(is.na(result$pass_rate[[2]]))
   expect_identical(
     attr(result, "redcapmissing_labels"),

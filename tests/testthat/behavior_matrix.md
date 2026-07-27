@@ -14,6 +14,8 @@ Each row names the source of executable evidence.
 | API-05 | Errors use the argument, schema, project, schedule, plan, and verification subclasses of `redcapmissing_error`. | `test-assessment-plan.R`, `test-run-plan.R`, `test-run-plan-verified.R` |
 | API-06 | An extension into an arm with zero observed records uses `redcapmissing_warning_empty_arm_extension`. | `test-assessment-plan.R` |
 | API-07 | `print(registry())` displays every validation check in full and returns its input invisibly with class unchanged. | `test-registry.R` |
+| API-08 | `registry()` returns exactly `validation_order`, `validation_level`, `validation_check`, `flex_label`, and `description` with the documented storage. | `test-registry.R` |
+| API-09 | `description` contains the concise pass condition for each assessed check, and `print(registry())` displays those values under `condition` without truncation. | `test-registry.R` |
 
 ## Plan objects and project structure
 
@@ -30,7 +32,8 @@ Each row names the source of executable evidence.
 | PLAN-09 | Plan validation rejects changed classes, components, schema versions, targets, sources, project values, and fingerprints. | `test-assessment-plan.R` |
 | PLAN-10 | Constructors retrieve each required connection surface once and make zero record export calls. | `test-assessment-plan.R` |
 | PLAN-11 | Missing project structure, including repeat configuration, raises a project error. | `test-assessment-plan.R` |
-| PLAN-12 | A `redcapAPI::offlineConnection()` can construct and run a classic project plan. | `test-redcapapi-integration.R` |
+| PLAN-12 | A genuine `redcapOfflineConnection` can construct and run a classic project plan. | `test-redcapapi-integration.R` |
+| PLAN-13 | Constructors reject `rcon` objects that inherit from neither `redcapApiConnection` nor `redcapOfflineConnection`. | `test-assessment-plan.R` |
 
 ## Structural values
 

@@ -7,7 +7,7 @@ flexify_summary_fixture <- function() {
     validation_level = "event:instrument",
     validation_check = "field-complete",
     status = "not applicable",
-    reason = "no assessible fields after field policy",
+    reason = "no fields remain after field policy",
     assessed = 0L,
     passed = 0L,
     failed = 0L,

@@ -30,10 +30,13 @@ columns must use ordinary atomic vector storage. A correctly structured
 empty data frame is allowed. Plan targets stay fixed when \code{data} contains
 additional rows; absent planned rows remain targets and follow the checks below.}
 
-\item{rcon}{The REDCap connection object for the same unchanged project
-structure as \code{plan}. It must expose project identity, longitudinal status,
-metadata, instruments, repeat configuration, and, for longitudinal
-projects, arms, events, and instrument to event mappings.}
+\item{rcon}{A \code{redcapAPI} connection inheriting from
+\code{redcapApiConnection}, as created by \code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, or
+\code{redcapOfflineConnection}, as created by \code{\link[redcapAPI:offlineConnection]{redcapAPI::offlineConnection()}}
+or \code{\link[redcapAPI:readPreservedProject]{redcapAPI::readPreservedProject()}}. It must represent the same
+unchanged project structure as \code{plan} and expose project identity,
+longitudinal status, metadata, instruments, repeat configuration, and, for
+longitudinal projects, arms, events, and instrument to event mappings.}
 
 \item{required_fields}{One nonmissing logical value. \code{TRUE} limits
 field-complete assessment to fields marked required in REDCap metadata;
@@ -75,7 +78,7 @@ interactive progress bar. Progress cleanup is registered on exit.}
 A \code{redcapmissing} object as described in \strong{Return value}.
 }
 \description{
-\code{run_plan()} evaluates the Assessible targets stored in a
+\code{run_plan()} evaluates the \code{assessible_targets} stored in a
 \code{\link[=plan_from_data]{plan_from_data()}} or \code{\link[=plan_explicit]{plan_explicit()}} result against supplied REDCap data.
 Target rows come from \code{plan$assessible_targets}.
 }
@@ -87,7 +90,7 @@ Target rows come from \code{plan$assessible_targets}.
 \item Validate and normalize verification.
 \item Resolve instrument-start fields.
 \item Resolve field-complete fields.
-\item Join Assessible targets to physical rows.
+\item Join assessible_targets to physical rows.
 \item Run \code{event-row-started}.
 \item Run \code{repeat-instance-row-started}.
 \item Run \code{instrument-started}.
@@ -143,7 +146,7 @@ supplies targets, physical rows supply the two row checks, and the independent
 detection set supplies \code{instrument-started}. An optional, ignored, or excluded
 type field may establish that an instrument started. If no fields remain,
 \code{field-complete} is \code{"not applicable"}, its reason is
-\code{"no assessible fields after field policy"}, its counts are zero, and its
+\code{"no fields remain after field policy"}, its counts are zero, and its
 rates are \code{NA_real_}.
 
 Branching logic is evaluated in the target's exact event/repeat context,
@@ -193,7 +196,7 @@ username or status filtering:\tabular{lll}{
 
 
 Inapplicable repeat and event dimensions must normalize to typed missing values;
-applicable dimensions must exactly match an Assessible target. \code{NaN},
+applicable dimensions must exactly match an \code{assessible_targets} row. \code{NaN},
 infinity, padded identifiers, invalid timestamps, unknown project/event/field
 contexts, illegal repeat shapes, and verification contexts outside the plan
 are errors.
@@ -215,7 +218,7 @@ A \code{redcapmissing} object with exactly \code{plan}, \code{target_results}, \
 \code{missing}, \code{verification}, \code{diagnostics}, and \code{details}. The stored components
 exclude source \code{data}, raw \code{verified}, tokens, and the live connection.
 
-\code{target_results} has one row per Assessible target and exactly:\tabular{ll}{
+\code{target_results} has one row per \code{assessible_targets} row and exactly:\tabular{ll}{
    Columns \tab Storage \cr
    \code{record_id}, \code{instrument}, \code{redcap_event_name}, \code{repeat_instrument}, \code{target_source} \tab Character \cr
    \code{repeat_instance}, \code{fields_assessed}, \code{fields_failed} \tab Integer \cr
@@ -271,8 +274,8 @@ eligible verification override. \code{verification_applied} is \code{TRUE} exact
 an overridden field row.
 
 \code{target_results$field_applicability_reason} is either typed missing,
-\code{"no assessible fields after field policy"}, or
-\code{"no assessible fields after branching logic"}. The \code{details$reason} column
+\code{"no fields remain after field policy"}, or
+\code{"no fields apply after branching logic"}. The \code{details$reason} column
 explains a target level check that is not applicable, using
 \code{"not applicable for classic project"}, \code{"not a repeating target"}, or one
 of those two exact field reasons. \code{summary$reason} carries the corresponding

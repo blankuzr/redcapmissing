@@ -1,38 +1,41 @@
-#' Inspect the redcapmissing validation registry
+#' Inspect validation checks and report metadata
 #'
-#' `registry()` returns the public validation taxonomy used by [run_plan()]. It
-#' defines the check codes, display labels, assessment order, and
-#' downstream gating metadata used by accessors and formatters.
+#' `registry()` returns the four validation checks used by [run_plan()] and the
+#' report metadata associated with each check. The returned columns identify
+#' assessment order, validation level, validation check code, [flexify()] label,
+#' and concise pass condition.
 #'
 #' @details
-#' The four validation check codes, in assessment order, are:
+#' The four `validation_check` values, in `validation_order`, are:
 #'
-#' 1. `"event-row-started"`: a physical row exists for the record and event;
-#' 2. `"repeat-instance-row-started"`: the exact repeating physical row exists;
-#' 3. `"instrument-started"`: an ordinary detection field has a present
-#'    response or a checkbox detection field has a selected child; and
-#' 4. `"field-complete"`: every applicable field selected by policy is complete.
+#' 1. `"event-row-started"`;
+#' 2. `"repeat-instance-row-started"`;
+#' 3. `"instrument-started"`; and
+#' 4. `"field-complete"`.
 #'
-#' Report rows use validation levels `"event:instrument"` and
-#' `"event:instrument:instance"`, selected from the target's repeat context.
-#' Applicable failed upstream checks gate downstream assessment. See
-#' [run_plan()] for event checks in classic projects, repeat instance checks
-#' when `repeat_instance = NA_integer_`, and the exact field policy.
+#' Report rows use `validation_level = "event:instrument"` when a target has no
+#' repeat instance and `"event:instrument:instance"` when it has a repeat
+#' instance. See [run_plan()] for when each check is assessed, marked
+#' `"not applicable"`, or marked `"not reached"`, and for field selection,
+#' branching logic, missing responses, and verification overrides.
 #'
-#' @return A tibble with class `redcapmissing_registry` and one row per
-#'   validation check and validation level combination. It contains integer
-#'   `validation_order` and
-#'   `downstream_order`; character `validation_level`, `validation_check`,
-#'   `validation_label`, `flex_label`, `description`, `r_identifier`,
-#'   `component_stem`, and `step_suffix`; and logical `gates_downstream`.
-#'   `validation_check` is the stable public code used by [get_summary()] and
-#'   [get_missing()]. Public filters use these `validation_check` values; R
-#'   compatible stems are internal metadata.
+#' @return A tibble with class `redcapmissing_registry`, eight rows, and exactly
+#'   these columns:
+#'
+#' | Column | Storage | What it refers to |
+#' |---|---|---|
+#' | `validation_order` | Integer | The order in which [run_plan()] evaluates the check |
+#' | `validation_level` | Character | The value stored in report rows: `"event:instrument"` or `"event:instrument:instance"` |
+#' | `validation_check` | Character | The check code stored in report rows and accepted by the [get_summary()] and [get_missing()] filters |
+#' | `flex_label` | Character | The label used by [flexify()] |
+#' | `description` | Character | For an assessed check, the condition that makes the check pass; this is also the condition shown by `print(registry())` |
+#'
+#' Each validation check has one row for each validation level.
 #'
 #' @examples
 #' registry()
 #'
-#' @seealso [run_plan()], [get_summary()], [get_missing()]
+#' @seealso [run_plan()], [get_summary()], [get_missing()], [flexify()]
 #'
 #' @export
 registry <- function() {
@@ -94,13 +97,11 @@ print.redcapmissing_registry <- function(x, ...) {
   )
   data <- tibble::tibble(
     validation_order = rep(1:4, each = 2L),
-    downstream_order = rep(1:4, each = 2L),
     validation_level = rep(
       c("event:instrument", "event:instrument:instance"),
       times = 4L
     ),
     validation_check = rep(checks, each = 2L),
-    validation_label = rep(checks, each = 2L),
     flex_label = rep(c(
       "Event row started",
       "Repeat instance row started",
@@ -108,26 +109,18 @@ print.redcapmissing_registry <- function(x, ...) {
       "Field complete"
     ), each = 2L),
     description = rep(c(
-      "The expected REDCap event row exists in the export.",
-      "The expected REDCap repeat instance row exists in the export.",
-      paste("An ordinary detection response is present or a checkbox detection",
-            "field has a selected child."),
-      "Every applicable ordinary field has a present response or eligible verification override, and every applicable checkbox has a selected child or eligible verification override."
-    ), each = 2L),
-    r_identifier = rep(c(
-      "event_row_started",
-      "repeat_instance_row_started",
-      "instrument_started",
-      "field_complete"
-    ), each = 2L),
-    component_stem = rep(c(
-      "event_row_started",
-      "repeat_instance_row_started",
-      "instrument_started",
-      "field_complete"
-    ), each = 2L),
-    step_suffix = rep(checks, each = 2L),
-    gates_downstream = rep(TRUE, 8L)
+      paste("At least one physical row exists in the export for the target",
+            "record and event."),
+      paste("The exact physical row exists in the export for the target record,",
+            "event, repeat instrument, and repeat instance."),
+      paste("The exact target row exists, and at least one ordinary detection",
+            "field has a present response or one checkbox detection field has",
+            "a selected child."),
+      paste("Every field selected by field policy and branching logic is",
+            "complete: each ordinary field has a present response or eligible",
+            "verification override, and each checkbox has a selected child or",
+            "eligible verification override.")
+    ), each = 2L)
   )
   function() data
 })
@@ -160,38 +153,6 @@ print.redcapmissing_registry <- function(x, ...) {
   unique(.redcapmissing_registry_data()$validation_check)
 }
 
-.redcapmissing_on_route_checks <- function() {
-  registry <- .redcapmissing_registry_data()
-  unique(registry$validation_check[registry$gates_downstream])
-}
-
-.redcapmissing_validation_metadata <- function(
-  validation_check,
-  n,
-  repeat_instance = NULL
-) {
-  registry <- .redcapmissing_registry_data()
-  registry <- registry[!duplicated(registry$validation_check), , drop = FALSE]
-  check_i <- match(validation_check, registry$validation_check)
-  if (length(check_i) != 1L || is.na(check_i)) {
-    stop(
-      "Unknown validation check `",
-      validation_check,
-      "`.",
-      call. = FALSE
-    )
-  }
-  check <- registry$validation_check[[check_i]]
-  label <- registry$validation_label[[check_i]]
-  tibble::new_tibble(list(
-    validation_level = .redcapmissing_context_validation_level(
-      validation_check = rep(check, n),
-      repeat_instance = repeat_instance %||% rep("", n)
-    ),
-    validation_check = rep(check, n),
-    validation_label = rep(label, n)
-  ), nrow = n)
-}
 
 .redcapmissing_context_validation_level <- function(
   validation_check,
@@ -223,20 +184,19 @@ print.redcapmissing_registry <- function(x, ...) {
 
 .redcapmissing_registry_print_table <- function(x, stream = stdout()) {
   x <- x[order(x$validation_order, x$validation_level), , drop = FALSE]
-  meanings <- vapply(
-    x$validation_check,
-    .redcapmissing_registry_print_meaning,
-    character(1)
-  )
   display_width <- function(header, values) {
     max(nchar(c(header, as.character(values)), type = "width"), na.rm = TRUE)
   }
-  widths <- c(
+  fixed_widths <- c(
     display_width("level", x$validation_level),
-    display_width("check", x$validation_check),
-    display_width("meaning", meanings)
+    display_width("check", x$validation_check)
   )
-  names(widths) <- c("level", "check", "meaning")
+  condition_width <- max(
+    30L,
+    min(72L, getOption("width", 80L) - sum(fixed_widths) - 10L)
+  )
+  widths <- c(fixed_widths, condition_width)
+  names(widths) <- c("level", "check", "condition")
 
   cli::cat_line(
     .redcapmissing_registry_style("border")(.redcapmissing_registry_rule(widths)),
@@ -252,15 +212,28 @@ print.redcapmissing_registry <- function(x, ...) {
   )
 
   for (row in seq_len(nrow(x))) {
-    values <- c(
-      x$validation_level[[row]],
-      x$validation_check[[row]],
-      .redcapmissing_registry_print_meaning(x$validation_check[[row]])
+    condition_lines <- strwrap(
+      as.character(x$description[[row]]),
+      width = widths[["condition"]]
     )
-    cli::cat_line(
-      .redcapmissing_registry_print_row(values, widths, record = x[row, , drop = FALSE]),
-      file = stream
-    )
+    if (!length(condition_lines)) {
+      condition_lines <- ""
+    }
+    for (line in seq_along(condition_lines)) {
+      values <- c(
+        if (line == 1L) x$validation_level[[row]] else "",
+        if (line == 1L) x$validation_check[[row]] else "",
+        condition_lines[[line]]
+      )
+      cli::cat_line(
+        .redcapmissing_registry_print_row(
+          values,
+          widths,
+          record = x[row, , drop = FALSE]
+        ),
+        file = stream
+      )
+    }
   }
 
   cli::cat_line(
@@ -307,7 +280,7 @@ print.redcapmissing_registry <- function(x, ...) {
     column,
     "level" = .redcapmissing_registry_level_color(record$validation_level, value),
     "check" = cli::col_cyan(value),
-    "meaning" = .redcapmissing_registry_style("text")(value),
+    "condition" = .redcapmissing_registry_style("text")(value),
     value
   )
 }
@@ -322,19 +295,6 @@ print.redcapmissing_registry <- function(x, ...) {
   )
 }
 
-.redcapmissing_registry_gate_color <- function(gates_downstream, value) {
-  if (isTRUE(gates_downstream)) {
-    return(cli::col_green(value))
-  }
-  cli::col_yellow(value)
-}
-
-.redcapmissing_registry_gate_label <- function(gates_downstream) {
-  if (isTRUE(gates_downstream)) {
-    return(paste(cli::symbol$tick, "gates"))
-  }
-  paste(cli::symbol$bullet, "report")
-}
 
 .redcapmissing_registry_style <- function(element) {
   switch(
@@ -344,24 +304,10 @@ print.redcapmissing_registry <- function(x, ...) {
     "muted" = cli::make_ansi_style("#94a3b8"),
     "text" = cli::make_ansi_style("#e5e7eb"),
     "level" = cli::make_ansi_style("#60a5fa"),
-    "on_route" = cli::make_ansi_style("#22c55e"),
     identity
   )
 }
 
-.redcapmissing_registry_print_meaning <- function(validation_check) {
-  switch(
-    validation_check,
-    "event-row-started" = "event row exists",
-    "repeat-instance-row-started" = "repeat instance row exists",
-    "instrument-started" = "ordinary response present or checkbox child selected",
-    "field-complete" = paste(
-      "ordinary response present; checkbox child selected;",
-      "eligible verification may override a failure"
-    ),
-    validation_check
-  )
-}
 
 .redcapmissing_pad <- function(value, width) {
   value <- as.character(value)

@@ -1,6 +1,6 @@
 #' Run a REDCap missingness assessment plan
 #'
-#' `run_plan()` evaluates the Assessible targets stored in a
+#' `run_plan()` evaluates the `assessible_targets` stored in a
 #' [plan_from_data()] or [plan_explicit()] result against supplied REDCap data.
 #' Target rows come from `plan$assessible_targets`.
 #'
@@ -14,10 +14,13 @@
 #'   columns must use ordinary atomic vector storage. A correctly structured
 #'   empty data frame is allowed. Plan targets stay fixed when `data` contains
 #'   additional rows; absent planned rows remain targets and follow the checks below.
-#' @param rcon The REDCap connection object for the same unchanged project
-#'   structure as `plan`. It must expose project identity, longitudinal status,
-#'   metadata, instruments, repeat configuration, and, for longitudinal
-#'   projects, arms, events, and instrument to event mappings.
+#' @param rcon A `redcapAPI` connection inheriting from
+#'   `redcapApiConnection`, as created by [redcapAPI::redcapConnection()], or
+#'   `redcapOfflineConnection`, as created by [redcapAPI::offlineConnection()]
+#'   or [redcapAPI::readPreservedProject()]. It must represent the same
+#'   unchanged project structure as `plan` and expose project identity,
+#'   longitudinal status, metadata, instruments, repeat configuration, and, for
+#'   longitudinal projects, arms, events, and instrument to event mappings.
 #' @param required_fields One nonmissing logical value. `TRUE` limits
 #'   field-complete assessment to fields marked required in REDCap metadata;
 #'   `FALSE` retains required and optional fields before the remaining policy
@@ -55,7 +58,7 @@
 #' 2. Validate and normalize verification.
 #' 3. Resolve instrument-start fields.
 #' 4. Resolve field-complete fields.
-#' 5. Join Assessible targets to physical rows.
+#' 5. Join assessible_targets to physical rows.
 #' 6. Run `event-row-started`.
 #' 7. Run `repeat-instance-row-started`.
 #' 8. Run `instrument-started`.
@@ -107,7 +110,7 @@
 #' detection set supplies `instrument-started`. An optional, ignored, or excluded
 #' type field may establish that an instrument started. If no fields remain,
 #' `field-complete` is `"not applicable"`, its reason is
-#' `"no assessible fields after field policy"`, its counts are zero, and its
+#' `"no fields remain after field policy"`, its counts are zero, and its
 #' rates are `NA_real_`.
 #'
 #' Branching logic is evaluated in the target's exact event/repeat context,
@@ -153,7 +156,7 @@
 #' | `username` | Character; nonmissing, nonblank, unpadded, case sensitive | Character |
 #'
 #' Inapplicable repeat and event dimensions must normalize to typed missing values;
-#' applicable dimensions must exactly match an Assessible target. `NaN`,
+#' applicable dimensions must exactly match an `assessible_targets` row. `NaN`,
 #' infinity, padded identifiers, invalid timestamps, unknown project/event/field
 #' contexts, illegal repeat shapes, and verification contexts outside the plan
 #' are errors.
@@ -173,7 +176,7 @@
 #' `missing`, `verification`, `diagnostics`, and `details`. The stored components
 #' exclude source `data`, raw `verified`, tokens, and the live connection.
 #'
-#' `target_results` has one row per Assessible target and exactly:
+#' `target_results` has one row per `assessible_targets` row and exactly:
 #'
 #' | Columns | Storage |
 #' |---|---|
@@ -229,8 +232,8 @@
 #' an overridden field row.
 #'
 #' `target_results$field_applicability_reason` is either typed missing,
-#' `"no assessible fields after field policy"`, or
-#' `"no assessible fields after branching logic"`. The `details$reason` column
+#' `"no fields remain after field policy"`, or
+#' `"no fields apply after branching logic"`. The `details$reason` column
 #' explains a target level check that is not applicable, using
 #' `"not applicable for classic project"`, `"not a repeating target"`, or one
 #' of those two exact field reasons. `summary$reason` carries the corresponding
@@ -280,7 +283,7 @@ run_plan <- function(
     "Validate and normalize verification",
     "Resolve instrument-start fields",
     "Resolve field-complete fields",
-    "Join Assessible targets to physical rows",
+    "Join assessible_targets to physical rows",
     "Run event-row-started",
     "Run repeat-instance-row-started",
     "Run instrument-started",
@@ -847,7 +850,7 @@ run_plan <- function(
     instrument_fields <- field_plan$rows[[instrument]]
     if (!nrow(instrument_fields)) {
       field_status[active_targets] <- "not applicable"
-      field_reason[active_targets] <- "no assessible fields after field policy"
+      field_reason[active_targets] <- "no fields remain after field policy"
       next
     }
 
@@ -972,7 +975,7 @@ run_plan <- function(
     )
     not_applicable <- active_targets[!assessed]
     field_status[not_applicable] <- "not applicable"
-    field_reason[not_applicable] <- "no assessible fields after branching logic"
+    field_reason[not_applicable] <- "no fields apply after branching logic"
   }
 
   field_rows <- if (!piece_n) {
