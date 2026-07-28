@@ -18,6 +18,7 @@ test_that("flex_html renders formatted summary HTML when optional packages are a
   html_out <- flex_html(flexify(get_summary(report)))
 
   expect_type(html_out, "character")
+  expect_length(html_out, 1L)
   expect_true(nchar(html_out) > 0)
 })
 
@@ -65,6 +66,7 @@ test_that("flex_html renders formatted missing rows for multiple instruments", {
   html_out <- flex_html(flexify(get_missing(report)))
 
   expect_type(html_out, "character")
+  expect_length(html_out, 1L)
   expect_true(grepl("Alpha instrument", html_out, fixed = TRUE))
   expect_true(grepl("Beta instrument", html_out, fixed = TRUE))
 })

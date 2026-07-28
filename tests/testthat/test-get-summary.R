@@ -91,6 +91,54 @@ test_that("get_summary filters by checks, events, and instruments", {
   expect_error(get_summary(report, validation_check = "form-started"), "Unknown `validation_check`")
 })
 
+test_that("get_summary normalizes duplicate filters without reordering rows", {
+  report <- summary_report_fixture()
+  original <- report
+  result <- get_summary(
+    report,
+    validation_check = c(
+      "field-complete", "event-row-started", "field-complete"
+    ),
+    events = c(
+      "followup_event", "baseline_event", "followup_event"
+    ),
+    instruments = c("alpha", "alpha")
+  )
+
+  expect_identical(
+    result$validation_check,
+    c("event-row-started", "field-complete")
+  )
+  expect_identical(
+    result$redcap_event_name,
+    c("baseline_event", "followup_event")
+  )
+  expect_identical(report, original)
+  expect_error(
+    get_summary(report, validation_check = "Field-complete"),
+    "Unknown `validation_check`"
+  )
+})
+
+test_that("get_summary empty intersections retain types and labels", {
+  report <- summary_report_fixture()
+  result <- get_summary(report, instruments = "unrepresented")
+
+  expect_identical(nrow(result), 0L)
+  expect_identical(names(result), .summary_list_columns())
+  expect_identical(
+    unname(vapply(result, typeof, character(1))),
+    c(
+      rep("character", 3), "integer", rep("character", 4),
+      rep("integer", 3), rep("double", 2)
+    )
+  )
+  expect_identical(
+    attr(result, "redcapmissing_labels"),
+    attr(get_summary(report), "redcapmissing_labels")
+  )
+})
+
 test_that("get_summary rejects malformed stored summaries", {
   report <- summary_report_fixture()
   report$summary$repeat_instance <- as.character(report$summary$repeat_instance)

@@ -47,6 +47,30 @@ test_that("exact latest VERIFIED evidence overrides only a failed field check", 
   expect_identical(field$effective_disposition, "passed")
   expect_identical(result$verification$overrides_applied, 1L)
   expect_identical(result$target_results$field_complete, "passed")
+  field_summary <- result$summary[
+    result$summary$validation_check == "field-complete",
+  ]
+  expect_identical(
+    field_summary[c(
+      "status", "reason", "assessed", "passed", "failed",
+      "pass_rate", "fail_rate"
+    )],
+    tibble::tibble(
+      status = "assessed",
+      reason = NA_character_,
+      assessed = 1L,
+      passed = 1L,
+      failed = 0L,
+      pass_rate = 1,
+      fail_rate = 0
+    )
+  )
+  expect_false(any(result$missing$field_name == "required_note", na.rm = TRUE))
+  expect_false(any(
+    get_missing(result)$field_name == "required_note",
+    na.rm = TRUE
+  ))
+  expect_identical(field$reason, NA_character_)
 })
 
 test_that("verification results agree across detail settings", {
@@ -133,7 +157,17 @@ test_that("all verification rows are validated before user filtering", {
 test_that("a complete empty verification template is valid and audited", {
   rcon <- run_plan_rcon(); data <- run_plan_data()
   plan <- plan_from_data(data, rcon, "baseline_form")
-  template <- run_plan_verified_row()[0, ]
+  template <- tibble::tibble(
+    project_id = logical(),
+    record = integer(),
+    event_id = as.Date(character()),
+    field_name = complex(),
+    repeat_instrument = list(),
+    instance = raw(),
+    ts = as.POSIXct(character(), tz = "UTC"),
+    current_query_status = factor(),
+    username = double()
+  )
   expect_silent(
     result <- run_plan(
       plan,

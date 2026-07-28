@@ -580,20 +580,79 @@ test_that("nullable structural dimensions accept every typed NA representation",
     declared <- plan_explicit(data, rcon, "demographics", explicit)
     expect_identical(declared$assessible_targets$target_source, "explicit")
   }
-  invalid_event <- tibble::tibble(record_id = "r1", redcap_event_name = 1)
-  expect_error(
-    plan_from_data(invalid_event, rcon, "demographics"),
-    class = "redcapmissing_error_schema"
+
+  all_missing_atomic <- list(
+    logical = c(NA, NA),
+    character = c(NA_character_, NA_character_),
+    integer = c(NA_integer_, NA_integer_),
+    double = c(NA_real_, NA_real_),
+    complex = c(NA_complex_, NA_complex_)
   )
-  invalid_instance <- tibble::tibble(
-    record_id = "r1",
-    redcap_repeat_instrument = NA_character_,
-    redcap_repeat_instance = NaN
+  for (storage in all_missing_atomic) {
+    data <- tibble::tibble(
+      record_id = c("r1", "r2"),
+      redcap_event_name = storage,
+      redcap_repeat_instrument = storage,
+      redcap_repeat_instance = c(NA_integer_, NA_integer_)
+    )
+    plan <- plan_from_data(data, rcon, "demographics")
+    expect_identical(
+      plan$assessible_targets$redcap_event_name,
+      c(NA_character_, NA_character_)
+    )
+    expect_identical(
+      plan$assessible_targets$repeat_instrument,
+      c(NA_character_, NA_character_)
+    )
+  }
+
+  rejected_nullable_values <- list(
+    nonmissing_number = 1,
+    date = as.Date(NA_character_),
+    timestamp = as.POSIXct(NA_character_, tz = "UTC"),
+    nan = NaN
   )
-  expect_error(
-    plan_from_data(invalid_instance, rcon, "demographics"),
-    class = "redcapmissing_error_schema"
-  )
+  for (value in rejected_nullable_values) {
+    expect_error(
+      plan_from_data(
+        tibble::tibble(record_id = "r1", redcap_event_name = value),
+        rcon,
+        "demographics"
+      ),
+      class = "redcapmissing_error_schema"
+    )
+    expect_error(
+      plan_from_data(
+        tibble::tibble(
+          record_id = "r1",
+          redcap_repeat_instrument = value,
+          redcap_repeat_instance = NA_integer_
+        ),
+        rcon,
+        "demographics"
+      ),
+      class = "redcapmissing_error_schema"
+    )
+  }
+
+  for (value in list(
+    as.Date(NA_character_),
+    as.POSIXct(NA_character_, tz = "UTC"),
+    NaN
+  )) {
+    expect_error(
+      plan_from_data(
+        tibble::tibble(
+          record_id = "r1",
+          redcap_repeat_instrument = NA_character_,
+          redcap_repeat_instance = value
+        ),
+        rcon,
+        "demographics"
+      ),
+      class = "redcapmissing_error_schema"
+    )
+  }
 })
 
 test_that("required constructor arguments and instrument vectors fail with classed errors", {

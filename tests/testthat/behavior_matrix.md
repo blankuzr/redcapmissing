@@ -1,143 +1,109 @@
-# `redcapmissing` 7.0.0 behavior matrix
+# `redcapmissing` 7.0.0 documentation-to-test matrix
 
-This index links package behavior to the test files and commands that check it.
-Each row names the source of executable evidence.
+This index treats authored package documentation as the behavioral authority.
+Each row identifies one public contract, its canonical package-facing section,
+and the exact `test_that()` block that supplies executable evidence. Test block
+names are quoted exactly so a failing contract can be located without relying
+on a broad file-level claim.
 
-## Exported functions, classes, and names
+## Public API, classes, and registry
 
-| ID | Behavior checked | Evidence |
-|---|---|---|
-| API-01 | `plan_from_data()`, `plan_explicit()`, and `run_plan()` have the documented arguments and defaults. | `test-assessment-plan.R`, `test-run-plan.R` |
-| API-02 | Validation checks are `event-row-started`, `repeat-instance-row-started`, `instrument-started`, and `field-complete`. | `test-registry.R` |
-| API-03 | Report columns, filters, labels, headings, and metrics use `instrument` or `instruments`. | `test-get-summary.R`, `test-get-missing.R`, `test-flexify.R`, `test-flex-event-instruments.R` |
-| API-04 | `find_missing()` and `flex_event_forms()` are absent from the exports. | `test-registry.R`, `test-flex-event-instruments.R` |
-| API-05 | Errors use the argument, schema, project, schedule, plan, and verification subclasses of `redcapmissing_error`. | `test-assessment-plan.R`, `test-run-plan.R`, `test-run-plan-verification.R` |
-| API-06 | An extension into an arm with zero observed records uses `redcapmissing_warning_empty_arm_extension`. | `test-assessment-plan.R` |
-| API-07 | `print(registry())` displays every validation check in full and returns its input invisibly with class unchanged. | `test-registry.R` |
-| API-08 | `registry()` returns exactly `validation_order`, `validation_level`, `validation_check`, `flex_label`, and `description` with the documented storage. | `test-registry.R` |
-| API-09 | `description` contains the concise pass condition for each assessed check, and `print(registry())` displays those values under `condition` without truncation. | `test-registry.R` |
+| ID | Contract | Canonical package surface | Exact executable evidence |
+|---|---|---|---|
+| API-01 | The export set contains exactly the nine documented 7.0.0 entry points; retired APIs are absent. | Roxygen: `R/redcapmissing-package.R` — package overview; `README.Rmd` — “Construct an assessment plan”, “Run the plan”, and “Inspect results” | `test-public-api.R` — “the public API is exactly the documented 7.0.0 surface” |
+| API-02 | Every exported function retains its documented formals and defaults. | Roxygen usage and parameter sections in `R/assessment-plan.R`, `R/run-plan.R`, `R/report-accessors.R`, `R/registry.R`, `R/flexify.R`, `R/flex-event-instruments.R`, and `R/flex-html.R` | `test-public-api.R` — “the public API is exactly the documented 7.0.0 surface” |
+| API-03 | `flex_event_instruments.redcapmissing`, `print.redcapmissing_plan`, and `print.redcapmissing_registry` are registered S3 methods, and the public formatter generic dispatches. | Roxygen: `R/flex-event-instruments.R` — “Format a REDCap missingness report by event and instrument”; `R/assessment-plan.R` — “Print a REDCap missingness assessment plan”; `R/registry.R` — “Print the validation registry” | `test-public-api.R` — “documented S3 methods are registered and public generics dispatch” |
+| API-04 | Plan and registry print methods return the input invisibly. | Roxygen return sections for `print.redcapmissing_plan()` and `print.redcapmissing_registry()` | `test-public-api.R` — “plan and registry print methods return their inputs invisibly” |
+| API-05 | The registry exposes exactly the four checks, their order, levels, labels, and concise pass conditions. | Roxygen: `R/registry.R` — “Inspect validation checks and report metadata” | `test-registry.R` — “registry returns validation check metadata”; “registry print takes conditions from description” |
+| API-06 | Public argument, schema, project, schedule, plan, and verification failures inherit from `redcapmissing_error`; empty-arm extensions use the documented warning subclass. | Roxygen: `R/assessment-plan.R` — “Conditions”; `R/run-plan.R` — “Conditions” | `test-assessment-plan.R` — “all public condition subclasses inherit from package base classes”; “extensions into an arm with no observed records warn and add no targets” |
 
-## Plan objects and project structure
+## Plan construction and structural normalization
 
-| ID | Behavior checked | Evidence |
-|---|---|---|
-| PLAN-01 | Both constructors return `redcapmissing_plan` with `schema_version`, `construction`, `instruments`, `assessible_targets`, `project`, and `structure_fingerprint`. | `test-assessment-plan.R` |
-| PLAN-02 | `construction` is `"from_data"` or `"explicit"`. | `test-assessment-plan.R` |
-| PLAN-03 | `assessible_targets` has the documented six columns and storage types. | `test-assessment-plan.R` |
-| PLAN-04 | Targets are unique on their first five columns and have stable instrument, event, record, repeat kind, and instance order. | `test-assessment-plan.R` |
-| PLAN-05 | `target_source` is `"observed"`, `"extended"`, `"observed+extended"`, or `"explicit"`. | `test-assessment-plan.R` |
-| PLAN-06 | Plans contain project identity and labels and exclude source records and a live connection. | `test-assessment-plan.R` |
-| PLAN-07 | Plan printing reports construction, instrument count, and target count while excluding record IDs. | `test-assessment-plan.R` |
-| PLAN-08 | SHA-256 fingerprints are stable when source tables have different row order and change when project structure changes. | `test-assessment-plan.R` |
-| PLAN-09 | Plan validation rejects changed classes, components, schema versions, targets, sources, project values, and fingerprints. | `test-assessment-plan.R` |
-| PLAN-10 | Constructors retrieve each required connection surface once and make zero record export calls. | `test-assessment-plan.R` |
-| PLAN-11 | Missing project structure, including repeat configuration, raises a project error. | `test-assessment-plan.R` |
-| PLAN-12 | A genuine `redcapOfflineConnection` can construct and run a classic project plan. | `test-redcapapi-integration.R` |
-| PLAN-13 | Constructors reject `rcon` objects that inherit from neither `redcapApiConnection` nor `redcapOfflineConnection`. | `test-assessment-plan.R` |
+| ID | Contract | Canonical package surface | Exact executable evidence |
+|---|---|---|---|
+| PLAN-01 | Both constructors return the exact compact `redcapmissing_plan` structure, class, component order, target schema, project labels, and construction/source values. | Roxygen: `R/assessment-plan.R` — “Returned plan”; vignette — “Plan contents” | `test-assessment-plan.R` — “plan_from_data creates an exact compact plan from physical classic rows”; “plan_explicit freezes exact targets including records absent from data”; “plan project label maps are complete and protected” |
+| PLAN-02 | Plans retain neither source records nor a live connection, and printing excludes record IDs while reporting construction and counts. | Roxygen: `R/assessment-plan.R` — “Returned plan” and “Print a REDCap missingness assessment plan”; vignette — “Plan contents” | `test-assessment-plan.R` — “plan_from_data creates an exact compact plan from physical classic rows” |
+| PLAN-03 | Target identities remain native and unique, deterministic ordering is preserved, and delimiter-like values do not collide. | Roxygen: `R/assessment-plan.R` — “Returned plan”; vignette — “Plan contents” | `test-assessment-plan.R` — “native target identities do not collide on delimiter values”; “planning materializes moderate record expansions with exact provenance” |
+| PLAN-04 | The SHA-256 fingerprint is independent of source table order and option state, distinguishes missing/structured values, and changes with project structure. | Roxygen: `R/assessment-plan.R` — “Returned plan”; vignette — “Plan contents” | `test-assessment-plan.R` — “project fingerprints are stable to table row order with explicit record identity”; “fingerprints distinguish missing values and structured delimiter values”; “numeric identifiers and fingerprints are option independent” |
+| PLAN-05 | Hand edits, malformed components, invalid target invariants, and changed project structure invalidate a plan. | Roxygen: `R/assessment-plan.R` — “Returned plan” and “Conditions” | `test-assessment-plan.R` — “plan validation rejects hand edits and changed project structure”; “plan validation rejects malformed components and target invariants” |
+| PLAN-06 | Constructors use supported `redcapAPI` connection classes, retrieve each project surface once, and never export records themselves. | Roxygen: `R/assessment-plan.R` — `rcon` parameter; vignette — “Before you begin” and “Planning functions” | `test-assessment-plan.R` — “plan constructors require supported redcapAPI connection classes”; “constructors retrieve project surfaces and make zero record export calls” |
+| PLAN-07 | A genuine credential-free `redcapOfflineConnection` supports the documented plan/run workflow. | `README.Rmd` — “First success with a synthetic offline project”; vignette — “Before you begin” | `test-redcapapi-integration.R` — “genuine redcapAPI offline connections support the plan and run workflow” |
+| NORM-01 | Record IDs accept character, factor, integer, and finite double storage, preserve character leading zeros, and reject missing, blank, padded, nonfinite, date/time, and absent values. | Roxygen: `R/assessment-plan.R` — “Structural data normalization”; vignette — “Structural columns in `data`” | `test-assessment-plan.R` — “record identifiers normalize accepted storage and reject invalid values”; “large numeric record vectors normalize without row loss” |
+| NORM-02 | Nullable event and repeat-instrument dimensions accept character/factor blanks and every documented nonempty all-missing atomic storage, then become typed character `NA`. | Roxygen: `R/assessment-plan.R` — “Structural data normalization”; vignette — “Structural columns in `data`” | `test-assessment-plan.R` — “nullable structural dimensions accept every typed NA representation” |
+| NORM-03 | Nullable event, repeat-instrument, and repeat-instance dimensions reject the documented `Date`, `POSIXt`, `NaN`, and nonmissing invalid representations. | Roxygen: `R/assessment-plan.R` — “Structural data normalization”; vignette — “Structural columns in `data`” | `test-assessment-plan.R` — “nullable structural dimensions accept every typed NA representation”; “repeat columns and instances enforce contextual missingness” |
+| NORM-04 | Repeat instances accept positive integer, whole double, and unpadded digit-string IDs and reject all invalid/missing applicable representations and overflow. | Roxygen: `R/assessment-plan.R` — “Structural data normalization”; vignette — “Structural columns in `data`” | `test-assessment-plan.R` — “repeat columns and instances enforce contextual missingness”; “nonmissing factor repeat instances are rejected” |
+| NORM-05 | Classic, longitudinal, repeating-event, and repeating-instrument rows must match project structure; normalization collisions fail closed. | Roxygen: `R/assessment-plan.R` — “Structural data normalization”; vignette — “Classic, longitudinal, and repeating projects” | `test-assessment-plan.R` — “target dimensions normalize across classic longitudinal and repeat modes”; “repeat configuration must be explicit and consistent with project status”; “normalized schedule collisions error before target construction” |
 
-## Structural values
+## `plan_from_data()` and `plan_explicit()`
 
-| ID | Behavior checked | Evidence |
-|---|---|---|
-| NORM-01 | Record IDs accept character, factor, integer, and finite double storage and become character while preserving character leading zeros. | `test-assessment-plan.R` |
-| NORM-02 | Record IDs reject missing, blank, padded, `NaN`, infinite, and absent values. | `test-assessment-plan.R` |
-| NORM-03 | Longitudinal rows require known raw event names. Classic event absence, blank values, and typed missing values become `NA_character_`. | `test-assessment-plan.R` |
-| NORM-04 | A repeating design requires `redcap_repeat_instrument` and `redcap_repeat_instance` together. | `test-assessment-plan.R` |
-| NORM-05 | Repeat instances accept positive integers, whole number doubles, and character digits matching `[1-9][0-9]*`, then become integer. | `test-assessment-plan.R` |
-| NORM-06 | Repeat instances reject leading zeros, zero, negatives, decimals, required missing values, other text, `NaN`, infinity, integer overflow, and factors with values. | `test-assessment-plan.R` |
-| NORM-07 | Missing structural values become typed `NA` where the dimension is inapplicable. | `test-assessment-plan.R` |
-| NORM-08 | Rows where neither the event nor instrument repeats, rows at repeating events, rows for repeating instruments, and instruments whose repeat status differs by event must match the REDCap project structure. | `test-assessment-plan.R` |
-| NORM-09 | Duplicate normalized physical keys raise an error. | `test-assessment-plan.R` |
-| NORM-10 | Planning uses physical row presence and requires structural columns. | `test-assessment-plan.R` |
+| ID | Contract | Canonical package surface | Exact executable evidence |
+|---|---|---|---|
+| DATA-01 | Observed targets are the intersection of project-permitted crossings and physical rows; blank response rows remain observed and unselected/unmapped crossings do not become targets. | Roxygen: `R/assessment-plan.R` — “`assessible_targets` rule”; vignette — “Plan from observed data” | `test-assessment-plan.R` — “plan_from_data creates an exact compact plan from physical classic rows”; “target construction excludes unselected and unmapped physical rows” |
+| DATA-02 | `extended_schedule` has its exact ordered three-column schema; `NULL` and correctly typed zero-row schedules mean observed-only planning. | Roxygen: `R/assessment-plan.R` — “Extended schedule schema”; vignette — “Add crossings with `extended_schedule`” | `test-assessment-plan.R` — “empty schedules require complete ordered schemas and allowed storage”; “schedule schemas and allowable crossings fail closed” |
+| DATA-03 | Extensions add exact permitted instances, union with observations, expand only across the applicable records/arm, and warn without adding targets when an arm has no observed records. | Roxygen: `R/assessment-plan.R` — “`assessible_targets` rule” and “Extended schedule schema”; vignette — “Add crossings with `extended_schedule`” | `test-assessment-plan.R` — “classic repeating instruments produce exact observed and extended instances”; “plan_from_data unions observed and applicable arm extensions”; “extensions into an arm with no observed records warn and add no targets” |
+| DATA-04 | `plan_from_data()` rejects zero-row planner data and invalid, duplicate, unknown, unselected, or disallowed schedule crossings before target construction. | Roxygen: `R/assessment-plan.R` — `data` parameter and “Extended schedule schema”; vignette — “Structural columns in `data`” | `test-assessment-plan.R` — “empty schedules require complete ordered schemas and allowed storage”; “unknown and unmapped schedule crossings fail before intersection” |
+| EXPL-01 | `explicit_schedule` has its exact ordered four-column schema; a correctly typed empty schedule yields zero targets, while omitted/`NULL` schedules fail. | Roxygen: `R/assessment-plan.R` — “Explicit schedule schema”; vignette — “Plan from `explicit_schedule`” | `test-assessment-plan.R` — “a typed empty explicit schedule assesses nothing”; “empty schedules require complete ordered schemas and allowed storage”; “required constructor arguments and instrument vectors fail with classed errors” |
+| EXPL-02 | Every permitted explicit row creates one exact target, omissions exclude observed crossings, and absent selected instruments with no rows produce no target. | Roxygen: `R/assessment-plan.R` — “`assessible_targets` rule”; vignette — “Plan from `explicit_schedule`” | `test-assessment-plan.R` — “plan_explicit freezes exact targets including records absent from data”; “explicit omissions exclude observed crossings and absent selected instruments” |
+| EXPL-03 | Correctly structured zero-row planner data may retain explicit targets for records absent from the export. | Roxygen: `R/assessment-plan.R` — `data` and `explicit_schedule` parameters; vignette — “Structural columns in `data`” | `test-assessment-plan.R` — “empty schedules require complete ordered schemas and allowed storage” |
 
-## `plan_from_data()`
+## Runner gates, results, details, and privacy
 
-| ID | Behavior checked | Evidence |
-|---|---|---|
-| DATA-01 | Targets are project permitted crossings found in observed rows or `extended_schedule`. | `test-assessment-plan.R` |
-| DATA-02 | Omitted, `NULL`, and correctly typed extension data frames with zero rows produce observed targets. | `test-assessment-plan.R` |
-| DATA-03 | `extended_schedule` requires `instrument`, `redcap_event_name`, and `repeat_instance` in that order. Extra, reordered, or incomplete columns raise an error. | `test-assessment-plan.R` |
-| DATA-04 | Duplicate rows and unknown, unselected, unmapped, or invalid crossings raise an error before target creation. | `test-assessment-plan.R` |
-| DATA-05 | Each extension adds its exact instance and preserves observed targets. | `test-assessment-plan.R` |
-| DATA-06 | Classic extensions expand across all observed records. Longitudinal extensions expand across records observed in the matching arm. | `test-assessment-plan.R` |
-| DATA-07 | An extension into an arm with zero observed records warns once and adds zero targets. | `test-assessment-plan.R` |
-| DATA-08 | `plan_from_data()` rejects planner data with zero rows. | `test-assessment-plan.R` |
+| ID | Contract | Canonical package surface | Exact executable evidence |
+|---|---|---|---|
+| RUN-01 | `run_plan()` rejects malformed plans, changed projects, and invalid runtime structural/storage inputs while permitting a newer snapshot with unchanged structure. | Roxygen: `R/run-plan.R` — description and “Conditions”; vignette — “Run a plan” | `test-run-plan.R` — “run_plan rejects malformed plans, changed projects, and runtime structure”; “newer data snapshots cannot add targets and absent planned rows still fail” |
+| RUN-02 | Runtime data with zero rows retains explicit targets and produces the documented classic gate statuses, summaries, unresolved row, detail dispositions, reasons, and typed target-level missing values. | Roxygen: `R/run-plan.R` — “Checks and gating” and “Return value”; vignette — “Gates and statuses” and “Detailed rows and stored values” | `test-run-plan.R` — “zero-row runtime data retains explicit targets and exact gate evidence” |
+| RUN-03 | Diagnostics contain the twelve documented stages in exact order and complete successfully. | Roxygen: `R/run-plan.R` — “Execution stages”; vignette — “Execution stages” | `test-run-plan.R` — “run_plan exposes the exact plan execution API and report schemas” |
+| RUN-04 | Classic, longitudinal, and repeat targets receive the documented event/repeat gates, downstream `not reached` propagation, and absent-target behavior. | Roxygen: `R/run-plan.R` — “Checks and gating”; vignette — “Gates and statuses” | `test-run-plan.R` — “run_plan freezes targets and gates absent physical rows”; “longitudinal event gates use any physical row in the record and event”; “repeating event gates distinguish absent events from absent instances” |
+| RUN-05 | `target_results`, `summary`, `missing`, `verification`, `diagnostics`, and `details` retain the exact documented names and storage types. | Roxygen: `R/run-plan.R` — “Return value”; vignette — “Result components” | `test-run-plan.R` — “run_plan exposes the exact plan execution API and report schemas”; “run_plan result components preserve every documented storage type” |
+| RUN-06 | Zero-target, fully gated, mixed-pass/fail, and all-fail reports reconcile target statuses, summary counts/rates, missing rows, and provenance without losing typed structural absence. | Roxygen: `R/run-plan.R` — “Return value”; vignette — “Result components” | `test-run-plan.R` — “zero targets and fully gated targets reconcile across report components”; “mixed target outcomes reconcile statuses summaries missing rows and provenance”; “all failing targets reconcile exactly without losing structural absence” |
+| RUN-07 | Detailed output contributes exactly one row per target for each upstream check, one row per assessed applicable field, and no row for branching-closed fields. | Roxygen: `R/run-plan.R` — `details` parameter and “Return value”; vignette — “Detailed rows and stored values” | `test-run-plan.R` — “details have exact target and field row cardinality and values” |
+| RUN-08 | Target-level detail field columns and values use typed missing storage; dispositions and exact reasons are retained; assessed field rows have `branch_satisfied = TRUE`. | Roxygen: `R/run-plan.R` — “Return value”; vignette — “Detailed rows and stored values” | `test-run-plan.R` — “details have exact target and field row cardinality and values”; “zero-row runtime data retains explicit targets and exact gate evidence” |
+| RUN-09 | Ordinary values are converted to character, dates use their character representation, selected checkbox child names are comma-separated, and an assessed checkbox with no selection uses `""`. | Roxygen: `R/run-plan.R` — “Return value”; vignette — “Detailed rows and stored values” | `test-run-plan.R` — “details have exact target and field row cardinality and values” |
+| RUN-10 | Compact and detailed runs have identical effective results; compact execution stores `details = NULL` and does not construct detailed rows. | Roxygen: `R/run-plan.R` — `details` parameter and “Return value”; vignette — “Detailed rows and stored values” | `test-run-plan.R` — “compact and detailed runs have identical assessment results”; “compact execution does not construct detailed validation rows” |
+| RUN-11 | Serialized compact reports retain no response sentinel, verification-extra sentinel, connection sentinel, or token sentinel; detailed reports retain only the documented response value and still exclude the other sentinels. | Roxygen: `R/run-plan.R` — “Return value” privacy paragraphs; vignette — “Detailed rows and stored values” | `test-run-plan.R` — “run_plan retains no source data, verification rows, connection, or token” |
+| RUN-12 | Disabled verification stores exact false/typed-missing/zero audit values. | Roxygen: `R/run-plan.R` — “Verification” and “Return value”; vignette — “Verification” | `test-run-plan.R` — “disabled verification records exact zero audit values” |
 
-## `plan_explicit()`
+## Instrument detection, field policy, branching, and response missingness
 
-| ID | Behavior checked | Evidence |
-|---|---|---|
-| EXPL-01 | Each permitted row in `explicit_schedule` creates one exact target. | `test-assessment-plan.R` |
-| EXPL-02 | Omitted and `NULL` schedules raise an error. A complete schedule data frame with zero rows creates a plan with zero targets. | `test-assessment-plan.R` |
-| EXPL-03 | `explicit_schedule` requires `record_id`, `instrument`, `redcap_event_name`, and `repeat_instance` in that order. Extra, reordered, incomplete, or duplicate rows raise an error. | `test-assessment-plan.R` |
-| EXPL-04 | Observed combinations require a matching schedule row to become targets. | `test-assessment-plan.R` |
-| EXPL-05 | Record IDs absent from planner data remain targets. The project type and the target's `redcap_event_name`, `repeat_instrument`, and `repeat_instance` determine the first failed check during `run_plan()`. | `test-assessment-plan.R`, `test-run-plan.R` |
-| EXPL-06 | A record observed in one arm raises an error when scheduled into another arm. | `test-assessment-plan.R` |
-| EXPL-07 | Correctly structured planner data with zero rows supports explicit targets for absent records. | `test-assessment-plan.R` |
-| EXPL-08 | An absent classic target with `repeat_instance = NA_integer_` has both physical row checks marked `"not applicable"` and fails `instrument-started`. Absent longitudinal events and absent repeat instances fail their applicable physical row checks. | `test-run-plan.R`, `test-run-plan-verification.R` |
-
-## `run_plan()` stages and results
-
-| ID | Behavior checked | Evidence |
-|---|---|---|
-| RUN-01 | `run_plan()` rejects malformed plans, changed projects, and invalid runtime structure. | `test-assessment-plan.R`, `test-run-plan.R` |
-| RUN-02 | A newer export with the same project structure uses the plan targets. Added rows create zero new targets. Each absent planned row receives the gate results defined by the project type and its `redcap_event_name`, `repeat_instrument`, and `repeat_instance`. | `test-run-plan.R` |
-| RUN-03 | Diagnostics record the twelve documented stages in order. | `test-run-plan.R` |
-| RUN-04 | Every longitudinal target receives `event-row-started`; classic targets receive status `"not applicable"`. | `test-run-plan.R` |
-| RUN-05 | A target with a positive `repeat_instance` receives `repeat-instance-row-started` after its event check passes; a target with `repeat_instance = NA_integer_` receives status `"not applicable"`. | `test-run-plan.R`, `test-run-plan-verification.R` |
-| RUN-06 | Failed physical row checks give later checks status `"not reached"`; `field-complete` runs after `instrument-started` passes. | `test-run-plan.R`, `test-run-plan-verification.R` |
-| RUN-07 | `target_results` has one row per target, four check status columns, field counts, source, and reason. | `test-run-plan.R`, `test-flex-event-instruments.R` |
-| RUN-08 | `summary` has the documented columns and types, status and reason, and `NA_real_` rates for unassessed checks. | `test-run-plan.R`, `test-get-summary.R` |
-| RUN-09 | `missing` contains effective unresolved failures with typed structural missing values. | `test-run-plan.R`, `test-run-plan-verification.R`, `test-get-missing.R` |
-| RUN-10 | `verification` contains counts for verification processing. | `test-run-plan.R`, `test-run-plan-verification.R` |
-| RUN-11 | `details = TRUE` stores field rows with raw and effective dispositions, verification status, branching status, reason, and `value_summary`. | `test-run-plan.R`, `test-run-plan-verification.R` |
-| RUN-12 | Ordinary assessed field values are character in `details$value_summary`; checkbox values list selected exported checkbox child column names. | `test-run-plan.R` |
-| RUN-13 | `details = FALSE` returns `details = NULL`. Both detail settings have equal targets, summaries, missing rows, and verification counts. | `test-run-plan.R`, `test-run-plan-verification.R` |
-| RUN-14 | Report components exclude source data, supplied verification rows, API tokens, and the live connection. | `test-run-plan.R` |
-| RUN-15 | Reports with all passes, all failures, zero targets, inapplicable checks, and failed gates retain the documented schemas and counts. | `test-run-plan.R` |
-
-## Instrument detection, field selection, and branching logic
-
-| ID | Behavior checked | Evidence |
-|---|---|---|
-| FIELD-01 | Instrument start detection uses data entry fields except the record ID field, `descriptive` fields, and `calc` fields. Checkbox roots use exported child columns. | `test-run-plan.R` |
-| FIELD-02 | A selected instrument with zero usable detection fields raises a project error. | `test-run-plan.R` |
-| FIELD-03 | Missing detection, assessment, checkbox child, branching dependency, and required metadata columns raise an error before assessment. | `test-run-plan.R` |
-| FIELD-04 | Logical controls require one nonmissing logical value. | `test-run-plan.R` |
-| FIELD-05 | Character controls accept `NULL` or empty vectors and otherwise require unique, nonblank, unpadded values. Explicit `exclude_types` values must occur after the `required_fields` filter; `ignore_fields` names must remain after both preceding steps. | `test-run-plan.R` |
-| FIELD-06 | `ignore_fields` accepts metadata field names. Exported checkbox child names raise an argument error. | `test-run-plan.R` |
-| FIELD-07 | Field selection applies `required_fields`, `exclude_types`, and `ignore_fields` in that order. | `test-run-plan.R` |
-| FIELD-08 | The three field selection arguments change `field-complete` assessment and preserve targets and the first three checks. | `test-run-plan.R` |
-| FIELD-09 | Zero fields after selection or branching gives `field-complete` status `"not applicable"`, the documented reason, zero counts, and `NA_real_` rates. | `test-run-plan.R` |
-| FIELD-10 | Same row logic, cross event logic, and checkbox root completeness use REDCap field codes and exact target context. | `test-run-plan.R` |
-| FIELD-11 | A unique cross event source row with a missing `redcap_repeat_instance` is selected before source rows with positive repeat instances. When no missing instance row exists, one positive instance row is usable and multiple positive instance rows raise a project error. | `test-run-plan.R` |
-| FIELD-12 | R missing values, factor missing values, logical missing values, numeric missing values, date and time missing values, `NaN`, empty strings, and strings containing whitespace are missing responses. | `test-run-plan.R` |
-| FIELD-13 | `Inf`, `-Inf`, `"NA"`, `"N/A"`, `"NULL"`, `"."`, and `"-999"` are present responses. | `test-run-plan.R` |
-| FIELD-14 | Physical row presence is independent of field response missingness. | `test-assessment-plan.R`, `test-run-plan.R` |
-| FIELD-15 | Unresolved rows receive a REDCap data entry URL when the required URL values are available. | `test-run-plan.R` |
+| ID | Contract | Canonical package surface | Exact executable evidence |
+|---|---|---|---|
+| FIELD-01 | Instrument detection uses the complete independent entry-field set, excludes record ID/descriptive/calc fields, and expands checkbox roots to exported children. | Roxygen: `R/run-plan.R` — “Checks and gating”; vignette — “Instrument detection and field selection” | `test-run-plan.R` — “instrument detection uses the complete independent field set”; “checkbox detection requires a selected child” |
+| FIELD-02 | Missing detection/assessment/checkbox/branch columns, ambiguous checkbox metadata, incomplete metadata, and instruments with no usable detection fields fail closed. | Roxygen: `R/run-plan.R` — “Checks and gating” and “Field-complete policy”; vignette — “Instrument detection and field selection” | `test-run-plan.R` — “instrument detection requires every exported detection column”; “checkbox metadata must define unambiguous exported children”; “selected instruments require at least one usable start detection field”; “run_plan rejects incomplete metadata before field resolution” |
+| FIELD-03 | `required_fields`, `exclude_types`, and `ignore_fields` validate strictly and apply in documented order while leaving targets and upstream checks invariant. | Roxygen: `R/run-plan.R` — “Field-complete policy”; vignette — “Instrument detection and field selection” | `test-run-plan.R` — “run_plan validates scalar and named field policy arguments”; “explicit exclusions must remain relevant after the required fields filter”; “every field policy argument leaves targets and upstream checks invariant” |
+| FIELD-04 | No selected fields and no branching-applicable fields produce distinct exact reasons, zero counts, and typed missing rates. | Roxygen: `R/run-plan.R` — “Field-complete policy” and “Return value”; vignette — “Branching logic and checkboxes” | `test-run-plan.R` — “an empty field policy reports not applicable”; “fields closed by branching report not applicable” |
+| FIELD-05 | Same-row and cross-event branching use exact REDCap codes/context, and checkbox roots are complete only when a child is selected. | Roxygen: `R/run-plan.R` — “Field-complete policy”; vignette — “Branching logic and checkboxes” | `test-run-plan.R` — “branching and checkbox roots retain REDCap completeness semantics”; “cross event branching uses the matching record and event context”; “run_plan evaluates shared branching plans across record vectors” |
+| FIELD-06 | The single ordinary-response predicate treats typed R missing values, `NaN`, empty/whitespace strings, and missing date/time values as missing while retaining nonfinite and documented literal strings as present. | Roxygen: `R/run-plan.R` — “Response missingness”; vignette — “Response missingness” | `test-run-plan.R` — “response missingness distinguishes R missing values from literal text”; “typed response missing values fail while nonfinite values remain literal” |
+| FIELD-07 | Unresolved longitudinal rows receive the documented REDCap data-entry URL when URL components are available. | Roxygen: `R/run-plan.R` — “Return value”; vignette — “Missing values, columns, and rows” | `test-run-plan.R` — “longitudinal unresolved rows receive REDCap data entry URLs” |
 
 ## Verification
 
-| ID | Behavior checked | Evidence |
-|---|---|---|
-| VER-01 | `verified` and `verified_user` are supplied together. Two `NULL` values disable verification. | `test-run-plan-verification.R` |
-| VER-02 | `verified` requires the nine documented columns. Extra columns are ignored. A complete data frame with zero rows is valid. | `test-run-plan-verification.R` |
-| VER-03 | Every verification row is validated before filtering by username or status. | `test-run-plan-verification.R` |
-| VER-04 | Event and repeat values accept typed missing values when their dimensions are inapplicable. | `test-run-plan-verification.R` |
-| VER-05 | Documented character timestamps and finite `POSIXct` values become UTC. Character timestamps lacking a zone use UTC. | `test-run-plan-verification.R` |
-| VER-06 | Username and status matching is exact and sensitive to letter case. | `test-run-plan-verification.R` |
-| VER-07 | The latest row for each selected username and field context is used. Identical latest ties collapse and conflicting latest ties raise an error. | `test-run-plan-verification.R` |
-| VER-08 | `"VERIFIED"` changes an assessed failed `field-complete` row. Targets, gates, instrument start, passing fields, and fields removed by policy or branching keep their prior results. | `test-run-plan-verification.R` |
-| VER-09 | Verification input order leaves results unchanged. Zero matching rows produce audit counts. | `test-run-plan-verification.R` |
+| ID | Contract | Canonical package surface | Exact executable evidence |
+|---|---|---|---|
+| VER-01 | `verified` and `verified_user` are paired; verification requires each of the nine columns exactly once and ignores extras. | Roxygen: `R/run-plan.R` — “Verification”; `README.Rmd` — “Verified field failures”; vignette — “Verification” | `test-run-plan-verification.R` — “verification arguments are paired and require the schema with nine columns”; “verification requires each of its nine columns exactly once”; “verification extras are ignored and finite POSIXct timestamps normalize” |
+| VER-02 | A zero-row nine-column verification table is valid regardless of column storage and yields exact enabled zero audit counts. | Roxygen: `R/run-plan.R` — `verified` parameter and “Verification”; vignette — “Verification” | `test-run-plan-verification.R` — “a complete empty verification template is valid and audited” |
+| VER-03 | Every verification row is validated before user/status filtering, including project, record, event, field, repeat context, nullable storage, and timestamp rules. | Roxygen: `R/run-plan.R` — “Verification”; vignette — “Verification” | `test-run-plan-verification.R` — “all verification rows are validated before user filtering”; “invalid verification rows are rejected before username and status filtering”; “verification rejects invalid identity and text columns before filtering” |
+| VER-04 | Documented character and finite `POSIXct` timestamps normalize to UTC; offsets/fractions order correctly; malformed or nonfinite timestamps fail. | Roxygen: `R/run-plan.R` — “Verification”; vignette — “Verification” | `test-run-plan-verification.R` — “mixed documented timestamp formats are normalized row by row”; “verification timestamps preserve offsets and fractional ordering”; “verification rejects every malformed timestamp before filtering” |
+| VER-05 | Username/status matching is exact and case-sensitive; rows are reduced to the latest context independent of input order; identical ties collapse and conflicting ties fail. | Roxygen: `R/run-plan.R` — “Verification”; vignette — “Verification” | `test-run-plan-verification.R` — “latest user status is order independent and only VERIFIED applies”; “identical latest verification duplicates collapse harmlessly”; “conflicting latest verification ties fail closed”; “verification status and user matching are exact with quiet empty results” |
+| VER-06 | An eligible latest `VERIFIED` failure changes the detail disposition, `target_results`, summary counts/rates, and unresolved missing/accessor rows, with exact audit counts. | Roxygen: `R/run-plan.R` — “Verification” and “Return value”; `README.Rmd` — “Verified field failures”; vignette — “Verification” | `test-run-plan-verification.R` — “exact latest VERIFIED evidence overrides only a failed field check” |
+| VER-07 | Verification cannot alter targets, event/repeat/instrument gates, passing fields, policy-removed fields, branching-closed fields, or failed-gate outcomes. | Roxygen: `R/run-plan.R` — “Verification”; vignette — “Verification” | `test-run-plan-verification.R` — “verification leaves instrument start and removed fields unchanged”; “verification preserves targets and a failed event gate”; “verification preserves a failed repeat instance gate” |
+| VER-08 | Compact and detailed verification runs have identical targets, summaries, missing rows, audit values, and effective outcomes. | Roxygen: `R/run-plan.R` — `details` parameter and “Verification”; vignette — “Verification” | `test-run-plan-verification.R` — “verification results agree across detail settings” |
 
-## Accessors, formatters, and progress
+## Accessors and presentation
 
-| ID | Behavior checked | Evidence |
-|---|---|---|
-| OUT-01 | `get_summary()` returns the documented columns and types, labels, status, reason, and filtered rows. | `test-get-summary.R` |
-| OUT-02 | `get_missing()` returns the documented unresolved rows and types and leaves the stored report unchanged. | `test-get-missing.R` |
-| OUT-03 | Accessor filters reject empty, missing, blank, padded, unknown, and noncharacter values. | `test-get-summary.R`, `test-get-missing.R` |
-| OUT-04 | `flexify()` applies labels, removes two empty repeat columns, and displays inapplicable rates as blank cells. | `test-flexify.R` |
-| OUT-05 | `flex_event_instruments()` calculates event and instrument metrics from `target_results`, applies `missing_threshold`, and rejects inconsistent event checks. | `test-flex-event-instruments.R` |
-| OUT-06 | `flex_html()` renders a `flextable` returned by a package formatter as HTML. | `test-flex-html.R` |
-| OUT-07 | `progress` validates one logical value, preserves assessment results, and closes its display after success or error. | `test-run-plan.R` |
+| ID | Contract | Canonical package surface | Exact executable evidence |
+|---|---|---|---|
+| OUT-01 | `get_summary()` returns the exact documented schema, storage, status/reason/rates, and label attribute. | Roxygen: `R/report-accessors.R` — “Get validation summaries from a REDCap missingness report”; vignette — “Inspect and present results” | `test-get-summary.R` — “get_summary exposes the exact typed plan and run schema” |
+| OUT-02 | `get_missing()` returns the exact unresolved-row schema, typed structural values, and label attribute without mutating the report. | Roxygen: `R/report-accessors.R` — “Get unresolved missing rows from a REDCap missingness report”; vignette — “Inspect and present results” | `test-get-missing.R` — “get_missing exposes normalized typed structural values”; “get_missing filters only the completed result” |
+| OUT-03 | Accessor filters intersect without reordering source rows, normalize duplicates without duplicating rows, remain case-sensitive, and leave inputs unchanged. | Roxygen: both accessor parameter sections in `R/report-accessors.R`; vignette — “Inspect and present results” | `test-get-summary.R` — “get_summary normalizes duplicate filters without reordering rows”; `test-get-missing.R` — “get_missing normalizes duplicate filters without reordering rows” |
+| OUT-04 | Empty accessor intersections retain exact zero-row storage and complete event/instrument label metadata. | Roxygen: both accessor return sections in `R/report-accessors.R`; vignette — “Inspect and present results” | `test-get-summary.R` — “get_summary empty intersections retain types and labels”; `test-get-missing.R` — “get_missing empty intersections retain types and labels” |
+| OUT-05 | Accessor filters reject empty, missing, blank, padded, unknown, and noncharacter values; stored malformed schemas/types fail. | Roxygen: both accessor parameter and return sections in `R/report-accessors.R`; vignette — “Errors and recovery” | `test-get-summary.R` — “accessor filters enforce invalid value rules”; “get_summary rejects malformed stored summaries”; `test-get-missing.R` — “get_missing rejects retired filters and malformed storage” |
+| OUT-06 | Public `flexify()` accepts complete accessor outputs, preserves input objects, and returns a `flextable`. | Roxygen: `R/flexify.R` — “Format an accessor tibble as a flextable”; vignette — “Inspect and present results” | `test-flexify.R` — “flexify preserves complete public accessor outputs” |
+| OUT-07 | `flexify()` preserves row/column order for reordered, grouped, subset, single-column, repeat-only, and zero-row inputs. | Roxygen: `R/flexify.R` — details and `x` parameter; vignette — “Inspect and present results” | `test-flexify.R` — “flexify preserves reordered grouped subset and zero-row inputs” |
+| OUT-08 | Repeat columns are dropped together only for entirely blank displayed context and retained for repeat context; labels fall back to raw values. | Roxygen: `R/flexify.R` — details; vignette — “Inspect and present results” | `test-flexify.R` — “flexify retains repeat context and applies raw label fallback”; “flexify drops jointly absent repeat columns without mutating input” |
+| OUT-09 | `flexify()` applies registry labels, headers, one-decimal percentages, blank missing cells, and URL hyperlinks. | Roxygen: `R/flexify.R` — details; vignette — “Inspect and present results” | `test-flexify.R` — “flexify renders labels percentages blanks and URL hyperlinks” |
+| OUT-10 | `flex_event_instruments()` dispatches publicly, includes repeat columns only for repeat reports, and omits them for classic reports. | Roxygen: `R/flex-event-instruments.R` — return section; vignette — “Inspect and present results” | `test-flex-event-instruments.R` — “flex_event_instruments returns a flextable when dependencies exist”; “public dispatch omits repeat columns for classic reports” |
+| OUT-11 | Event/instrument aggregates, classic started/due counts, strict threshold boundaries, and `missing_threshold = 1` semantics match the documented formulas. | Roxygen: `R/flex-event-instruments.R` — details; vignette — “Inspect and present results” | `test-flex-event-instruments.R` — “event and instrument data is computed from target_results”; “classic event gates remain fully due when not applicable”; “missing threshold comparison is strict below one”; “integer and double one use identical missing threshold semantics”; “aggregates many target contexts accurately” |
+| OUT-12 | A started instrument with a non-applicable field check has zero missing fraction and does not exceed threshold zero. | Roxygen: `R/flex-event-instruments.R` — details; vignette — “Inspect and present results” | `test-flex-event-instruments.R` — “non-applicable field checks have zero missingness at threshold zero” |
+| OUT-13 | `flex_html()` returns one nonempty character scalar for summary and missing tables and rejects non-`flextable` inputs. | Roxygen: `R/flex-html.R` — return section; vignette — “Inspect and present results” | `test-flex-html.R` — “flex_html rejects invalid inputs”; “flex_html renders formatted summary HTML when optional packages are available”; “flex_html renders formatted missing rows for multiple instruments” |
+| OUT-14 | Optional presentation dependency errors name the missing package set and calling context. | Roxygen optional-dependency paragraphs in `R/flexify.R`, `R/flex-event-instruments.R`, and `R/flex-html.R` | `test-flexify.R` — “formatter dependency diagnostics name every missing package” |
+| OUT-15 | Progress validates a logical scalar, reports all stages, preserves results, and closes on success or error. | Roxygen: `R/run-plan.R` — `progress` parameter and “Execution stages”; vignette — “Execution stages” | `test-run-plan.R` — “progress updates all stages and cleans up on success and error” |

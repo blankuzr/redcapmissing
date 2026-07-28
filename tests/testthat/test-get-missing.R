@@ -87,6 +87,48 @@ test_that("get_missing filters only the completed result", {
   expect_equal(nrow(get_missing(report, instruments = "empty")), 0L)
 })
 
+test_that("get_missing normalizes duplicate filters without reordering rows", {
+  report <- missing_report_fixture()
+  original <- report
+  result <- get_missing(
+    report,
+    validation_check = c(
+      "instrument-started", "event-row-started", "instrument-started"
+    ),
+    events = c(
+      "baseline_event", "followup_event", "baseline_event"
+    ),
+    instruments = c("status", "status")
+  )
+
+  expect_identical(result$record_id, c("r3", "r2"))
+  expect_identical(
+    result$validation_check,
+    c("event-row-started", "instrument-started")
+  )
+  expect_identical(report, original)
+  expect_error(
+    get_missing(report, instruments = "Status"),
+    "Unknown `instruments`"
+  )
+})
+
+test_that("get_missing empty intersections retain types and labels", {
+  report <- missing_report_fixture()
+  result <- get_missing(report, instruments = "empty")
+
+  expect_identical(nrow(result), 0L)
+  expect_identical(names(result), .missing_list_columns())
+  expect_identical(
+    unname(vapply(result, typeof, character(1))),
+    c(rep("character", 3), "integer", rep("character", 8))
+  )
+  expect_identical(
+    attr(result, "redcapmissing_labels"),
+    attr(get_missing(report), "redcapmissing_labels")
+  )
+})
+
 test_that("get_missing rejects retired filters and malformed storage", {
   report <- missing_report_fixture()
   expect_error(get_missing(report, validation_check = "form-started"), "Unknown")

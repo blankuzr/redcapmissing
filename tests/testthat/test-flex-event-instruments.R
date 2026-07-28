@@ -154,10 +154,73 @@ test_that("flex_event_instruments returns a flextable when dependencies exist", 
   skip_if_not_installed("flextable")
   skip_if_not_installed("glue")
 
-  result <- flex_event_instruments.redcapmissing(flex_event_instruments_report())
+  result <- flex_event_instruments(flex_event_instruments_report())
   expect_s3_class(result, "flextable")
   expect_true("Instrument" %in% names(result$body$dataset))
   expect_false("Form" %in% names(result$body$dataset))
+  expect_true(all(
+    c("Repeat Instrument", "Repeat Instance") %in%
+      names(result$body$dataset)
+  ))
+})
+
+test_that("public dispatch omits repeat columns for classic reports", {
+  skip_if_not_installed("flextable")
+  skip_if_not_installed("glue")
+
+  rcon <- run_plan_rcon()
+  data <- run_plan_data()
+  report <- run_plan(
+    plan_from_data(data, rcon, "baseline_form"),
+    data,
+    rcon,
+    progress = FALSE
+  )
+  result <- flex_event_instruments(report)
+
+  expect_s3_class(result, "flextable")
+  expect_false(any(
+    c("Repeat Instrument", "Repeat Instance") %in%
+      names(result$body$dataset)
+  ))
+  expect_identical(
+    names(result$body$dataset),
+    c(
+      "Event", "Instrument", "N (started/due)",
+      "Instrument Incomplete", "Instrument Not Started",
+      "Instrument >10% Missing"
+    )
+  )
+})
+
+test_that("non-applicable field checks have zero missingness at threshold zero", {
+  report <- flex_event_instruments_report()
+  target <- report$target_results[1, , drop = FALSE]
+  target$field_complete <- "not applicable"
+  target$fields_assessed <- 0L
+  target$fields_failed <- 0L
+  target$field_applicability_reason <- "no fields remain after field policy"
+  report$target_results <- target
+  report$plan$assessible_targets <- target[c(
+    "record_id", "instrument", "redcap_event_name", "repeat_instrument",
+    "repeat_instance", "target_source"
+  )]
+
+  result <- .flex_event_instruments_build_table(
+    report,
+    missing_threshold = 0
+  )$data
+  instrument_row <- result[result$row_type == "instrument", ]
+
+  expect_identical(result$`Instrument Incomplete`[[1]], "0/1 (0%)")
+  expect_identical(result$`Instrument Not Started`[[1]], "0/1 (0%)")
+  expect_identical(result$`Instrument Missing Threshold`[[1]], "0/1 (0%)")
+  expect_identical(instrument_row$`Instrument Incomplete`, "0/1 (0%)")
+  expect_identical(instrument_row$`Instrument Not Started`, "0/1 (0%)")
+  expect_identical(
+    instrument_row$`Instrument Missing Threshold`,
+    "0/1 (0%)"
+  )
 })
 test_that("aggregates many target contexts accurately", {
   record_count <- 200L

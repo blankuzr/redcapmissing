@@ -1,3 +1,22 @@
+serialized_report_contains <- function(x, text) {
+  serialized <- serialize(x, connection = NULL)
+  needle <- charToRaw(text)
+  if (length(serialized) < length(needle)) {
+    return(FALSE)
+  }
+  starts <- seq_len(length(serialized) - length(needle) + 1L)
+  any(vapply(
+    starts,
+    function(start) {
+      identical(
+        serialized[seq.int(start, length.out = length(needle))],
+        needle
+      )
+    },
+    logical(1)
+  ))
+}
+
 test_that("run_plan exposes the exact plan execution API and report schemas", {
   expect_identical(names(formals(run_plan)), c(
     "plan", "data", "rcon", "required_fields", "ignore_fields",
@@ -77,37 +96,78 @@ test_that("run_plan exposes the exact plan execution API and report schemas", {
 
 test_that("run_plan retains no source data, verification rows, connection, or token", {
   rcon <- run_plan_rcon()
-  rcon$token <- "DO_NOT_RETAIN_THIS_TOKEN"
-  data <- run_plan_data(required_note = "")
+  sentinels <- c(
+    response = "SYNTHETIC_RESPONSE_SENTINEL_7_0_0",
+    verification_extra = "SYNTHETIC_VERIFICATION_EXTRA_SENTINEL_7_0_0",
+    connection = "SYNTHETIC_CONNECTION_SENTINEL_7_0_0",
+    token = "SYNTHETIC_TOKEN_SENTINEL_7_0_0"
+  )
+  rcon$connection_sentinel <- sentinels[["connection"]]
+  rcon$token <- sentinels[["token"]]
+  data <- run_plan_data(required_note = sentinels[["response"]])
   plan <- plan_from_data(data, rcon, "baseline_form")
   verified <- run_plan_verified_row()
-  result <- run_plan(
-    plan,
-    data,
-    rcon,
-    verified = verified,
-    verified_user = "alice",
-    details = TRUE,
-    progress = FALSE
-  )
+  verified$ignored_extra <- sentinels[["verification_extra"]]
+  run <- function(details) {
+    run_plan(
+      plan,
+      data,
+      rcon,
+      verified = verified,
+      verified_user = "alice",
+      details = details,
+      progress = FALSE
+    )
+  }
+  compact <- run(FALSE)
+  detailed <- run(TRUE)
 
-  expect_false(any(vapply(result, identical, logical(1), data)))
-  expect_false(any(vapply(result, identical, logical(1), verified)))
-  expect_false(any(vapply(result, identical, logical(1), rcon)))
-  expect_false(any(c("data", "rcon", "token", "verified") %in% names(result)))
-  serialized <- serialize(result, connection = NULL)
-  token <- charToRaw("DO_NOT_RETAIN_THIS_TOKEN")
-  windows <- if (length(serialized) < length(token)) integer() else
-    seq_len(length(serialized) - length(token) + 1L)
-  contains_token <- any(vapply(
-    windows,
-    function(start) identical(
-      serialized[seq.int(start, length.out = length(token))],
-      token
-    ),
-    logical(1)
-  ))
-  expect_false(contains_token)
+  for (result in list(compact, detailed)) {
+    expect_false(any(vapply(result, identical, logical(1), data)))
+    expect_false(any(vapply(result, identical, logical(1), verified)))
+    expect_false(any(vapply(result, identical, logical(1), rcon)))
+    expect_false(
+      any(c("data", "rcon", "token", "verified") %in% names(result))
+    )
+    expect_false(serialized_report_contains(
+      result,
+      sentinels[["verification_extra"]]
+    ))
+    expect_false(serialized_report_contains(
+      result,
+      sentinels[["connection"]]
+    ))
+    expect_false(serialized_report_contains(result, sentinels[["token"]]))
+  }
+
+  expect_false(serialized_report_contains(compact, sentinels[["response"]]))
+  expect_true(serialized_report_contains(detailed, sentinels[["response"]]))
+  expect_identical(
+    detailed$details$value_summary[
+      detailed$details$field_name %in% "required_note"
+    ],
+    sentinels[["response"]]
+  )
+})
+
+test_that("disabled verification records exact zero audit values", {
+  rcon <- run_plan_rcon()
+  data <- run_plan_data()
+  plan <- plan_from_data(data, rcon, "baseline_form")
+  result <- run_plan(plan, data, rcon, progress = FALSE)
+
+  expect_identical(
+    result$verification,
+    list(
+      enabled = FALSE,
+      verified_user = NA_character_,
+      input_rows = 0L,
+      user_rows = 0L,
+      latest_user_rows = 0L,
+      verified_rows = 0L,
+      overrides_applied = 0L
+    )
+  )
 })
 
 test_that("run_plan rejects malformed plans, changed projects, and runtime structure", {
@@ -187,6 +247,90 @@ test_that("run_plan freezes targets and gates absent physical rows", {
   expect_identical(result$target_results$instrument_started, "failed")
   expect_identical(result$target_results$field_complete, "not reached")
   expect_true("instrument-started" %in% result$missing$validation_check)
+})
+
+test_that("zero-row runtime data retains explicit targets and exact gate evidence", {
+  rcon <- run_plan_rcon()
+  planner_data <- run_plan_data()
+  plan <- plan_explicit(
+    planner_data,
+    rcon,
+    "baseline_form",
+    run_plan_explicit_schedule("absent")
+  )
+  runtime_data <- planner_data[0, , drop = FALSE]
+  result <- run_plan(
+    plan,
+    runtime_data,
+    rcon,
+    details = TRUE,
+    progress = FALSE
+  )
+
+  expect_identical(result$target_results$record_id, "absent")
+  expect_identical(result$target_results$target_source, "explicit")
+  expect_identical(
+    result$target_results[c(
+      "event_row_started", "repeat_instance_row_started",
+      "instrument_started", "field_complete"
+    )],
+    tibble::tibble(
+      event_row_started = "not applicable",
+      repeat_instance_row_started = "not applicable",
+      instrument_started = "failed",
+      field_complete = "not reached"
+    )
+  )
+  expect_identical(
+    result$summary[c(
+      "validation_check", "status", "reason",
+      "assessed", "passed", "failed"
+    )],
+    tibble::tibble(
+      validation_check = c(
+        "event-row-started", "repeat-instance-row-started",
+        "instrument-started", "field-complete"
+      ),
+      status = c(
+        "not applicable", "not applicable", "assessed", "assessed"
+      ),
+      reason = c(
+        "not applicable for classic project", "not a repeating target",
+        NA_character_, NA_character_
+      ),
+      assessed = c(0L, 0L, 1L, 0L),
+      passed = c(0L, 0L, 0L, 0L),
+      failed = c(0L, 0L, 1L, 0L)
+    )
+  )
+  expect_identical(
+    result$missing$validation_check,
+    "instrument-started"
+  )
+  expect_identical(
+    result$details$validation_check,
+    c(
+      "event-row-started", "repeat-instance-row-started",
+      "instrument-started", "field-complete"
+    )
+  )
+  expect_identical(
+    result$details$raw_disposition,
+    c("not applicable", "not applicable", "failed", "not reached")
+  )
+  expect_identical(
+    result$details$reason,
+    c(
+      "not applicable for classic project", "not a repeating target",
+      NA_character_, NA_character_
+    )
+  )
+  expect_true(all(is.na(result$details$field_name)))
+  expect_type(result$details$field_name, "character")
+  expect_true(all(is.na(result$details$branch_satisfied)))
+  expect_type(result$details$branch_satisfied, "logical")
+  expect_true(all(is.na(result$details$value_summary)))
+  expect_type(result$details$value_summary, "character")
 })
 
 test_that("field policy changes only field-complete assessment", {
@@ -751,28 +895,107 @@ test_that("compact and detailed runs have identical assessment results", {
   expect_true(is.data.frame(detailed$details))
 })
 
-test_that("detailed values summarize ordinary and checkbox fields", {
+test_that("details have exact target and field row cardinality and values", {
   rcon <- run_plan_rcon()
   data <- run_plan_data(
+    required_note = 42,
+    checkbox_1 = "0",
+    checkbox_2 = "0"
+  )
+  plan <- plan_from_data(data, rcon, "baseline_form")
+  result <- run_plan(plan, data, rcon, details = TRUE, progress = FALSE)
+  target_rows <- result$details[
+    result$details$validation_check != "field-complete",
+  ]
+  fields <- result$details[
+    result$details$validation_check == "field-complete",
+  ]
+
+  expect_identical(
+    target_rows$validation_check,
+    c(
+      "event-row-started", "repeat-instance-row-started",
+      "instrument-started"
+    )
+  )
+  expect_identical(
+    target_rows$raw_disposition,
+    c("not applicable", "not applicable", "passed")
+  )
+  expect_identical(
+    target_rows$effective_disposition,
+    target_rows$raw_disposition
+  )
+  expect_identical(
+    target_rows$reason,
+    c(
+      "not applicable for classic project", "not a repeating target",
+      NA_character_
+    )
+  )
+  for (column in c(
+    "field_name", "field_label", "field_type", "branching_logic",
+    "value_summary"
+  )) {
+    expect_type(target_rows[[column]], "character")
+    expect_true(all(is.na(target_rows[[column]])), info = column)
+  }
+  expect_type(target_rows$branch_satisfied, "logical")
+  expect_true(all(is.na(target_rows$branch_satisfied)))
+
+  expect_identical(nrow(fields), result$target_results$fields_assessed)
+  expect_identical(
+    fields$field_name,
+    c("record_id", "branch_flag", "required_note", "checkbox_field")
+  )
+  expect_false("conditional_note" %in% fields$field_name)
+  expect_true(all(fields$branch_satisfied))
+  expect_identical(fields$value_summary, c("1", "0", "42", ""))
+  expect_identical(
+    fields$raw_disposition,
+    c("passed", "passed", "passed", "failed")
+  )
+  expect_identical(fields$effective_disposition, fields$raw_disposition)
+  expect_true(all(is.na(fields$reason)))
+  expect_false(any(fields$verification_applied))
+  expect_identical(
+    result$target_results$fields_failed,
+    sum(fields$effective_disposition == "failed")
+  )
+
+  selected <- run_plan_data(
     required_note = "synthetic free text",
     checkbox_1 = "1",
     checkbox_2 = "1"
   )
-  plan <- plan_from_data(data, rcon, "baseline_form")
-  result <- run_plan(plan, data, rcon, details = TRUE, progress = FALSE)
-  fields <- result$details[result$details$validation_check == "field-complete", ]
-
-  ordinary <- fields[fields$field_name == "required_note", ]
-  checkbox <- fields[fields$field_name == "checkbox_field", ]
-  expect_identical(ordinary$value_summary, "synthetic free text")
+  selected_details <- run_plan(
+    plan,
+    selected,
+    rcon,
+    details = TRUE,
+    progress = FALSE
+  )$details
   expect_identical(
-    checkbox$value_summary,
+    selected_details$value_summary[
+      selected_details$field_name %in% "checkbox_field"
+    ],
     "checkbox_field___1, checkbox_field___2"
   )
-  expect_identical(ordinary$branch_satisfied, TRUE)
-  expect_identical(checkbox$branch_satisfied, TRUE)
-  expect_identical(ordinary$raw_disposition, "passed")
-  expect_identical(ordinary$effective_disposition, "passed")
+
+  dated <- run_plan_data(required_note = as.Date("2026-01-02"))
+  dated_details <- run_plan(
+    plan,
+    dated,
+    rcon,
+    details = TRUE,
+    progress = FALSE
+  )$details
+  expect_identical(
+    dated_details$value_summary[
+      dated_details$field_name %in% "required_note"
+    ],
+    "2026-01-02"
+  )
 })
 
 test_that("explicit plans with no targets return typed empty report tables", {
