@@ -48,8 +48,9 @@ overflow: visible;
 }
 </style>
 <style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
 pre > code.sourceCode { white-space: pre; position: relative; }
-pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
 pre > code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode > span { color: inherit; text-decoration: inherit; }
@@ -485,7 +486,9 @@ exported form.</p>
 <p>The constructors discover the project record ID field from
 <code>rcon</code>. The field may have any valid REDCap field name.
 Planning treats every exported physical row as observed, including rows
-whose response values are all missing.</p>
+whose response values are all missing. Export records before
+constructing a plan: neither constructor exports records through
+<code>rcon</code>.</p>
 </div>
 <div id="planning-functions" class="section level2">
 <h2>Planning functions</h2>
@@ -541,8 +544,9 @@ mappings.</li>
 nonmissing, nonblank, unpadded raw instrument names. Its order controls
 target ordering.</li>
 </ul>
-<p><code>data</code> is the record source for both constructors. The
-constructors read project structure from <code>rcon</code>.</p>
+<p>Caller-supplied <code>data</code> is the only physical-row source for
+both constructors. The constructors read project structure from
+<code>rcon</code> but never use it to export records.</p>
 </div>
 <div id="plan-from-observed-data" class="section level2">
 <h2>Plan from observed data</h2>
@@ -625,8 +629,9 @@ from <code>plan_from_data()</code>.</p>
 project.</td>
 <td>In a classic project, character or factor blank values and typed
 <code>NA</code> values are accepted. Accepted noncharacter storage is a
-nonempty atomic vector containing only typed <code>NA</code> values,
-excluding <code>Date</code> and <code>POSIXt</code>.</td>
+nonempty atomic vector containing only typed <code>NA</code> values.
+<code>Date</code>, <code>POSIXt</code>, and <code>NaN</code> are
+rejected even when the complete column is missing.</td>
 <td>Character; <code>NA_character_</code> for a classic project.</td>
 </tr>
 <tr class="odd">
@@ -637,7 +642,8 @@ scheduled event or instrument repeats.</td>
 <td>When neither the scheduled event nor instrument repeats, numeric
 <code>NA</code>, character <code>NA</code> or blank, or a nonempty
 logical or factor column whose every value is <code>NA</code> is
-accepted.</td>
+accepted. <code>Date</code>, <code>POSIXt</code>, and <code>NaN</code>
+are rejected even when the complete column is missing.</td>
 <td>Integer; <code>NA_integer_</code> when neither the scheduled event
 nor instrument repeats.</td>
 </tr>
@@ -710,8 +716,9 @@ and unpadded. Character leading zeros are preserved.</td>
 project.</td>
 <td>In a classic project, character or factor blank values and typed
 <code>NA</code> values are accepted. Accepted noncharacter storage is a
-nonempty atomic vector containing only typed <code>NA</code> values,
-excluding <code>Date</code> and <code>POSIXt</code>.</td>
+nonempty atomic vector containing only typed <code>NA</code> values.
+<code>Date</code>, <code>POSIXt</code>, and <code>NaN</code> are
+rejected even when the complete column is missing.</td>
 <td>Character; <code>NA_character_</code> for a classic project.</td>
 </tr>
 <tr class="even">
@@ -722,7 +729,8 @@ scheduled event or instrument repeats.</td>
 <td>When neither the scheduled event nor instrument repeats, numeric
 <code>NA</code>, character <code>NA</code> or blank, or a nonempty
 logical or factor column whose every value is <code>NA</code> is
-accepted.</td>
+accepted. <code>Date</code>, <code>POSIXt</code>, and <code>NaN</code>
+are rejected even when the complete column is missing.</td>
 <td>Integer; <code>NA_integer_</code> when neither the scheduled event
 nor instrument repeats.</td>
 </tr>
@@ -807,8 +815,8 @@ Structural values are converted as follows:</p>
 <td>Project record ID field</td>
 <td>Character, factor, integer, or finite double; values are nonblank
 and unpadded.</td>
-<td>Missing values, <code>NaN</code>, and infinity produce an
-error.</td>
+<td>Missing values, <code>Date</code>, <code>POSIXt</code>,
+<code>NaN</code>, and infinity produce an error.</td>
 <td>Character; character leading zeros are preserved.</td>
 </tr>
 <tr class="even">
@@ -821,18 +829,21 @@ error.</td>
 <td><code>redcap_event_name</code> in a classic project</td>
 <td>The column may be absent. If present, it uses character or factor
 storage, or a nonempty atomic column containing only typed
-<code>NA</code> values and no <code>NaN</code>.</td>
-<td>Every value is blank or missing.</td>
+<code>NA</code> values.</td>
+<td>Every value is blank or missing. <code>Date</code>,
+<code>POSIXt</code>, and <code>NaN</code> are rejected even when every
+value in the column is missing.</td>
 <td><code>NA_character_</code>.</td>
 </tr>
 <tr class="even">
 <td><code>redcap_repeat_instrument</code></td>
 <td>Character or factor raw instrument names where a repeating
 instrument applies. Accepted noncharacter storage is a nonempty atomic
-vector containing only typed <code>NA</code> values, excluding
-<code>Date</code> and <code>POSIXt</code>.</td>
+vector containing only typed <code>NA</code> values.</td>
 <td>Blank or missing applies to rows at a repeating event and rows where
-neither the event nor instrument repeats.</td>
+neither the event nor instrument repeats. <code>Date</code>,
+<code>POSIXt</code>, and <code>NaN</code> are rejected even when every
+value in the column is missing.</td>
 <td>Character or <code>NA_character_</code>.</td>
 </tr>
 <tr class="odd">
@@ -843,7 +854,8 @@ or instrument repeats.</td>
 <td>When neither the event nor instrument repeats, numeric
 <code>NA</code>, character <code>NA</code> or blank, or a nonempty
 logical or factor column whose every value is <code>NA</code> is
-accepted.</td>
+accepted. <code>Date</code>, <code>POSIXt</code>, and <code>NaN</code>
+are rejected even when every value in the column is missing.</td>
 <td>Integer or <code>NA_integer_</code>.</td>
 </tr>
 </tbody>
@@ -983,7 +995,8 @@ by <code>construction</code>.</td>
 <code>instruments</code>, REDCap event order, record ID, repeat kind,
 and repeat instance. The fingerprint represents project identity,
 metadata, instruments, arms, events, instrument event mappings, and
-repeat settings independent of source table row order. The stored
+repeat settings independent of source table row order and the current
+<code>scipen</code> and <code>OutDec</code> option values. The stored
 components exclude the input <code>data</code> and
 <code>rcon</code>.</p>
 </div>
@@ -1656,7 +1669,7 @@ scalar arguments reject <code>NA</code>.</td>
 </tr>
 <tr class="even">
 <td><code>NaN</code></td>
-<td>Error.</td>
+<td>Error, including for an all-missing nullable structural column.</td>
 <td>Missing.</td>
 <td>Error for numeric structural values.</td>
 </tr>
@@ -1932,12 +1945,21 @@ assessment result in both settings.</p>
 <span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a><span class="fu">flexify</span>(<span class="fu">get_summary</span>(report))</span>
 <span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a><span class="fu">flex_event_instruments</span>(report)</span>
 <span id="cb12-6"><a href="#cb12-6" tabindex="-1"></a><span class="fu">flex_html</span>(<span class="fu">flexify</span>(<span class="fu">get_missing</span>(report)))</span></code></pre></div>
-<p>Accessor filters match exact values and respect case. Their
-<code>redcapmissing_labels</code> attribute contains named
-<code>events</code> and <code>instruments</code> character vectors for
-display. See <code>?get_summary</code>, <code>?get_missing</code>,
-<code>?flex_event_instruments</code>, and <code>?flex_html</code> for
-their specific arguments and return classes.</p>
+<p>Values within one accessor filter vector are alternatives. Multiple
+non-<code>NULL</code> filters are combined by intersection. Matching
+uses exact raw values and is case sensitive; duplicate requested values
+normalize to one value, and unknown, missing, blank, or padded values
+error. Filtering preserves the stored report row order.</p>
+<p>When no rows match, <code>get_summary()</code> retains the names,
+order, and storage types documented for <code>report$summary</code>;
+<code>get_missing()</code> retains those documented for
+<code>report$missing</code>. The <code>redcapmissing_labels</code>
+attribute continues to contain labels for every event and instrument
+represented by <code>report$plan</code>, including labels absent from
+the returned rows. See <code>?get_summary</code>,
+<code>?get_missing</code>, <code>?flex_event_instruments</code>, and
+<code>?flex_html</code> for their specific arguments and return
+classes.</p>
 </div>
 <div id="errors-and-recovery" class="section level2">
 <h2>Errors and recovery</h2>

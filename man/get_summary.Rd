@@ -46,11 +46,25 @@ the returned data and are used for filtering.
 \code{\link[=run_plan]{run_plan()}}. Filters select rows from the stored summary. Assessment results,
 applicability, and denominators remain those computed by \code{\link[=run_plan]{run_plan()}}.
 }
-\details{
-Filter matching is case sensitive. Vectors require present, nonblank,
-unpadded values. Unknown values error. Duplicate filter values normalize to
-one value.
+\section{Filter semantics}{
+
+Values within one non-\code{NULL} filter vector are alternatives: a stored row
+matches that filter when its exact raw value equals any supplied value.
+Multiple non-\code{NULL} filters are combined by intersection, so a row must
+satisfy every supplied filter. Matching is case sensitive.
+
+Filter vectors require present, nonblank, unpadded values. Unknown values
+error. Duplicate values normalize to their first occurrence before
+filtering. Filtering subsets the stored component without changing its row
+order.
+
+When no rows match, \code{get_summary()} retains the names, order, and storage
+types documented for \code{report$summary}; \code{get_missing()} retains those
+documented for \code{report$missing}. The \code{redcapmissing_labels} attribute
+continues to contain labels for every event and instrument represented by
+\code{report$plan}, including labels absent from the returned rows.
 }
+
 \examples{
 \dontrun{
 # report and instruments are caller supplied.

@@ -55,21 +55,6 @@ test_that("registry returns validation check metadata", {
   expect_identical(reg$description, rep(expected_descriptions, each = 2L))
 })
 
-test_that("retired monolithic and form formatter APIs are not exported", {
-  exports <- getNamespaceExports("redcapmissing")
-  expect_false(any(c("find_missing", "flex_event_forms") %in% exports))
-  expect_false(exists(
-    "find_missing",
-    envir = asNamespace("redcapmissing"),
-    inherits = FALSE
-  ))
-  expect_false(exists(
-    "flex_event_forms",
-    envir = asNamespace("redcapmissing"),
-    inherits = FALSE
-  ))
-})
-
 test_that("context validation levels use instrument terminology", {
   expect_identical(
     .registry_resolve_validation_level(

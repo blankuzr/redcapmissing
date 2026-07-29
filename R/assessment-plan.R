@@ -3,14 +3,16 @@
 #' `plan_from_data()` identifies `assessible_targets` by intersecting REDCap
 #' instrument/event/repeat crossings allowed by `rcon` with crossings observed
 #' in `data` or added through `extended_schedule`. An absent extension row
-#' leaves observed targets unchanged.
+#' leaves observed targets unchanged. Caller-supplied `data` is the only source
+#' of physical rows; the constructor never exports records through `rcon`.
 #'
 #' @param data A data frame exported from the REDCap project represented by
 #'   `rcon`. It must contain at least one physical REDCap row. Planning uses
 #'   structural row identity. Instrument response fields may be absent, and a
 #'   response row containing only blanks remains observed. Every supplied column
 #'   must use ordinary atomic vector storage; list or matrix columns are
-#'   rejected. `rcon` supplies the name of the record ID column.
+#'   rejected. `rcon` supplies the name of the record ID column but is not used
+#'   to export records.
 #' @param rcon A `redcapAPI` connection inheriting from
 #'   `redcapApiConnection`, as created by [redcapAPI::redcapConnection()], or
 #'   `redcapOfflineConnection`, as created by [redcapAPI::offlineConnection()]
@@ -18,7 +20,8 @@
 #'   metadata, instruments, and applicable arms, events, mappings, and repeat
 #'   configuration. A missing repeat configuration surface is an error; an
 #'   explicit empty surface represents a project with no repeats. Constructors
-#'   inspect project structure and use records supplied in `data`.
+#'   inspect project structure and use caller-supplied `data` as their only
+#'   physical-row source. They never export records through `rcon`.
 #' @param instruments A nonempty character vector of unique, nonmissing,
 #'   nonblank, unpadded raw REDCap instrument names. Values must exist in the
 #'   project. Their order determines target ordering.
@@ -52,6 +55,16 @@
 #' | `redcap_event_name` | Character or factor raw event names in longitudinal projects; character/factor blanks or typed missing values only in classic projects | Character; `NA_character_` in classic projects |
 #' | `repeat_instance` | Positive integer, whole number double, or digit string without leading zeros when the scheduled event or instrument repeats; typed missing or blank only when neither repeats | Integer; `NA_integer_` when neither the scheduled event nor instrument repeats |
 #'
+#' For nullable `redcap_event_name`, character or factor blank and missing
+#' values are accepted. Other storage is accepted only as a nonempty atomic
+#' vector whose every value is a typed `NA`; logical, integer, double, and
+#' complex all-`NA` vectors therefore qualify. `Date`, `POSIXt`, and `NaN`
+#' values are rejected, including when every value in the column is one of
+#' those missing values. Nullable `repeat_instance` accepts character missing
+#' or blank values, numeric `NA`, or a nonempty logical or factor vector whose
+#' every value is `NA`. It likewise rejects `Date`, `POSIXt`, and `NaN`, even in
+#' an all-missing column.
+#'
 #' Extra columns, incorrect column order, incomplete empty schemas, duplicate
 #' normalized rows, unselected instruments, unknown events, and event,
 #' instrument, or repeat combinations disallowed by `rcon` are errors. An
@@ -60,12 +73,23 @@
 #' @section Structural data normalization:
 #' Record IDs accept character, factor, integer, or finite double storage and
 #' normalize to character. Character leading zeros are preserved. Missing,
-#' blank, padded, `NaN`, and infinite identifiers produce schema errors.
+#' blank, padded, `Date`, `POSIXt`, `NaN`, and infinite identifiers produce
+#' schema errors.
 #'
 #' Longitudinal rows require a nonblank raw `redcap_event_name`. In classic
 #' projects that column may be absent, or contain only character/factor blanks
 #' or typed missing values, and normalizes to `NA_character_`; a nonblank value
 #' is an error.
+#'
+#' Nullable `redcap_event_name` and `redcap_repeat_instrument` columns accept
+#' character or factor blanks and missing values. A noncharacter column must be
+#' a nonempty atomic vector containing only typed `NA` values; logical, integer,
+#' double, and complex all-`NA` columns are accepted. `Date`, `POSIXt`, and
+#' `NaN` are rejected even when the complete column is missing. Nullable
+#' `redcap_repeat_instance` accepts numeric `NA`, character missing or blank
+#' values, or a nonempty logical or factor column containing only `NA`.
+#' `Date`, `POSIXt`, and `NaN` are rejected for this column as well, including
+#' all-missing columns.
 #'
 #' When the project configures repeating events or instruments, `data` must
 #' contain both `redcap_repeat_instrument` and `redcap_repeat_instance`. A row
@@ -125,8 +149,9 @@
 #'
 #' The SHA-256 `structure_fingerprint` represents normalized project identity,
 #' metadata, instruments, arms, events, mappings, and repeat configuration. Its
-#' value is independent of source table row order. The stored plan excludes
-#' `data` and the live connection.
+#' value is independent of source table row order and the current `scipen` and
+#' `OutDec` option values. The stored plan excludes `data` and the live
+#' connection.
 #'
 #' @section Conditions:
 #' Validation failures inherit from `redcapmissing_error`, with the more
@@ -135,7 +160,8 @@
 #' `redcapmissing_error_schedule`, or `redcapmissing_error_plan` as applicable.
 #' An extension into an arm with no observed records emits
 #' `redcapmissing_warning_empty_arm_extension`, which also inherits from
-#' `redcapmissing_warning`.
+#' `redcapmissing_warning`; its character `events` component contains the
+#' affected raw REDCap event names.
 #' A selected longitudinal instrument designated to no event contributes no
 #' target and does not warn. Selection alone does not invent an event crossing.
 #'
@@ -186,12 +212,16 @@ plan_from_data <- function(data, rcon, instruments, extended_schedule = NULL) {
 #' repeat instance crossings declared by `explicit_schedule`, after validating
 #' that each crossing is allowed by `rcon`. A schedule row may identify a record
 #' absent from `data`; that absence is evaluated later by [run_plan()].
+#' Caller-supplied `data` is the only physical-row source, and the constructor
+#' never exports records through `rcon`.
 #'
 #' @inheritParams plan_from_data
 #' @param data A data frame exported from the REDCap project represented by
 #'   `rcon`. Only structural columns are required, and a correctly structured
 #'   empty data frame is allowed. Every supplied column must use ordinary
 #'   atomic vector storage. Structural normalization follows [plan_from_data()].
+#'   This caller-supplied object is the only physical-row source; no records are
+#'   exported through `rcon`.
 #' @param explicit_schedule A data frame with exactly the columns `record_id`,
 #'   `instrument`, `redcap_event_name`, and `repeat_instance`, in that order.
 #'   An absent row means do not assess that crossing. A correctly typed empty
@@ -226,8 +256,9 @@ plan_from_data <- function(data, rcon, instruments, extended_schedule = NULL) {
 #'
 #' Extra columns, incorrect column order, incomplete empty schemas, duplicate
 #' normalized rows, and invalid or disallowed crossings are errors. The
-#' structural identifier and repeat instance rejection rules documented for
-#' [plan_from_data()] apply here as well.
+#' structural identifier, nullable storage, and `Date`, `POSIXt`, and `NaN`
+#' rejection rules documented for [plan_from_data()] apply here as well,
+#' including their all-missing cases.
 #'
 #' @inheritSection plan_from_data Returned plan
 #'

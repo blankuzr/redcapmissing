@@ -66,6 +66,22 @@ test_that("the public API is exactly the documented eleven-function surface", {
   expect_identical(as.list(formals(flex_html)), alist(x =))
 })
 
+test_that("retired entry points are absent from exports and the namespace", {
+  exports <- getNamespaceExports("redcapmissing")
+
+  expect_false(any(c("find_missing", "flex_event_forms") %in% exports))
+  expect_false(exists(
+    "find_missing",
+    envir = asNamespace("redcapmissing"),
+    inherits = FALSE
+  ))
+  expect_false(exists(
+    "flex_event_forms",
+    envir = asNamespace("redcapmissing"),
+    inherits = FALSE
+  ))
+})
+
 test_that("documented S3 methods are registered and public generics dispatch", {
   expect_identical(
     utils::getS3method("flex_event_instruments", "redcapmissing"),
@@ -96,19 +112,4 @@ test_that("documented S3 methods are registered and public generics dispatch", {
   )
   result <- flex_event_instruments(report)
   expect_s3_class(result, "flextable")
-})
-
-test_that("plan and registry print methods return their inputs invisibly", {
-  rcon <- run_plan_rcon()
-  data <- run_plan_data()
-  plan <- plan_from_data(data, rcon, "baseline_form")
-  checks <- registry()
-
-  capture.output(plan_print <- withVisible(print(plan)))
-  capture.output(registry_print <- withVisible(print(checks)))
-
-  expect_false(plan_print$visible)
-  expect_identical(plan_print$value, plan)
-  expect_false(registry_print$visible)
-  expect_identical(registry_print$value, checks)
 })

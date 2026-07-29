@@ -10,7 +10,9 @@ plan_explicit(data, rcon, instruments, explicit_schedule)
 \item{data}{A data frame exported from the REDCap project represented by
 \code{rcon}. Only structural columns are required, and a correctly structured
 empty data frame is allowed. Every supplied column must use ordinary
-atomic vector storage. Structural normalization follows \code{\link[=plan_from_data]{plan_from_data()}}.}
+atomic vector storage. Structural normalization follows \code{\link[=plan_from_data]{plan_from_data()}}.
+This caller-supplied object is the only physical-row source; no records are
+exported through \code{rcon}.}
 
 \item{rcon}{A \code{redcapAPI} connection inheriting from
 \code{redcapApiConnection}, as created by \code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, or
@@ -19,7 +21,8 @@ or \code{\link[redcapAPI:readPreservedProject]{redcapAPI::readPreservedProject()
 metadata, instruments, and applicable arms, events, mappings, and repeat
 configuration. A missing repeat configuration surface is an error; an
 explicit empty surface represents a project with no repeats. Constructors
-inspect project structure and use records supplied in \code{data}.}
+inspect project structure and use caller-supplied \code{data} as their only
+physical-row source. They never export records through \code{rcon}.}
 
 \item{instruments}{A nonempty character vector of unique, nonmissing,
 nonblank, unpadded raw REDCap instrument names. Values must exist in the
@@ -41,6 +44,8 @@ every target.
 repeat instance crossings declared by \code{explicit_schedule}, after validating
 that each crossing is allowed by \code{rcon}. A schedule row may identify a record
 absent from \code{data}; that absence is evaluated later by \code{\link[=run_plan]{run_plan()}}.
+Caller-supplied \code{data} is the only physical-row source, and the constructor
+never exports records through \code{rcon}.
 }
 \section{\code{assessible_targets} rule}{
 
@@ -72,8 +77,9 @@ The function accepts only these column names, order, and storage:\tabular{lll}{
 
 Extra columns, incorrect column order, incomplete empty schemas, duplicate
 normalized rows, and invalid or disallowed crossings are errors. The
-structural identifier and repeat instance rejection rules documented for
-\code{\link[=plan_from_data]{plan_from_data()}} apply here as well.
+structural identifier, nullable storage, and \code{Date}, \code{POSIXt}, and \code{NaN}
+rejection rules documented for \code{\link[=plan_from_data]{plan_from_data()}} apply here as well,
+including their all-missing cases.
 }
 
 \section{Conditions}{
@@ -129,8 +135,9 @@ instance.
 
 The SHA-256 \code{structure_fingerprint} represents normalized project identity,
 metadata, instruments, arms, events, mappings, and repeat configuration. Its
-value is independent of source table row order. The stored plan excludes
-\code{data} and the live connection.
+value is independent of source table row order and the current \code{scipen} and
+\code{OutDec} option values. The stored plan excludes \code{data} and the live
+connection.
 }
 
 \examples{

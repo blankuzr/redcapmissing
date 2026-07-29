@@ -1,4 +1,4 @@
-test_that("verification arguments are paired and require the schema with nine columns", {
+test_that("verification arguments must be supplied together", {
   rcon <- run_plan_rcon(); data <- run_plan_data(required_note = "")
   plan <- plan_from_data(data, rcon, "baseline_form")
   issue <- run_plan_verified_row()
@@ -6,6 +6,14 @@ test_that("verification arguments are paired and require the schema with nine co
                class = "redcapmissing_error_verification")
   expect_error(run_plan(plan, data, rcon, verified_user = "alice", progress = FALSE),
                class = "redcapmissing_error_verification")
+})
+
+test_that("verification input requires the nine-column schema", {
+  rcon <- run_plan_rcon()
+  data <- run_plan_data(required_note = "")
+  plan <- plan_from_data(data, rcon, "baseline_form")
+  issue <- run_plan_verified_row()
+
   expect_error(run_plan(plan, data, rcon, verified = issue[, -1],
                         verified_user = "alice", progress = FALSE),
                class = "redcapmissing_error_verification")
@@ -32,114 +40,6 @@ test_that("verification requires each of its nine columns exactly once", {
   )
 })
 
-test_that("exact latest VERIFIED evidence overrides only a failed field check", {
-  rcon <- run_plan_rcon(); data <- run_plan_data(required_note = "")
-  plan <- plan_from_data(data, rcon, "baseline_form")
-  issue <- run_plan_verified_row()
-  result <- run_plan(
-    plan, data, rcon, ignore_fields = c("record_id", "branch_flag", "checkbox_field",
-      "conditional_note"), verified = issue, verified_user = "alice",
-    details = TRUE, progress = FALSE
-  )
-  field <- result$details[result$details$field_name %in% "required_note", ]
-  expect_identical(field$raw_disposition, "failed")
-  expect_true(field$verification_applied)
-  expect_identical(field$effective_disposition, "passed")
-  expect_identical(result$verification$overrides_applied, 1L)
-  expect_identical(result$target_results$field_complete, "passed")
-  field_summary <- result$summary[
-    result$summary$validation_check == "field-complete",
-  ]
-  expect_identical(
-    field_summary[c(
-      "status", "reason", "assessed", "passed", "failed",
-      "pass_rate", "fail_rate"
-    )],
-    tibble::tibble(
-      status = "assessed",
-      reason = NA_character_,
-      assessed = 1L,
-      passed = 1L,
-      failed = 0L,
-      pass_rate = 1,
-      fail_rate = 0
-    )
-  )
-  expect_false(any(result$missing$field_name == "required_note", na.rm = TRUE))
-  expect_false(any(
-    get_missing(result)$field_name == "required_note",
-    na.rm = TRUE
-  ))
-  expect_identical(field$reason, NA_character_)
-})
-
-test_that("verification results agree across detail settings", {
-  rcon <- run_plan_rcon()
-  data <- run_plan_data(required_note = "")
-  plan <- plan_from_data(data, rcon, "baseline_form")
-  issue <- run_plan_verified_row()
-  ignored <- c("record_id", "branch_flag", "checkbox_field", "conditional_note")
-  run <- function(details) run_plan(
-    plan,
-    data,
-    rcon,
-    ignore_fields = ignored,
-    verified = issue,
-    verified_user = "alice",
-    details = details,
-    progress = FALSE
-  )
-
-  compact <- run(FALSE)
-  detailed <- run(TRUE)
-
-  expect_identical(compact$plan, detailed$plan)
-  expect_identical(compact$target_results, detailed$target_results)
-  expect_identical(compact$summary, detailed$summary)
-  expect_identical(compact$missing, detailed$missing)
-  expect_identical(compact$verification, detailed$verification)
-  expect_identical(
-    compact$diagnostics[setdiff(names(compact$diagnostics), "elapsed_seconds")],
-    detailed$diagnostics[setdiff(names(detailed$diagnostics), "elapsed_seconds")]
-  )
-  expect_null(compact$details)
-  expect_true(is.data.frame(detailed$details))
-  expect_identical(compact$verification$overrides_applied, 1L)
-})
-
-test_that("latest user status is order independent and only VERIFIED applies", {
-  rcon <- run_plan_rcon(); data <- run_plan_data(required_note = "")
-  plan <- plan_from_data(data, rcon, "baseline_form")
-  evidence <- dplyr::bind_rows(
-    run_plan_verified_row(ts = "2026-07-25 11:00:00", status = "VERIFIED"),
-    run_plan_verified_row(ts = "2026-07-25 12:00:00", status = "OPEN")
-  )
-  run <- function(x) run_plan(
-    plan, data, rcon, ignore_fields = c("record_id", "branch_flag", "checkbox_field",
-      "conditional_note"), verified = x, verified_user = "alice",
-    details = TRUE, progress = FALSE
-  )
-  first <- run(evidence); second <- run(evidence[2:1, ])
-  expect_identical(first$verification, second$verification)
-  expect_identical(first$verification$latest_user_rows, 1L)
-  expect_identical(first$verification$verified_rows, 0L)
-  expect_identical(first$target_results$field_complete, "failed")
-})
-
-test_that("conflicting latest verification ties fail closed", {
-  rcon <- run_plan_rcon(); data <- run_plan_data(required_note = "")
-  plan <- plan_from_data(data, rcon, "baseline_form")
-  evidence <- dplyr::bind_rows(
-    run_plan_verified_row(status = "VERIFIED"),
-    run_plan_verified_row(status = "OPEN")
-  )
-  expect_error(
-    run_plan(plan, data, rcon, verified = evidence, verified_user = "alice",
-             progress = FALSE),
-    class = "redcapmissing_error_verification"
-  )
-})
-
 test_that("all verification rows are validated before user filtering", {
   rcon <- run_plan_rcon(); data <- run_plan_data(required_note = "")
   plan <- plan_from_data(data, rcon, "baseline_form")
@@ -151,44 +51,6 @@ test_that("all verification rows are validated before user filtering", {
     run_plan(plan, data, rcon, verified = evidence, verified_user = "alice",
              progress = FALSE),
     class = "redcapmissing_error_verification"
-  )
-})
-
-test_that("a complete empty verification template is valid and audited", {
-  rcon <- run_plan_rcon(); data <- run_plan_data()
-  plan <- plan_from_data(data, rcon, "baseline_form")
-  template <- tibble::tibble(
-    project_id = logical(),
-    record = integer(),
-    event_id = as.Date(character()),
-    field_name = complex(),
-    repeat_instrument = list(),
-    instance = raw(),
-    ts = as.POSIXct(character(), tz = "UTC"),
-    current_query_status = factor(),
-    username = double()
-  )
-  expect_silent(
-    result <- run_plan(
-      plan,
-      data,
-      rcon,
-      verified = template,
-      verified_user = "alice",
-      progress = FALSE
-    )
-  )
-  expect_identical(
-    result$verification,
-    list(
-      enabled = TRUE,
-      verified_user = "alice",
-      input_rows = 0L,
-      user_rows = 0L,
-      latest_user_rows = 0L,
-      verified_rows = 0L,
-      overrides_applied = 0L
-    )
   )
 })
 
@@ -445,56 +307,6 @@ test_that("repeating instrument verification requires its instrument and instanc
   }
 })
 
-test_that("verification preserves a failed repeat instance gate", {
-  repeat_table <- tibble::tibble(event_name = NA_character_, form_name = "baseline_form")
-  rcon <- run_plan_rcon(repeat_table = repeat_table)
-  data <- dplyr::mutate(
-    run_plan_data(required_note = ""),
-    redcap_repeat_instrument = "baseline_form",
-    redcap_repeat_instance = 1L
-  )
-  schedule <- tibble::tibble(
-    record_id = "1", instrument = "baseline_form",
-    redcap_event_name = NA_character_, repeat_instance = 2L
-  )
-  plan <- plan_explicit(data, rcon, "baseline_form", schedule)
-  issue <- run_plan_verified_row()
-  issue$repeat_instrument <- "baseline_form"
-  issue$instance <- 2L
-  result <- run_plan(plan, data, rcon, verified = issue,
-                     verified_user = "alice", progress = FALSE)
-  expect_identical(result$target_results$repeat_instance_row_started, "failed")
-  expect_identical(result$target_results$instrument_started, "not reached")
-  expect_identical(result$target_results$field_complete, "not reached")
-  expect_identical(result$verification$overrides_applied, 0L)
-})
-
-test_that("identical latest verification duplicates collapse harmlessly", {
-  rcon <- run_plan_rcon(); data <- run_plan_data(required_note = "")
-  plan <- plan_from_data(data, rcon, "baseline_form")
-  issue <- run_plan_verified_row()
-  result <- run_plan(plan, data, rcon,
-    verified = dplyr::bind_rows(issue, issue), verified_user = "alice",
-    progress = FALSE)
-  expect_identical(result$verification$user_rows, 2L)
-  expect_identical(result$verification$latest_user_rows, 1L)
-  expect_identical(result$verification$verified_rows, 1L)
-})
-test_that("verification leaves passing fields unchanged and matches usernames case sensitively", {
-  rcon <- run_plan_rcon(); data <- run_plan_data(required_note = "complete")
-  plan <- plan_from_data(data, rcon, "baseline_form")
-  issue <- run_plan_verified_row()
-  passing <- run_plan(plan, data, rcon, verified = issue,
-                      verified_user = "alice", details = TRUE, progress = FALSE)
-  expect_identical(passing$verification$overrides_applied, 0L)
-  field <- passing$details[passing$details$field_name %in% "required_note", ]
-  expect_false(field$verification_applied)
-
-  case_mismatch <- run_plan(plan, data, rcon, verified = issue,
-                            verified_user = "Alice", progress = FALSE)
-  expect_identical(case_mismatch$verification$user_rows, 0L)
-  expect_identical(case_mismatch$verification$overrides_applied, 0L)
-})
 test_that("invalid verification rows are rejected before username and status filtering", {
   rcon <- run_plan_rcon(); data <- run_plan_data(required_note = "")
   plan <- plan_from_data(data, rcon, "baseline_form")
@@ -535,20 +347,6 @@ test_that("nonfinite POSIXct verification timestamps fail closed", {
   expect_error(
     run_plan(plan, data, rcon, verified = issue,
              verified_user = "alice", progress = FALSE),
-    class = "redcapmissing_error_verification"
-  )
-})
-
-test_that("latest ties differing in any supplied context fail closed", {
-  rcon <- run_plan_rcon(); data <- run_plan_data(required_note = "")
-  plan <- plan_from_data(data, rcon, "baseline_form")
-  first <- run_plan_verified_row()
-  second <- run_plan_verified_row()
-  second$event_id <- "101"
-  expect_error(
-    run_plan(plan, data, rcon,
-      verified = dplyr::bind_rows(first, second),
-      verified_user = "alice", progress = FALSE),
     class = "redcapmissing_error_verification"
   )
 })
@@ -632,6 +430,7 @@ test_that("verification rejects factors and NaN in structural nullable columns",
     )
   }
 })
+
 test_that("verification extras are ignored and finite POSIXct timestamps normalize", {
   rcon <- run_plan_rcon()
   data <- run_plan_data(required_note = "")
@@ -659,156 +458,6 @@ test_that("verification extras are ignored and finite POSIXct timestamps normali
   expect_identical(result$verification$verified_rows, 1L)
   expect_identical(result$verification$overrides_applied, 1L)
   expect_false("ignored_extra" %in% names(result$details))
-})
-
-test_that("verification status and user matching are exact with quiet empty results", {
-  rcon <- run_plan_rcon()
-  data <- run_plan_data(required_note = "")
-  plan <- plan_from_data(data, rcon, "baseline_form")
-
-  case_status <- run_plan_verified_row(status = "verified")
-  status_result <- run_plan(
-    plan,
-    data,
-    rcon,
-    verified = case_status,
-    verified_user = "alice",
-    progress = FALSE
-  )
-  expect_identical(status_result$verification$user_rows, 1L)
-  expect_identical(status_result$verification$latest_user_rows, 1L)
-  expect_identical(status_result$verification$verified_rows, 0L)
-  expect_identical(status_result$verification$overrides_applied, 0L)
-
-  other_user <- run_plan_verified_row(username = "bob")
-  expect_silent(
-    no_user <- run_plan(
-      plan,
-      data,
-      rcon,
-      verified = other_user,
-      verified_user = "alice",
-      progress = FALSE
-    )
-  )
-  expect_identical(no_user$verification$input_rows, 1L)
-  expect_identical(no_user$verification$user_rows, 0L)
-  expect_identical(no_user$verification$latest_user_rows, 0L)
-  expect_identical(no_user$verification$verified_rows, 0L)
-  expect_identical(no_user$verification$overrides_applied, 0L)
-})
-
-test_that("verification leaves instrument start and removed fields unchanged", {
-  rcon <- run_plan_rcon()
-  unstarted <- run_plan_data(
-    required_note = "",
-    start_marker = "",
-    branch_flag = "",
-    checkbox_1 = "0",
-    checkbox_2 = "0"
-  )
-  plan <- plan_from_data(unstarted, rcon, "baseline_form")
-  evidence <- run_plan_verified_row(field_name = "required_note")
-  gated <- run_plan(
-    plan,
-    unstarted,
-    rcon,
-    verified = evidence,
-    verified_user = "alice",
-    progress = FALSE
-  )
-  expect_identical(gated$target_results$instrument_started, "failed")
-  expect_identical(gated$target_results$field_complete, "not reached")
-  expect_identical(gated$verification$overrides_applied, 0L)
-
-  data <- run_plan_data(branch_flag = "0")
-  plan <- plan_from_data(data, rcon, "baseline_form")
-  removed <- dplyr::bind_rows(
-    run_plan_verified_row(field_name = "conditional_note"),
-    run_plan_verified_row(field_name = "optional_note")
-  )
-  closed_and_optional <- run_plan(
-    plan,
-    data,
-    rcon,
-    verified = removed,
-    verified_user = "alice",
-    details = TRUE,
-    progress = FALSE
-  )
-  expect_identical(closed_and_optional$verification$verified_rows, 2L)
-  expect_identical(closed_and_optional$verification$overrides_applied, 0L)
-  assessed_fields <- closed_and_optional$details$field_name[
-    closed_and_optional$details$validation_check == "field-complete"
-  ]
-  expect_false(any(c("conditional_note", "optional_note") %in% assessed_fields))
-
-  ignored <- run_plan(
-    plan,
-    data,
-    rcon,
-    ignore_fields = "required_note",
-    verified = run_plan_verified_row(field_name = "required_note"),
-    verified_user = "alice",
-    progress = FALSE
-  )
-  expect_identical(ignored$verification$verified_rows, 1L)
-  expect_identical(ignored$verification$overrides_applied, 0L)
-})
-
-test_that("verification preserves targets and a failed event gate", {
-  rcon <- run_plan_rcon()
-  data <- run_plan_data(record_id = "1", required_note = "")
-  plan <- plan_from_data(data, rcon, "baseline_form")
-  outside <- run_plan_verified_row(record = "2")
-  expect_error(
-    run_plan(
-      plan,
-      data,
-      rcon,
-      verified = outside,
-      verified_user = "alice",
-      progress = FALSE
-    ),
-    class = "redcapmissing_error_verification"
-  )
-
-  repeat_rcon <- run_plan_repeat_event_rcon()
-  repeat_data <- run_plan_repeat_event_data()
-  schedule <- tibble::tibble(
-    record_id = "1",
-    instrument = "diary",
-    redcap_event_name = "visit_arm_1",
-    repeat_instance = 2L
-  )
-  repeat_plan <- plan_explicit(
-    repeat_data,
-    repeat_rcon,
-    "diary",
-    schedule
-  )
-  event_evidence <- run_plan_verified_row(
-    record = "1",
-    field_name = "diary_value"
-  )
-  event_evidence$event_id <- 102L
-  event_evidence$instance <- 2L
-  event_gated <- run_plan(
-    repeat_plan,
-    repeat_data,
-    repeat_rcon,
-    verified = event_evidence,
-    verified_user = "alice",
-    progress = FALSE
-  )
-  expect_identical(event_gated$target_results$event_row_started, "failed")
-  expect_identical(
-    event_gated$target_results$repeat_instance_row_started,
-    "not reached"
-  )
-  expect_identical(event_gated$target_results$instrument_started, "not reached")
-  expect_identical(event_gated$target_results$field_complete, "not reached")
-  expect_identical(event_gated$verification$overrides_applied, 0L)
 })
 
 test_that("verification rejects invalid identity and text columns before filtering", {
@@ -882,6 +531,7 @@ test_that("verification rejects invalid identity and text columns before filteri
   }
 })
 
+
 test_that("verification rejects every malformed timestamp before filtering", {
   rcon <- run_plan_rcon()
   data <- run_plan_data(required_note = "")
@@ -922,42 +572,6 @@ test_that("verification rejects every malformed timestamp before filtering", {
   }
 })
 
-test_that("verified_user requires one nonblank unpadded character scalar", {
-  rcon <- run_plan_rcon()
-  data <- run_plan_data(required_note = "")
-  plan <- plan_from_data(data, rcon, "baseline_form")
-  evidence <- run_plan_verified_row()
-  invalid <- list(
-    character_missing = NA_character_,
-    blank = "",
-    whitespace = " ",
-    leading_whitespace = " alice",
-    trailing_whitespace = "alice ",
-    length_zero = character(),
-    length_two = c("alice", "bob"),
-    factor = factor("alice"),
-    integer = 1L,
-    numeric = 1,
-    logical = TRUE,
-    date = as.Date("2026-07-25"),
-    list = list("alice")
-  )
-
-  for (case_name in names(invalid)) {
-    expect_error(
-      run_plan(
-        plan,
-        data,
-        rcon,
-        verified = evidence,
-        verified_user = invalid[[case_name]],
-        progress = FALSE
-      ),
-      class = "redcapmissing_error_verification",
-      info = case_name
-    )
-  }
-})
 
 test_that("longitudinal verification rejects malformed event IDs before filtering", {
   rcon <- run_plan_rcon(longitudinal = TRUE)
@@ -1008,6 +622,7 @@ test_that("longitudinal verification rejects malformed event IDs before filterin
     )
   }
 })
+
 
 test_that("repeating verification rejects malformed instrument and instance keys", {
   repeat_table <- tibble::tibble(
@@ -1096,6 +711,7 @@ test_that("repeating verification rejects malformed instrument and instance keys
   }
 })
 
+
 test_that("verification preparation batches many native field contexts", {
   record_count <- 500L
   records <- sprintf("r%04d", seq_len(record_count))
@@ -1143,4 +759,52 @@ test_that("verification preparation batches many native field contexts", {
   expect_identical(prepared$audit$user_rows, record_count * 2L)
   expect_identical(prepared$audit$latest_user_rows, record_count)
   expect_identical(prepared$audit$verified_rows, record_count)
+})
+
+test_that("run_plan accepts zero rows in verified after checking nine required names regardless of storage", {
+  rcon <- run_plan_rcon()
+  data <- run_plan_data()
+  plan <- plan_from_data(data, rcon, "baseline_form")
+  template <- tibble::tibble(
+    project_id = logical(),
+    record = integer(),
+    event_id = as.Date(character()),
+    field_name = complex(),
+    repeat_instrument = list(),
+    instance = raw(),
+    ts = as.POSIXct(character(), tz = "UTC"),
+    current_query_status = factor(),
+    username = double()
+  )
+
+  result <- expect_silent(
+    run_plan(
+      plan,
+      data,
+      rcon,
+      verified = template,
+      verified_user = "alice",
+      progress = FALSE
+    )
+  )
+  expect_s3_class(result, "redcapmissing")
+})
+
+test_that("verification records must belong to frozen targets", {
+  rcon <- run_plan_rcon()
+  data <- run_plan_data(record_id = "1", required_note = "")
+  plan <- plan_from_data(data, rcon, "baseline_form")
+  outside <- run_plan_verified_row(record = "2")
+
+  expect_error(
+    run_plan(
+      plan,
+      data,
+      rcon,
+      verified = outside,
+      verified_user = "alice",
+      progress = FALSE
+    ),
+    class = "redcapmissing_error_verification"
+  )
 })

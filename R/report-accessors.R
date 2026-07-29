@@ -15,10 +15,22 @@
 #' @param instruments `NULL`, or a nonempty character vector of exact raw REDCap
 #'   instrument names selected by the plan.
 #'
-#' @details
-#' Filter matching is case sensitive. Vectors require present, nonblank,
-#' unpadded values. Unknown values error. Duplicate filter values normalize to
-#' one value.
+#' @section Filter semantics:
+#' Values within one non-`NULL` filter vector are alternatives: a stored row
+#' matches that filter when its exact raw value equals any supplied value.
+#' Multiple non-`NULL` filters are combined by intersection, so a row must
+#' satisfy every supplied filter. Matching is case sensitive.
+#'
+#' Filter vectors require present, nonblank, unpadded values. Unknown values
+#' error. Duplicate values normalize to their first occurrence before
+#' filtering. Filtering subsets the stored component without changing its row
+#' order.
+#'
+#' When no rows match, `get_summary()` retains the names, order, and storage
+#' types documented for `report$summary`; `get_missing()` retains those
+#' documented for `report$missing`. The `redcapmissing_labels` attribute
+#' continues to contain labels for every event and instrument represented by
+#' `report$plan`, including labels absent from the returned rows.
 #'
 #' @return A tibble with exactly these columns and storage types:
 #'
@@ -104,6 +116,8 @@ get_summary <- function(
 #' `redcapmissing_labels` attribute containing named character vectors `events`
 #' and `instruments` for presentation; raw
 #' values remain in the returned data and are used for filtering.
+#'
+#' @inheritSection get_summary Filter semantics
 #'
 #' @examples
 #' \dontrun{

@@ -51,14 +51,6 @@ flex_event_instruments_report <- function() {
   )
 }
 
-test_that("flex_event_instruments replaces the retired form API", {
-  expect_identical(
-    as.list(formals(flex_event_instruments)),
-    alist(x = , missing_threshold = 0.10, ... = )
-  )
-  expect_false(exists("flex_event_forms", envir = asNamespace("redcapmissing"), inherits = FALSE))
-})
-
 test_that("event and instrument data is computed from target_results", {
   parts <- .flex_event_instruments_build_table(
     flex_event_instruments_report(),

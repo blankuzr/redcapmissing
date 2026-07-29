@@ -220,6 +220,18 @@ its upstream gates and instrument start check, the field remains selected
 and applicable, and its raw \code{field-complete} disposition is \code{"failed"}.
 Eligible rows change the effective disposition to \code{"passed"}. The stored
 verification component contains audit counts. Supplied rows are excluded.
+
+With \code{verified = NULL} and \code{verified_user = NULL}, verification is disabled
+and the audit values are exactly \code{enabled = FALSE},
+\code{verified_user = NA_character_}, and \code{input_rows = 0L}, \code{user_rows = 0L},
+\code{latest_user_rows = 0L}, \code{verified_rows = 0L}, and
+\code{overrides_applied = 0L}.
+
+A complete zero-row \code{verified} table supplied with \code{verified_user} enables
+verification. Its audit values are exactly \code{enabled = TRUE},
+\code{verified_user} equal to the supplied character value, and
+\code{input_rows = 0L}, \code{user_rows = 0L}, \code{latest_user_rows = 0L},
+\code{verified_rows = 0L}, and \code{overrides_applied = 0L}.
 }
 
 \section{Return value}{

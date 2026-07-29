@@ -68,7 +68,9 @@ records <- redcapAPI::exportRecordsTyped(
 
 The constructors discover the project record ID field from `rcon`. The field
 may have any valid REDCap field name. Planning treats every exported physical
-row as observed, including rows whose response values are all missing.
+row as observed, including rows whose response values are all missing. Export
+records before constructing a plan: neither constructor exports records
+through `rcon`.
 
 ## Planning functions
 
@@ -87,8 +89,9 @@ For both constructors:
 - `instruments` is a nonempty character vector of unique, nonmissing,
   nonblank, unpadded raw instrument names. Its order controls target ordering.
 
-`data` is the record source for both constructors. The constructors read
-project structure from `rcon`.
+Caller-supplied `data` is the only physical-row source for both constructors.
+The constructors read project structure from `rcon` but never use it to export
+records.
 
 ## Plan from observed data
 
@@ -157,8 +160,8 @@ The extension has exactly these columns in this order:
 | Column | Accepted storage and values | Accepted missing values | Stored in the plan |
 |---|---|---|---|
 | `instrument` | Character or factor containing a value from `instruments`; values are nonblank and unpadded. | None. | Character. |
-| `redcap_event_name` | Character or factor containing a raw event name in a longitudinal project. | In a classic project, character or factor blank values and typed `NA` values are accepted. Accepted noncharacter storage is a nonempty atomic vector containing only typed `NA` values, excluding `Date` and `POSIXt`. | Character; `NA_character_` for a classic project. |
-| `repeat_instance` | Positive integer, finite whole number double, or character digits matching `[1-9][0-9]*` within R integer range when the scheduled event or instrument repeats. | When neither the scheduled event nor instrument repeats, numeric `NA`, character `NA` or blank, or a nonempty logical or factor column whose every value is `NA` is accepted. | Integer; `NA_integer_` when neither the scheduled event nor instrument repeats. |
+| `redcap_event_name` | Character or factor containing a raw event name in a longitudinal project. | In a classic project, character or factor blank values and typed `NA` values are accepted. Accepted noncharacter storage is a nonempty atomic vector containing only typed `NA` values. `Date`, `POSIXt`, and `NaN` are rejected even when the complete column is missing. | Character; `NA_character_` for a classic project. |
+| `repeat_instance` | Positive integer, finite whole number double, or character digits matching `[1-9][0-9]*` within R integer range when the scheduled event or instrument repeats. | When neither the scheduled event nor instrument repeats, numeric `NA`, character `NA` or blank, or a nonempty logical or factor column whose every value is `NA` is accepted. `Date`, `POSIXt`, and `NaN` are rejected even when the complete column is missing. | Integer; `NA_integer_` when neither the scheduled event nor instrument repeats. |
 
 A zero row extension uses character or factor storage for `instrument` and
 `redcap_event_name`, and character, integer, or double storage for
@@ -201,8 +204,8 @@ The schedule has exactly these columns in this order:
 |---|---|---|---|
 | `record_id` | Character, factor, integer, or finite double; values are nonblank and unpadded. Character leading zeros are preserved. | None. | Character. |
 | `instrument` | Character or factor containing a value from `instruments`; values are nonblank and unpadded. | None. | Character. |
-| `redcap_event_name` | Character or factor containing a raw event name in a longitudinal project. | In a classic project, character or factor blank values and typed `NA` values are accepted. Accepted noncharacter storage is a nonempty atomic vector containing only typed `NA` values, excluding `Date` and `POSIXt`. | Character; `NA_character_` for a classic project. |
-| `repeat_instance` | Positive integer, finite whole number double, or character digits matching `[1-9][0-9]*` within R integer range when the scheduled event or instrument repeats. | When neither the scheduled event nor instrument repeats, numeric `NA`, character `NA` or blank, or a nonempty logical or factor column whose every value is `NA` is accepted. | Integer; `NA_integer_` when neither the scheduled event nor instrument repeats. |
+| `redcap_event_name` | Character or factor containing a raw event name in a longitudinal project. | In a classic project, character or factor blank values and typed `NA` values are accepted. Accepted noncharacter storage is a nonempty atomic vector containing only typed `NA` values. `Date`, `POSIXt`, and `NaN` are rejected even when the complete column is missing. | Character; `NA_character_` for a classic project. |
+| `repeat_instance` | Positive integer, finite whole number double, or character digits matching `[1-9][0-9]*` within R integer range when the scheduled event or instrument repeats. | When neither the scheduled event nor instrument repeats, numeric `NA`, character `NA` or blank, or a nonempty logical or factor column whose every value is `NA` is accepted. `Date`, `POSIXt`, and `NaN` are rejected even when the complete column is missing. | Integer; `NA_integer_` when neither the scheduled event nor instrument repeats. |
 
 A zero row explicit schedule uses the same column storage described for the
 extension, with character, factor, integer, or double storage for `record_id`.
@@ -243,11 +246,11 @@ values are converted as follows:
 
 | Column or dimension | Accepted storage and values | Missing value rule | Value used by the package |
 |---|---|---|---|
-| Project record ID field | Character, factor, integer, or finite double; values are nonblank and unpadded. | Missing values, `NaN`, and infinity produce an error. | Character; character leading zeros are preserved. |
+| Project record ID field | Character, factor, integer, or finite double; values are nonblank and unpadded. | Missing values, `Date`, `POSIXt`, `NaN`, and infinity produce an error. | Character; character leading zeros are preserved. |
 | `redcap_event_name` in a longitudinal project | Character or factor raw event names. | Missing and blank values produce an error. | Character. |
-| `redcap_event_name` in a classic project | The column may be absent. If present, it uses character or factor storage, or a nonempty atomic column containing only typed `NA` values and no `NaN`. | Every value is blank or missing. | `NA_character_`. |
-| `redcap_repeat_instrument` | Character or factor raw instrument names where a repeating instrument applies. Accepted noncharacter storage is a nonempty atomic vector containing only typed `NA` values, excluding `Date` and `POSIXt`. | Blank or missing applies to rows at a repeating event and rows where neither the event nor instrument repeats. | Character or `NA_character_`. |
-| `redcap_repeat_instance` | Positive integer, finite whole number double, or character digits matching `[1-9][0-9]*` within R integer range when the event or instrument repeats. | When neither the event nor instrument repeats, numeric `NA`, character `NA` or blank, or a nonempty logical or factor column whose every value is `NA` is accepted. | Integer or `NA_integer_`. |
+| `redcap_event_name` in a classic project | The column may be absent. If present, it uses character or factor storage, or a nonempty atomic column containing only typed `NA` values. | Every value is blank or missing. `Date`, `POSIXt`, and `NaN` are rejected even when every value in the column is missing. | `NA_character_`. |
+| `redcap_repeat_instrument` | Character or factor raw instrument names where a repeating instrument applies. Accepted noncharacter storage is a nonempty atomic vector containing only typed `NA` values. | Blank or missing applies to rows at a repeating event and rows where neither the event nor instrument repeats. `Date`, `POSIXt`, and `NaN` are rejected even when every value in the column is missing. | Character or `NA_character_`. |
+| `redcap_repeat_instance` | Positive integer, finite whole number double, or character digits matching `[1-9][0-9]*` within R integer range when the event or instrument repeats. | When neither the event nor instrument repeats, numeric `NA`, character `NA` or blank, or a nonempty logical or factor column whose every value is `NA` is accepted. `Date`, `POSIXt`, and `NaN` are rejected even when every value in the column is missing. | Integer or `NA_integer_`. |
 
 When the project contains a repeating event or repeating instrument, `data`
 must include `redcap_repeat_instrument` and `redcap_repeat_instance`. Supplying
@@ -317,7 +320,8 @@ Targets are unique on the first five columns. Their order follows
 `instruments`, REDCap event order, record ID, repeat kind, and repeat instance.
 The fingerprint represents project identity, metadata, instruments, arms,
 events, instrument event mappings, and repeat settings independent of source
-table row order. The stored components exclude the input `data` and `rcon`.
+table row order and the current `scipen` and `OutDec` option values. The stored
+components exclude the input `data` and `rcon`.
 
 ## Run a plan
 
@@ -560,7 +564,7 @@ The same R representation has a different result at each input:
 | Representation | Structural identifier or schedule cell | Response field | Scalar or vector argument |
 |---|---|---|---|
 | Typed `NA` | Accepted for an inapplicable dimension; an applicable dimension requires a value. | Missing. | Accepted only where the argument documentation allows it; logical scalar arguments reject `NA`. |
-| `NaN` | Error. | Missing. | Error for numeric structural values. |
+| `NaN` | Error, including for an all-missing nullable structural column. | Missing. | Error for numeric structural values. |
 | `Inf` or `-Inf` | Error for numeric identifiers and instances. | Present. | Error where finite values are required. |
 | `""` or whitespace only | Converted to typed `NA` for an inapplicable dimension; an applicable dimension requires a value. | Missing. | Names and usernames require nonblank text. |
 | `"NA"`, `"N/A"`, `"NULL"`, `"."`, or `"-999"` | Literal text subject to the identifier or schedule rules. | Present. | Literal text subject to the argument rules. |
@@ -659,11 +663,19 @@ flex_event_instruments(report)
 flex_html(flexify(get_missing(report)))
 ```
 
-Accessor filters match exact values and respect case. Their
-`redcapmissing_labels` attribute contains named `events` and `instruments`
-character vectors for display. See `?get_summary`, `?get_missing`,
-`?flex_event_instruments`, and
-`?flex_html` for their specific arguments and return classes.
+Values within one accessor filter vector are alternatives. Multiple non-`NULL`
+filters are combined by intersection. Matching uses exact raw values and is
+case sensitive; duplicate requested values normalize to one value, and unknown,
+missing, blank, or padded values error. Filtering preserves the stored report
+row order.
+
+When no rows match, `get_summary()` retains the names, order, and storage types
+documented for `report$summary`; `get_missing()` retains those documented for
+`report$missing`. The `redcapmissing_labels` attribute continues to contain
+labels for every event and instrument represented by `report$plan`, including
+labels absent from the returned rows. See `?get_summary`, `?get_missing`,
+`?flex_event_instruments`, and `?flex_html` for their specific arguments and
+return classes.
 
 ## Errors and recovery
 

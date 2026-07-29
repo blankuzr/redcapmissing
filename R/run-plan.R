@@ -181,6 +181,18 @@
 #' Eligible rows change the effective disposition to `"passed"`. The stored
 #' verification component contains audit counts. Supplied rows are excluded.
 #'
+#' With `verified = NULL` and `verified_user = NULL`, verification is disabled
+#' and the audit values are exactly `enabled = FALSE`,
+#' `verified_user = NA_character_`, and `input_rows = 0L`, `user_rows = 0L`,
+#' `latest_user_rows = 0L`, `verified_rows = 0L`, and
+#' `overrides_applied = 0L`.
+#'
+#' A complete zero-row `verified` table supplied with `verified_user` enables
+#' verification. Its audit values are exactly `enabled = TRUE`,
+#' `verified_user` equal to the supplied character value, and
+#' `input_rows = 0L`, `user_rows = 0L`, `latest_user_rows = 0L`,
+#' `verified_rows = 0L`, and `overrides_applied = 0L`.
+#'
 #' @section Return value:
 #' A `redcapmissing` object with exactly `plan`, `target_results`, `summary`,
 #' `missing`, `verification`, `diagnostics`, and `details`. The stored components

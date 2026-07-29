@@ -12,7 +12,8 @@ plan_from_data(data, rcon, instruments, extended_schedule = NULL)
 structural row identity. Instrument response fields may be absent, and a
 response row containing only blanks remains observed. Every supplied column
 must use ordinary atomic vector storage; list or matrix columns are
-rejected. \code{rcon} supplies the name of the record ID column.}
+rejected. \code{rcon} supplies the name of the record ID column but is not used
+to export records.}
 
 \item{rcon}{A \code{redcapAPI} connection inheriting from
 \code{redcapApiConnection}, as created by \code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, or
@@ -21,7 +22,8 @@ or \code{\link[redcapAPI:readPreservedProject]{redcapAPI::readPreservedProject()
 metadata, instruments, and applicable arms, events, mappings, and repeat
 configuration. A missing repeat configuration surface is an error; an
 explicit empty surface represents a project with no repeats. Constructors
-inspect project structure and use records supplied in \code{data}.}
+inspect project structure and use caller-supplied \code{data} as their only
+physical-row source. They never export records through \code{rcon}.}
 
 \item{instruments}{A nonempty character vector of unique, nonmissing,
 nonblank, unpadded raw REDCap instrument names. Values must exist in the
@@ -42,7 +44,8 @@ A validated \code{redcapmissing_plan} as described in \strong{Returned plan}.
 \code{plan_from_data()} identifies \code{assessible_targets} by intersecting REDCap
 instrument/event/repeat crossings allowed by \code{rcon} with crossings observed
 in \code{data} or added through \code{extended_schedule}. An absent extension row
-leaves observed targets unchanged.
+leaves observed targets unchanged. Caller-supplied \code{data} is the only source
+of physical rows; the constructor never exports records through \code{rcon}.
 }
 \section{\code{assessible_targets} rule}{
 
@@ -68,6 +71,16 @@ The function accepts only these column names, order, and storage:\tabular{lll}{
 }
 
 
+For nullable \code{redcap_event_name}, character or factor blank and missing
+values are accepted. Other storage is accepted only as a nonempty atomic
+vector whose every value is a typed \code{NA}; logical, integer, double, and
+complex all-\code{NA} vectors therefore qualify. \code{Date}, \code{POSIXt}, and \code{NaN}
+values are rejected, including when every value in the column is one of
+those missing values. Nullable \code{repeat_instance} accepts character missing
+or blank values, numeric \code{NA}, or a nonempty logical or factor vector whose
+every value is \code{NA}. It likewise rejects \code{Date}, \code{POSIXt}, and \code{NaN}, even in
+an all-missing column.
+
 Extra columns, incorrect column order, incomplete empty schemas, duplicate
 normalized rows, unselected instruments, unknown events, and event,
 instrument, or repeat combinations disallowed by \code{rcon} are errors. An
@@ -78,12 +91,23 @@ exact repeat instance, such as \code{2}, adds instance 2 exclusively.
 
 Record IDs accept character, factor, integer, or finite double storage and
 normalize to character. Character leading zeros are preserved. Missing,
-blank, padded, \code{NaN}, and infinite identifiers produce schema errors.
+blank, padded, \code{Date}, \code{POSIXt}, \code{NaN}, and infinite identifiers produce
+schema errors.
 
 Longitudinal rows require a nonblank raw \code{redcap_event_name}. In classic
 projects that column may be absent, or contain only character/factor blanks
 or typed missing values, and normalizes to \code{NA_character_}; a nonblank value
 is an error.
+
+Nullable \code{redcap_event_name} and \code{redcap_repeat_instrument} columns accept
+character or factor blanks and missing values. A noncharacter column must be
+a nonempty atomic vector containing only typed \code{NA} values; logical, integer,
+double, and complex all-\code{NA} columns are accepted. \code{Date}, \code{POSIXt}, and
+\code{NaN} are rejected even when the complete column is missing. Nullable
+\code{redcap_repeat_instance} accepts numeric \code{NA}, character missing or blank
+values, or a nonempty logical or factor column containing only \code{NA}.
+\code{Date}, \code{POSIXt}, and \code{NaN} are rejected for this column as well, including
+all-missing columns.
 
 When the project configures repeating events or instruments, \code{data} must
 contain both \code{redcap_repeat_instrument} and \code{redcap_repeat_instance}. A row
@@ -145,8 +169,9 @@ instance.
 
 The SHA-256 \code{structure_fingerprint} represents normalized project identity,
 metadata, instruments, arms, events, mappings, and repeat configuration. Its
-value is independent of source table row order. The stored plan excludes
-\code{data} and the live connection.
+value is independent of source table row order and the current \code{scipen} and
+\code{OutDec} option values. The stored plan excludes \code{data} and the live
+connection.
 }
 
 \section{Conditions}{
@@ -157,7 +182,8 @@ specific classes \code{redcapmissing_error_argument},
 \code{redcapmissing_error_schedule}, or \code{redcapmissing_error_plan} as applicable.
 An extension into an arm with no observed records emits
 \code{redcapmissing_warning_empty_arm_extension}, which also inherits from
-\code{redcapmissing_warning}.
+\code{redcapmissing_warning}; its character \code{events} component contains the
+affected raw REDCap event names.
 A selected longitudinal instrument designated to no event contributes no
 target and does not warn. Selection alone does not invent an event crossing.
 }
