@@ -1,96 +1,58 @@
 ---
-title: "Getting started with redcapmissing"
+title: "Creating and running an assessment plan"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    number_sections: false
 vignette: >
-  %\VignetteIndexEntry{Getting started with redcapmissing}
+  %\VignetteIndexEntry{Creating and running an assessment plan}
   %\VignetteEngine{knitr::knitr}
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r, include = FALSE}
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>"
-)
-default_output_hook <- knitr::knit_hooks$get("output")
-knitr::knit_hooks$set(output = function(x, options) {
-  default_output_hook(gsub("[[:blank:]]+(?=\\r?\\n|$)", "", x, perl = TRUE), options)
-})
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 library(redcapmissing)
 ```
 
-`redcapmissing` builds branching-aware missingness reports for REDCap record
-exports. In real workflows, callers create a
-`redcapAPI::redcapConnection()`, export records with
-`redcapAPI::exportRecordsTyped()`, and pass both objects into `find_missing()`.
+`redcapmissing` separates target selection from assessment:
 
-The examples below are synthetic so the vignette can run without live REDCap
-credentials.
+1. `all_instruments()` and `build_extended_schedule()` help declare project
+   instrument scope and optional schedule extensions.
+2. `plan_from_data()` or `plan_explicit()` freezes the record, event,
+   instrument, and repeat instance crossings stored in `assessible_targets`.
+3. `run_plan()` evaluates the physical rows, instruments, and fields for those
+   frozen targets.
 
-## Validation registry
+This vignette explains the complete workflow from record export through result
+inspection.
 
-The package validation model is available through `registry()`:
+## Before you begin
 
-```{r}
-registry()
-```
+The examples assume that the caller has supplied these objects:
 
-The four checks run in registry order. Report rows use `event:form` for
-non-repeating contexts and `event:form:instance` for repeat-instance contexts;
-any failed check removes that context from downstream assessment. See
-`?registry` for the complete taxonomy and column definitions.
+| Object | Required for | Contents |
+|---|---|---|
+| `rcon` | Planning helpers, both constructors, and `run_plan()` | A `redcapAPI` object inheriting from `redcapApiConnection` or `redcapOfflineConnection` that represents the project used for `data`. |
+| `instruments` | The schedule builder and both constructors | A character vector of raw REDCap instrument names, optionally returned by `all_instruments(rcon)`. |
+| `records` | Both constructors and `run_plan()` | Records exported from the project represented by `rcon`. |
+| `extended_schedule` | Optional use of `plan_from_data()` | A table with the exact three column schema described below. |
+| `explicit_schedule` | `plan_explicit()` | A table with the exact four column schema described below. |
+| `verified` and `verified_user` | Optional use of `run_plan()` | A verification table and the exact username whose rows may apply. |
 
-## Synthetic REDCap helpers
+`redcapApiConnection` objects are returned by `redcapAPI::redcapConnection()`;
+`redcapOfflineConnection` objects are returned by
+`redcapAPI::offlineConnection()` or `redcapAPI::readPreservedProject()`. For an
+online connection, use `redcapAPI::unlockREDCap()` with its encrypted keyring
+when available, or obtain a token at run time. Keep the token only in memory and
+exclude it from R source, rendered documents, logs, and saved workspaces.
 
-```{r}
-meta_row <- function(
-  field_name,
-  form_name,
-  field_type = "text",
-  field_label = field_name,
-  choices = "",
-  branching = "",
-  required = ""
-) {
-  tibble::tibble(
-    field_name = field_name,
-    form_name = form_name,
-    field_type = field_type,
-    field_label = field_label,
-    select_choices_or_calculations = choices,
-    text_validation_type_or_show_slider_number = "",
-    branching_logic = branching,
-    required_field = required
-  )
-}
+## Export records
 
-fake_rcon <- function(metadata, mapping = NULL, repeat_instrument_event = NULL) {
-  forms <- unique(as.character(metadata$form_name))
-  instruments <- tibble::tibble(
-    instrument_name = forms,
-    instrument_label = paste(forms, "label")
-  )
+Export typed records while retaining REDCap codes for fields used by branching
+logic. Keep checkbox and REDCap system columns in their exported form.
 
-  list(
-    metadata = function() metadata,
-    instruments = function() instruments,
-    mapping = function() mapping,
-    mappings = function() mapping,
-    repeatInstrumentEvent = function() repeat_instrument_event
-  )
-}
-```
-
-## Real `redcapAPI` workflow
-
-For real REDCap projects, keep branching-logic fields in REDCap code space and
-leave checkbox and system fields raw:
-
-```{r, eval = FALSE}
-rcon <- redcapAPI::redcapConnection(
-  url = Sys.getenv("REDCAP_API_URL"),
-  token = Sys.getenv("REDCAP_API_TOKEN")
-)
-
+```{r export, eval = FALSE}
 records <- redcapAPI::exportRecordsTyped(
   rcon,
   cast = list(
@@ -102,322 +64,653 @@ records <- redcapAPI::exportRecordsTyped(
     system = redcapAPI::castRaw
   )
 )
+```
 
-report <- find_missing(
+The constructors discover the project record ID field from `rcon`. The field
+may have any valid REDCap field name. Planning treats every exported physical
+row as observed, including rows whose response values are all missing. Export
+records before constructing a plan: neither constructor exports records
+through `rcon`.
+
+## Planning functions
+
+| Function | Arguments | Result |
+|---|---|---|
+| `all_instruments()` | `rcon` | The complete ordered raw instrument inventory. |
+| `build_extended_schedule()` | `rcon`, `instruments`, and optional `n_repeat_instances` | A three-column extension containing every allowable crossing for the requested instruments. |
+| `plan_from_data()` | `data`, `rcon`, `instruments`, and optional `extended_schedule` | Frozen targets observed in `data`, plus those added by the extension. |
+| `plan_explicit()` | `data`, `rcon`, `instruments`, and required `explicit_schedule` | Frozen targets named in `explicit_schedule`. |
+
+For both constructors:
+
+- `data` is a data frame or tibble from the project represented by `rcon`.
+- `rcon` supplies project identity, metadata, instruments, repeat settings,
+  and the applicable arms, events, and instrument event mappings.
+- `instruments` is a nonempty character vector of unique, nonmissing,
+  nonblank, unpadded raw instrument names. Its order controls target ordering.
+
+Caller-supplied `data` is the only physical-row source for both constructors.
+The constructors read project structure from `rcon` but never use it to export
+records.
+
+## Plan from observed data
+
+`plan_from_data()` applies this rule:
+
+```text
+assessible_targets =
+  allowable crossings described by rcon
+  INTERSECT
+  (
+    crossings observed in data
+    UNION
+    crossings in extended_schedule
+  )
+```
+
+```{r observed_plan, eval = FALSE}
+observed_plan <- plan_from_data(
   data = records,
   rcon = rcon,
-  forms = "baseline_form"
+  instruments = instruments
 )
 ```
 
-If a REDCap reviewer has already verified field-level data-quality issues,
-cross-reference the data-quality export with that exact username:
+`data` must contain at least one physical row. Instrument response columns are
+optional during planning.
 
-```{r, eval = FALSE}
-quality_issues <- redcapAPI::exportDataQuality(rcon)
+`extended_schedule = NULL` selects observed planning. A zero row extension
+with the complete schema has the same result.
 
-verified_report <- find_missing(
+## Add crossings with `extended_schedule`
+
+Use `all_instruments()` when the plan should declare the complete project
+inventory, then pass all or a subset of that vector to the builder:
+
+```{r build_extension, eval = FALSE}
+instruments <- all_instruments(rcon)
+extension_instruments <- c("followup", "diary")
+extended_schedule <- build_extended_schedule(
+  rcon = rcon,
+  instruments = extension_instruments,
+  n_repeat_instances = 3L
+)
+```
+
+The builder requires a nonempty vector of unique project instrument names.
+`NULL` does not mean all instruments; call `all_instruments(rcon)` explicitly.
+
+The result has exactly `instrument`, `redcap_event_name`, and
+`repeat_instance`, with character, character, and integer storage.
+
+Classic project rows use the native eventless crossing represented by
+`redcap_event_name = NA_character_`. A classic repeating instrument receives
+instances `1` through `n_repeat_instances`. Longitudinal rows always use a
+concrete event designated for that instrument. A valid longitudinal instrument
+designated to no event contributes no row and emits one
+`redcapmissing_warning_undesignated_extension` warning; the builder never
+creates a longitudinal crossing with a missing event.
+
+If none of the requested longitudinal instruments is designated to an event,
+the builder warns and returns a correctly typed zero-row schedule. To request
+no extension, omit `extended_schedule` from `plan_from_data()`.
+
+The extension has exactly these columns in this order:
+
+| Column | Accepted storage and values | Accepted missing values | Stored in the plan |
+|---|---|---|---|
+| `instrument` | Character or factor containing a value from `instruments`; values are nonblank and unpadded. | None. | Character. |
+| `redcap_event_name` | Character or factor containing a raw event name in a longitudinal project. | In a classic project, character or factor blank values and typed `NA` values are accepted. Accepted noncharacter storage is a nonempty atomic vector containing only typed `NA` values. `Date`, `POSIXt`, and `NaN` are rejected even when the complete column is missing. | Character; `NA_character_` for a classic project. |
+| `repeat_instance` | Positive integer, finite whole number double, or character digits matching `[1-9][0-9]*` within R integer range when the scheduled event or instrument repeats. | When neither the scheduled event nor instrument repeats, numeric `NA`, character `NA` or blank, or a nonempty logical or factor column whose every value is `NA` is accepted. `Date`, `POSIXt`, and `NaN` are rejected even when the complete column is missing. | Integer; `NA_integer_` when neither the scheduled event nor instrument repeats. |
+
+A zero row extension uses character or factor storage for `instrument` and
+`redcap_event_name`, and character, integer, or double storage for
+`repeat_instance`. Column order is checked even when the table has no rows.
+Extra columns, duplicate rows after value conversion, unknown names, and
+crossings disallowed by `rcon` produce an error.
+
+```{r extension, eval = FALSE}
+extended_plan <- plan_from_data(
   data = records,
   rcon = rcon,
-  forms = "baseline_form",
-  verified = quality_issues,
-  verified_user = "reviewer_username"
+  instruments = instruments,
+  extended_schedule = extended_schedule
 )
-
-verified_report$diagnostics$verification
 ```
 
-Every non-empty issue row is validated against the cached project ID, fields,
-events, form-event mapping, and repeat structure before collapsing or
-filtering. Resolution history is grouped by `status_id`; the greatest `ts` is
-latest, with the greatest numeric `res_id` breaking timestamp ties. Only that
-latest resolution can match `verified_user`, and both its
-`current_query_status` and the live issue `query_status` must be `"VERIFIED"`.
-Historical resolutions never authorize an exception. Matching can pass only an
-otherwise-failing field check at the same record/event/repeat/field context. It
-does not create checks or bypass startedness, branching, field selection, or
-the requested report scope. The diagnostics retain counts, not the supplied
-data-quality rows; `verified_rows` counts matching latest resolutions. For a
-regular context, entirely missing `repeat_instrument` and `instance` columns
-may use any all-`NA` storage type returned by `exportDataQuality()`; other
-upstream `instance` placeholders are ignored. A classic export may carry one
-positive internal event ID, which is normalized to the classic event context.
-True repeating events and instruments still require their instance.
+Each row adds its exact instrument, event, and repeat instance crossing for
+records observed in the applicable arm. In a classic project, it adds the
+crossing for every observed record. An arm with no observed records produces
+one `redcapmissing_warning_empty_arm_extension` warning and contributes no
+targets. Each row contributes only the instance named in that row.
 
-## Branching-aware field checks
+An omitted crossing receives the observed planning rule. Any allowable
+crossing observed in `data` remains in `assessible_targets`.
 
-```{r}
-metadata <- dplyr::bind_rows(
-  meta_row("record_id", "baseline_form", required = "y"),
-  meta_row("branch_flag", "baseline_form", field_type = "yesno", required = "y"),
-  meta_row("required_note", "baseline_form", required = "y"),
-  meta_row(
-    "conditional_note",
-    "baseline_form",
-    branching = "[branch_flag] = '1'",
-    required = "y"
-  )
-)
+## Plan from `explicit_schedule`
 
-records <- tibble::tibble(
-  record_id = c("r1", "r2"),
-  branch_flag = c("1", "0"),
-  required_note = c("entered", "entered"),
-  conditional_note = c("", "")
-)
+`plan_explicit()` applies this rule:
 
-report <- find_missing(
+```text
+assessible_targets =
+  allowable crossings described by rcon
+  INTERSECT
+  crossings in explicit_schedule
+```
+
+The schedule has exactly these columns in this order:
+
+| Column | Accepted storage and values | Accepted missing values | Stored in the plan |
+|---|---|---|---|
+| `record_id` | Character, factor, integer, or finite double; values are nonblank and unpadded. Character leading zeros are preserved. | None. | Character. |
+| `instrument` | Character or factor containing a value from `instruments`; values are nonblank and unpadded. | None. | Character. |
+| `redcap_event_name` | Character or factor containing a raw event name in a longitudinal project. | In a classic project, character or factor blank values and typed `NA` values are accepted. Accepted noncharacter storage is a nonempty atomic vector containing only typed `NA` values. `Date`, `POSIXt`, and `NaN` are rejected even when the complete column is missing. | Character; `NA_character_` for a classic project. |
+| `repeat_instance` | Positive integer, finite whole number double, or character digits matching `[1-9][0-9]*` within R integer range when the scheduled event or instrument repeats. | When neither the scheduled event nor instrument repeats, numeric `NA`, character `NA` or blank, or a nonempty logical or factor column whose every value is `NA` is accepted. `Date`, `POSIXt`, and `NaN` are rejected even when the complete column is missing. | Integer; `NA_integer_` when neither the scheduled event nor instrument repeats. |
+
+A zero row explicit schedule uses the same column storage described for the
+extension, with character, factor, integer, or double storage for `record_id`.
+It creates a valid plan with no targets. `explicit_schedule = NULL` and an
+omitted `explicit_schedule` produce an error.
+
+```{r explicit_plan, eval = FALSE}
+explicit_plan <- plan_explicit(
   data = records,
-  rcon = fake_rcon(metadata),
-  forms = "baseline_form"
+  rcon = rcon,
+  instruments = instruments,
+  explicit_schedule = explicit_schedule
 )
-
-get_missing(
-  report,
-  validation_check = "field-complete"
-)[, c(
-  "record_id",
-  "validation_context",
-  "form",
-  "validation_check",
-  "field_name"
-)]
 ```
 
-Record `r1` is branch-open for `conditional_note`, so the missing value is a
-`field-complete` failure. Record `r2` is branch-closed, so the field is not in
-the assessment pool.
+Each schedule row creates its exact target. A record ID absent from `data`
+remains in the plan. During `run_plan()`, an absent longitudinal event fails
+`event-row-started`; a present event with an absent repeat instance fails
+`repeat-instance-row-started`; and an absent classic target with
+`repeat_instance = NA_integer_` has both row checks marked `"not applicable"`
+and fails `instrument-started`.
+For a longitudinal project, a record already observed in one arm must be
+scheduled within that arm.
+A selected instrument with no explicit schedule row contributes no target and
+produces no warning: omission means that the target was not requested.
 
-The `url` column from `get_missing(report)` is a raw REDCap Data Entry URL for
-each failed record/form context when `rcon` includes the required instance,
-version, and project metadata, plus an event ID for longitudinal projects. It
-is `NA` for connection-like objects that do not provide that metadata,
-including the synthetic helper used here.
+The absence rules differ:
 
-## Event-row gating
+| Input | Row absent | Table is `NULL` | Complete table has zero rows |
+|---|---|---|---|
+| `extended_schedule` | Use the observed planning rule for that crossing. | Use observed planning. | Use observed planning. |
+| `explicit_schedule` | Exclude that exact target. | Error. | Create a plan with no targets. |
 
-REDCap exports may omit entire event rows. `event-row-started` catches that
-before form and field checks run downstream.
+## Structural columns in `data`
 
-```{r}
-status_metadata <- dplyr::bind_rows(
-  meta_row("record_id", "status_form", required = "y"),
-  meta_row("status_started", "status_form", required = "y"),
-  meta_row("status_value", "status_form", required = "y")
+Every supplied column must be an atomic vector with no dimensions. Structural
+values are converted as follows:
+
+| Column or dimension | Accepted storage and values | Missing value rule | Value used by the package |
+|---|---|---|---|
+| Project record ID field | Character, factor, integer, or finite double; values are nonblank and unpadded. | Missing values, `Date`, `POSIXt`, `NaN`, and infinity produce an error. | Character; character leading zeros are preserved. |
+| `redcap_event_name` in a longitudinal project | Character or factor raw event names. | Missing and blank values produce an error. | Character. |
+| `redcap_event_name` in a classic project | The column may be absent. If present, it uses character or factor storage, or a nonempty atomic column containing only typed `NA` values. | Every value is blank or missing. `Date`, `POSIXt`, and `NaN` are rejected even when every value in the column is missing. | `NA_character_`. |
+| `redcap_repeat_instrument` | Character or factor raw instrument names where a repeating instrument applies. Accepted noncharacter storage is a nonempty atomic vector containing only typed `NA` values. | Blank or missing applies to rows at a repeating event and rows where neither the event nor instrument repeats. `Date`, `POSIXt`, and `NaN` are rejected even when every value in the column is missing. | Character or `NA_character_`. |
+| `redcap_repeat_instance` | Positive integer, finite whole number double, or character digits matching `[1-9][0-9]*` within R integer range when the event or instrument repeats. | When neither the event nor instrument repeats, numeric `NA`, character `NA` or blank, or a nonempty logical or factor column whose every value is `NA` is accepted. `Date`, `POSIXt`, and `NaN` are rejected even when every value in the column is missing. | Integer or `NA_integer_`. |
+
+When the project contains a repeating event or repeating instrument, `data`
+must include `redcap_repeat_instrument` and `redcap_repeat_instance`. Supplying
+one of these columns also requires the other.
+
+The row key is the converted record ID, event, repeat instrument, and repeat
+instance. Each key occurs once. A collision created during value conversion
+produces a duplicate key error.
+
+`plan_from_data()` requires at least one row. `plan_explicit()` and
+`run_plan()` accept a zero row data frame with every structural column required
+by the project.
+
+## Classic, longitudinal, and repeating projects
+
+Classic projects store `NA_character_` for `redcap_event_name` because they
+have no event dimension. An extension applies to all observed records. A
+classic repeating instrument uses positive instances at that eventless
+crossing; neither case is an undesignated instrument or produces that warning.
+
+Longitudinal projects require one raw event name on every physical row.
+Extensions apply to records observed in the arm that contains the scheduled
+event. An instrument mapped at only some events is assessible only at those
+events. A project instrument designated to no longitudinal event remains part
+of the project inventory but contributes no observed, extended, or explicit
+target unless REDCap later designates it to an event.
+
+A row where neither its event nor its instrument repeats stores
+`NA_character_` in `redcap_repeat_instrument` and `NA_integer_` in
+`redcap_repeat_instance`. A row at a repeating event stores `NA_character_`
+for the repeat instrument and a positive instance. A row for a repeating
+instrument stores the raw instrument name and a positive instance.
+
+An instrument may have no repeat at one event and repeat at another. The
+schedule row must match the repeat setting for that event.
+
+## Plan contents
+
+Both constructors return a `redcapmissing_plan` with these components:
+
+| Component | Storage and values |
+|---|---|
+| `schema_version` | Integer scalar `1L`. |
+| `construction` | Character scalar `"from_data"` or `"explicit"`. |
+| `instruments` | Character vector in the requested order. |
+| `assessible_targets` | Tibble with the six columns below. |
+| `project` | List containing `project_id`, `record_id_field`, `longitudinal`, `event_labels`, and `instrument_labels`. |
+| `structure_fingerprint` | Character scalar containing a 64 character lowercase hexadecimal SHA-256 digest. |
+
+`project$project_id` and `project$record_id_field` are character scalars.
+`project$longitudinal` is one logical value. `project$event_labels` and
+`project$instrument_labels` are named character vectors; the event vector is
+empty for a classic project.
+
+`assessible_targets` contains:
+
+| Column | Storage and values |
+|---|---|
+| `record_id` | Character record ID. |
+| `instrument` | Character raw instrument name from `instruments`. |
+| `redcap_event_name` | Character raw event name, or `NA_character_` for a classic project. |
+| `repeat_instrument` | Character raw instrument name for a repeating instrument target; `NA_character_` for a repeating event target or when neither the event nor instrument repeats. |
+| `repeat_instance` | Positive integer when the event or instrument repeats; `NA_integer_` when neither repeats. |
+| `target_source` | `"observed"`, `"extended"`, `"observed+extended"`, or `"explicit"` as allowed by `construction`. |
+
+Targets are unique on the first five columns. Their order follows
+`instruments`, REDCap event order, record ID, repeat kind, and repeat instance.
+The fingerprint represents project identity, metadata, instruments, arms,
+events, instrument event mappings, and repeat settings independent of source
+table row order and the current `scipen` and `OutDec` option values. The stored
+components exclude the input `data` and `rcon`.
+
+## Run a plan
+
+```{r run, eval = FALSE}
+report <- run_plan(
+  plan = extended_plan,
+  data = records,
+  rcon = rcon
 )
-
-mapping <- tibble::tibble(
-  arm_num = c(1, 1, 1),
-  unique_event_name = c("event_1_arm_1", "event_2_arm_1", "event_3_arm_1"),
-  form = c("status_form", "status_form", "status_form")
-)
-
-event_records <- tibble::tibble(
-  record_id = c("r1", "r1", "r2", "r2"),
-  redcap_event_name = c(
-    "event_1_arm_1",
-    "event_2_arm_1",
-    "event_1_arm_1",
-    "event_2_arm_1"
-  ),
-  status_started = c("yes", "yes", "yes", "yes"),
-  status_value = c("entered", "", "entered", "entered")
-)
-
-event_report <- find_missing(
-  data = event_records,
-  rcon = fake_rcon(status_metadata, mapping = mapping),
-  forms = "status_form"
-)
-
-get_summary(event_report)[
-  ,
-  c("validation_level", "validation_check", "redcap_event_name", "assessed", "failed")
-]
 ```
 
-`event_3_arm_1` fails `event-row-started`, so it is not assessed by
-`form-started` or `field-complete`.
+| Argument | Required | Default | Accepted values | Effect |
+|---|---:|---|---|---|
+| `plan` | Yes | None | A validated `redcapmissing_plan`. | Supplies the stored targets, selected instruments, `target_source` provenance, project data, and fingerprint. |
+| `data` | Yes | None | A data frame or tibble with structural columns, response columns needed by frozen target instruments, and branching dependencies for those responses. A complete zero row table is valid. | Supplies the rows and response values assessed during this call. |
+| `rcon` | Yes | None | The connection or supported object for the same project structure represented by `plan`. | Supplies current project identity and structure. |
+| `required_fields` | No | `TRUE` | One nonmissing logical value. | `TRUE` retains fields marked required before later removals; `FALSE` retains required and optional fields. |
+| `ignore_fields` | No | `NULL` | `NULL`, `character(0)`, or unique nonmissing, nonblank, unpadded raw metadata field names that remain after the `required_fields` filter and `exclude_types` removal. Unknown names and names removed by an earlier step produce an error. | Removes those names from `field-complete`. |
+| `exclude_types` | No | `"descriptive"` | `NULL`, `character(0)`, or unique nonmissing, nonblank, unpadded metadata field types present after the `required_fields` filter. An explicitly supplied unused type produces an error. The omitted default removes `descriptive` fields when present and is accepted when none remain. | Removes those types from `field-complete`. |
+| `verified` | No | `NULL` | `NULL`, a complete zero row verification table, or a table with the nine columns described below. | Supplies verification evidence for failed `field-complete` results. |
+| `verified_user` | No | `NULL` | `NULL` or one nonmissing, nonblank, unpadded character username. | Selects rows whose `username` exactly matches this value, including case. |
+| `details` | No | `FALSE` | One nonmissing logical value. | `TRUE` stores check and assessed field rows in `details`; `FALSE` stores `NULL`. |
+| `progress` | No | `interactive()` | One nonmissing logical value. | Controls progress reporting for the twelve stages. |
 
-## Event-specific record eligibility
+The current `data` may contain rows exported after plan construction when
+`rcon` still describes the same project structure. The plan continues to
+supply its stored targets. Rows outside those targets are ignored. For an
+absent stored target, a missing longitudinal event fails `event-row-started`, a
+missing repeat instance after a present event fails
+`repeat-instance-row-started`, and a missing classic target with
+`repeat_instance = NA_integer_` fails `instrument-started` after both row
+checks receive `"not applicable"`.
+Runtime field preflight is target-scoped. It derives instrument scope from
+`plan$assessible_targets`, then requires detection fields, retained assessment
+fields, checkbox child columns, branching dependencies for those fields, and
+the structural columns needed to match targets. A selected plan instrument
+with no frozen target imposes no exclusive response-column requirement. A
+field on a nontarget instrument remains required when target branching logic
+references it.
 
-Use `records` when records become eligible for validation on different REDCap
-events, forms, or repeat instances at different times. The argument is a named
-list keyed by raw `redcap_event_name`. An event-level vector limits every final
-requested form and selected repeat instance at that event. A nested form vector
-limits one event/form context. A nested instance list limits one
-event/form/repeat-instance context. Omitted event, form, and instance entries
-use the default eligibility implied by `data`, `forms`, `events`, `instances`,
-and `ignore_ids`. Empty, missing, `NULL`, and blank-only record values are
-errors. To remove an event from assessment entirely, exclude it with `events`
-rather than using an empty `records` entry.
+### Execution stages
 
-Every report stores `spec$record_eligibility` with one row for each final
-assessed record/event/form/repeat-instance context, even when `records` is
-omitted. If filtering leaves no assessable record IDs, `find_missing()` stops.
-Explicit `records` entries are the exception because they can declare expected
-contexts whose absent data rows should fail a row-started check.
+`diagnostics` records these stages in order:
 
-```{r}
-staged_metadata <- dplyr::bind_rows(
-  meta_row("record_id", "demographics", required = "y"),
-  meta_row("demographics_started", "demographics", required = "y"),
-  meta_row("demographics_value", "demographics", required = "y"),
-  meta_row("surgery_started", "surgery", required = "y"),
-  meta_row("surgery_value", "surgery", required = "y")
-)
+| Stage | Operation |
+|---:|---|
+| 1 | `"Validate plan, data, and rcon"` |
+| 2 | `"Validate and normalize verification"` |
+| 3 | `"Resolve instrument-start fields"` |
+| 4 | `"Resolve field-complete fields"` |
+| 5 | `"Join assessible_targets to physical rows"` |
+| 6 | `"Run event-row-started"` |
+| 7 | `"Run repeat-instance-row-started"` |
+| 8 | `"Run instrument-started"` |
+| 9 | `"Run raw field-complete"` |
+| 10 | `"Apply verification"` |
+| 11 | `"Aggregate effective results"` |
+| 12 | `"Construct the report"` |
 
-staged_mapping <- tibble::tibble(
-  arm_num = c(1, 1, 1),
-  unique_event_name = c("event_a", "event_b", "event_c"),
-  form = c("demographics", "surgery", "surgery")
-)
+### Gates and statuses
 
-staged_records <- tibble::tibble(
-  record_id = c("record_a", "record_a", "record_b", "record_b", "record_b"),
-  redcap_event_name = c("event_a", "event_b", "event_a", "event_b", "event_c"),
-  demographics_started = c("yes", "", "yes", "", ""),
-  demographics_value = c("entered", "", "entered", "", ""),
-  surgery_started = c("", "yes", "", "yes", "yes"),
-  surgery_value = c("", "entered", "", "entered", "")
-)
+Check statuses are `"passed"`, `"failed"`, `"not applicable"`, and
+`"not reached"`. Validation levels are `"event:instrument"` and
+`"event:instrument:instance"`.
 
-staged_report <- find_missing(
-  data = staged_records,
-  rcon = fake_rcon(staged_metadata, mapping = staged_mapping),
-  forms = c("surgery", "demographics"),
-  records = list(
-    event_a = c("record_a", "record_b"),
-    event_b = c("record_a", "record_b"),
-    event_c = list(
-      surgery = "record_b"
-    )
-  )
-)
+`registry()` documents these validation checks in five columns:
+`validation_order` is the check sequence; `validation_level` is the value stored
+in report rows; `validation_check` is the exact report and filter code;
+`flex_label` is the label used by `flexify()`; and `description` states the pass
+condition for an assessed check.
 
-staged_report$spec$record_eligibility
+| Target context | `event-row-started` | `repeat-instance-row-started` |
+|---|---|---|
+| Classic project | `"not applicable"` | Evaluated when `repeat_instance` is positive; `"not applicable"` when it is `NA_integer_`. |
+| Longitudinal target with `repeat_instance = NA_integer_` | Passes when any physical row exists for its record and event. | `"not applicable"`. |
+| Longitudinal target with a positive `repeat_instance` | Passes when any physical row exists for its record and event. | Evaluated after the event check passes. |
 
-staged_summary <- get_summary(staged_report)
-staged_summary[
-  staged_summary$validation_check == "event-row-started",
-  c("form", "redcap_event_name", "assessed", "failed")
-]
+A failed event or repeat instance check sets downstream checks to
+`"not reached"`. `instrument-started` then checks its own field set.
+`field-complete` runs after `instrument-started` passes.
+
+```{r registry}
+registry()
 ```
 
-Record `record_a` is assessed for `surgery` on `event_b`, but not on
-`event_c`. Record `record_b` is assessed on `event_c`, where its blank surgery
-value fails downstream field completeness.
+## Instrument detection and field selection
 
-If another requested event offered `demographics` and was not named in
-`records`, the `records` argument would not limit that event. The package would
-consider every applicable non-ignored record in `data` for that event, then use
-`event-row-started` to decide whether each record actually has an event row.
+`instrument-started` uses every data entry metadata field on each instrument
+represented in the frozen targets except:
 
-## Repeat expectations
+- the project record ID field;
+- fields with type `descriptive`; and
+- fields with type `calc`.
 
-REDCap does not export nonexistent repeat rows. Use `instances` to declare the
-repeat instances expected for the report.
+A checkbox root expands to its exported child columns. An ordinary detection
+field starts the instrument when its response is present. A checkbox root
+starts the instrument when at least one exported child column is selected. The
+values `"0"`, `"unchecked"`, `"false"`, and `"no"` are unselected regardless
+of letter case. A targeted instrument with no usable detection fields produces
+an error; a selected instrument with no target does not enter this check.
 
-```{r}
-repeat_metadata <- dplyr::bind_rows(
-  meta_row("record_id", "screen_form", required = "y"),
-  meta_row("screen_started", "screen_form", required = "y"),
-  meta_row("repeat_started", "repeat_form", required = "y"),
-  meta_row("repeat_value", "repeat_form", required = "y")
-)
+`required_fields`, `exclude_types`, and `ignore_fields` resolve the
+`field-complete` set in this order:
 
-repeat_mapping <- tibble::tibble(
-  arm_num = c(1, 1),
-  unique_event_name = c("baseline_event", "baseline_event"),
-  form = c("screen_form", "repeat_form")
-)
-
-repeat_map <- tibble::tibble(
-  event_name = "baseline_event",
-  form_name = "repeat_form",
-  custom_form_label = ""
-)
-
-repeat_records <- tibble::tibble(
-  record_id = c("r1", "r2", "r2"),
-  redcap_event_name = c("baseline_event", "baseline_event", "baseline_event"),
-  redcap_repeat_instrument = c("repeat_form", "repeat_form", "repeat_form"),
-  redcap_repeat_instance = c("1", "1", "2"),
-  repeat_started = c("yes", "yes", "yes"),
-  repeat_value = c("10", "20", "30")
-)
-
-repeat_report <- find_missing(
-  data = repeat_records,
-  rcon = fake_rcon(
-    repeat_metadata,
-    mapping = repeat_mapping,
-    repeat_instrument_event = repeat_map
-  ),
-  forms = "repeat_form",
-  instances = 2L
-)
-
-get_missing(
-  repeat_report,
-  validation_check = "instance-row-started"
-)[, c(
-  "record_id",
-  "redcap_event_name",
-  "redcap_repeat_instrument",
-  "redcap_repeat_instance",
-  "validation_context",
-  "form",
-  "validation_check"
-)]
+```text
+all fields on each targeted instrument
+-> retain fields marked required when required_fields = TRUE
+-> remove field types named by exclude_types
+-> remove field names named by ignore_fields
 ```
 
-The missing instance `2` for record `r1` fails `instance-row-started` and is
-removed from downstream form and field assessment.
+`ignore_fields` contains raw metadata field names. A checkbox uses its root
+field name. Unknown, duplicate, missing, blank, padded, and unused names or
+types produce an error. Explicit field policies remain strict against the
+target-scoped field set.
 
-## Mixed regular and repeating contexts
+These three arguments change `field-complete` only. Detection fields remain
+available to `instrument-started`. When the policy leaves no fields,
+`field-complete` receives:
 
-Some REDCap projects offer the same form as regular on one event and repeating
-on another. The package activates event/form checks per context:
+| Output | Value |
+|---|---|
+| status | `"not applicable"` |
+| reason | `"no fields remain after field policy"` |
+| counts | Zero. |
+| rates | `NA_real_`. |
 
-- regular event contexts use `event-row-started`
-- repeating contexts use `instance-row-started`
+## Branching logic and checkboxes
 
-If `events` excludes the repeating event, `instances` is ignored for that form.
-If a requested repeating context omits `instances`, the package assumes
-instance `1` and warns once.
+Branching logic is evaluated for each target event and repeat context. Fields
+whose logic evaluates to false are excluded from the field count for that
+target.
 
-## Inspecting results
+For an unqualified reference to another event:
 
-Use `get_summary()` to review validation counts and rates. Use `get_missing()`
-to identify the failed record or field contexts that need follow-up. Both
-accessors can focus the report by validation check, event, or form.
+1. A unique source row whose `redcap_repeat_instance` is missing supplies the
+   referenced value.
+2. When no such source row exists, one source row with a positive repeat
+   instance supplies the value.
+3. Multiple source rows with positive repeat instances and no source row with
+   a missing repeat instance produce a `redcapmissing_error_project` because
+   the reference identifies no single instance.
 
-```{r}
-summary_result <- get_summary(report)
-summary_result
+A target whose selected fields all have false branching logic receives:
 
-missing_result <- get_missing(
-  report,
-  validation_check = "field-complete"
+| Output | Value |
+|---|---|
+| `field_complete` | `"not applicable"` |
+| `field_applicability_reason` | `"no fields apply after branching logic"` |
+| field counts | Zero. |
+
+A checkbox root passes `field-complete` when at least one exported child column
+is selected. Before assessment, `run_plan()` requires every detection column,
+selected response column, checkbox child column, and branching dependency for
+the frozen targets. A branching dependency may belong to an instrument with no
+target of its own. Other fields exclusive to nontarget instruments are not
+required.
+
+## Verification
+
+`verified` and `verified_user` are supplied together. A nonempty verification
+table requires these nine columns. Extra columns are ignored.
+
+| Column | Accepted storage and values | Accepted missing values | Value used during matching |
+|---|---|---|---|
+| `project_id` | Character, integer, or finite whole number double matching `plan$project$project_id`. | None. | Character. |
+| `record` | Character, factor, integer, or finite double; values are nonblank and unpadded. | None. | Character; factor labels and character leading zeros are preserved. |
+| `event_id` | A longitudinal project requires a positive integer, finite whole number double, or character digits matching `[1-9][0-9]*` within R integer range. A classic project does not accept a nonmissing value. | A classic project accepts numeric or character missing or blank values, or a logical column whose every value is `NA`. A longitudinal project requires a value. | Character REDCap event ID and the corresponding raw event name in a longitudinal project; `NA_character_` in a classic project. |
+| `field_name` | Character raw metadata field name; values are nonblank and unpadded. | None. | Character. |
+| `repeat_instrument` | Character raw instrument name. | Character blank or missing values are accepted for an inapplicable repeat instrument dimension. A logical, integer, or double column is accepted when every value is typed `NA`; factor storage is rejected. | Character or `NA_character_`. |
+| `instance` | Positive integer, finite whole number double, or character digits matching `[1-9][0-9]*` within R integer range. | Numeric or character missing or blank values are accepted when neither the event nor instrument repeats. A logical column is accepted when every value is `NA`; factor storage is rejected. | Integer or `NA_integer_`. |
+| `ts` | A nonmissing `POSIXct`, or character date and time through seconds, optional fractional seconds, and optional `Z` or numeric UTC offset. The date and time separator is a space or `T`; numeric offsets use `+HHMM`, `-HHMM`, `+HH:MM`, or `-HH:MM`. | None. | `POSIXct` in UTC. Text with no offset is read as UTC. |
+| `current_query_status` | Character; values are nonmissing, nonblank, and unpadded. | None. | Character with case preserved. Exact `"VERIFIED"` may apply. |
+| `username` | Character; values are nonmissing, nonblank, and unpadded. | None. | Character with case preserved and matched to `verified_user`. |
+
+A complete table with zero rows is valid when each required column name occurs
+once; column storage and row values are checked when the table contains rows.
+Every row is validated before filtering by `username` or
+`current_query_status`. Each event, repeat, field, and record context must match
+a target stored in `plan`.
+
+For a classic project, every `event_id` must be missing or blank. A nonmissing
+value is an error and is never discarded to make verification evidence match a
+classic target. For a longitudinal project, every `event_id` must identify a
+known project event.
+
+```{r verified, eval = FALSE}
+verified_report <- run_plan(
+  plan = explicit_plan,
+  data = records,
+  rcon = rcon,
+  verified = verified,
+  verified_user = verified_user,
+  details = TRUE
 )
-missing_result[, c("record_id", "form", "field_name", "field_label")]
 ```
 
-See `?get_summary` and `?get_missing` for their complete filtering and return
-contracts.
+Rows matching `verified_user` are grouped by record, event, repeat instrument,
+repeat instance, and field. The latest `ts` in each group is retained.
+Identical rows tied at that time collapse to one row. Different rows tied at
+that time produce `redcapmissing_error_verification`.
 
-For presentation, `flexify()` turns either accessor result into a flextable,
-while `flex_event_forms()` provides a compact event/form overview of due,
-started, and incomplete form opportunities:
+Exact `"VERIFIED"` changes an assessed raw failure for `field-complete` to an
+effective pass. The eligible field must already belong to a stored target,
+pass its gates, apply under branching logic, and remain after field selection.
+`report$verification` stores these values:
 
-```{r, eval = FALSE}
-summary_ft <- flexify(summary_result)
-missing_ft <- flexify(missing_result)
-event_form_ft <- flex_event_forms(event_report)
+| Name | Meaning |
+|---|---|
+| `enabled` | `TRUE` when `verified` and `verified_user` were supplied together; `FALSE` when both were `NULL`. |
+| `verified_user` | The exact supplied username when enabled; `NA_character_` otherwise. |
+| `input_rows` | Number of supplied verification rows. |
+| `user_rows` | Number of rows whose `username` exactly equals `verified_user`. |
+| `latest_user_rows` | Number of rows retained after selecting the latest `ts` per exact field context and collapsing identical tied rows. |
+| `verified_rows` | Number of retained rows whose `current_query_status` is exactly `"VERIFIED"`. |
+| `overrides_applied` | Number of assessed failed `field-complete` results changed to passing results. |
+
+The supplied verification rows are excluded from the report object.
+
+## Response missingness
+
+Ordinary fields used by `instrument-started` and `field-complete` use the
+response rule in this table. Checkbox roots use the selected child rule in
+[Instrument detection and field selection](#instrument-detection-and-field-selection).
+
+| Response value | Treatment |
+|---|---|
+| Typed R `NA`, factor `NA`, logical `NA`, numeric `NA`, or `NaN` | Missing. |
+| Missing `Date` or `POSIXct` | Missing. |
+| Empty character text or text containing only whitespace | Missing. |
+| `Inf` or `-Inf` | Present. |
+| Literal `"NA"`, `"N/A"`, `"NULL"`, `"."`, or `"-999"` | Present unless an earlier REDCap missing code process converted it. |
+
+Physical row presence depends only on the structural key.
+
+## Missing values, columns, and rows
+
+The same R representation has a different result at each input:
+
+| Representation | Structural identifier or schedule cell | Response field | Scalar or vector argument |
+|---|---|---|---|
+| Typed `NA` | Accepted for an inapplicable dimension; an applicable dimension requires a value. | Missing. | Accepted only where the argument documentation allows it; logical scalar arguments reject `NA`. |
+| `NaN` | Error, including for an all-missing nullable structural column. | Missing. | Error for numeric structural values. |
+| `Inf` or `-Inf` | Error for numeric identifiers and instances. | Present. | Error where finite values are required. |
+| `""` or whitespace only | Converted to typed `NA` for an inapplicable dimension; an applicable dimension requires a value. | Missing. | Names and usernames require nonblank text. |
+| `"NA"`, `"N/A"`, `"NULL"`, `"."`, or `"-999"` | Literal text subject to the identifier or schedule rules. | Present. | Literal text subject to the argument rules. |
+| `NULL` | Unavailable as a table cell. | Unavailable as a table cell. | Selects omission only where the argument permits `NULL`. |
+| `character(0)` | Unavailable as a table cell. | Unavailable as a table cell. | Represents no removal for `ignore_fields` and `exclude_types`; `instruments` requires at least one value. |
+| Data frame with zero rows | Planner schedules require their exact schema and documented storage. A `verified` table requires each of its nine column names once; storage is checked when rows exist. | Supplies no responses. | `plan_from_data()` rejects zero row `data`; `plan_explicit()` and `run_plan()` accept correctly structured zero row `data`. |
+| Absent column | An error when the project structure requires the column. | An error when a selected check or branching expression requires the column. | No argument value exists. |
+| Absent row | Planning and running apply the input specific rules below. | A stored target remains; its `redcap_event_name`, `repeat_instrument`, and `repeat_instance` values determine the check statuses. | No argument value exists. |
+
+Absent row rules are:
+
+| Input | Result |
+|---|---|
+| Planner `data` | The crossing is unobserved. A schedule may add a target. |
+| `extended_schedule` | The observed planning rule applies to that crossing. |
+| `explicit_schedule` | The exact target is excluded. |
+| Runtime `data` | A stored target remains. An absent longitudinal event fails `event-row-started`; an absent repeat instance after a present event fails `repeat-instance-row-started`; an absent classic target with `repeat_instance = NA_integer_` has both row checks marked `"not applicable"` and fails `instrument-started`. |
+| `verified` | That field context receives no verification evidence. |
+
+## Result components
+
+`run_plan()` returns a `redcapmissing` object with these components:
+
+| Component | Contents |
+|---|---|
+| `plan` | The validated `redcapmissing_plan` used for assessment. |
+| `target_results` | One row per `assessible_targets` row, with source, four check statuses, field counts, and `field_applicability_reason`. |
+| `summary` | Counts and rates grouped by event, instrument, repeat context, validation level, and validation check. |
+| `missing` | Effective failures that remain unresolved after verification. |
+| `verification` | Counts named `enabled`, `verified_user`, `input_rows`, `user_rows`, `latest_user_rows`, `verified_rows`, and `overrides_applied`. |
+| `diagnostics` | The twelve stages with completion and elapsed time. |
+| `details` | Detailed check and field rows when `details = TRUE`; `NULL` when `details = FALSE`. |
+
+`summary$status` is `"assessed"` or `"not applicable"`.
+`summary$reason` is typed missing for assessed rows and contains the applicable
+reason for a row with status `"not applicable"`. Rates are `NA_real_` when a
+group has no assessed checks.
+
+`missing` uses typed missing values for inapplicable event and repeat dimensions.
+Its `url` column may contain a REDCap data entry URL when `rcon` supplies the
+required URL, version, and event data.
+
+### Detailed rows and stored values
+
+With `details = TRUE`:
+
+- `event-row-started`, `repeat-instance-row-started`, and
+  `instrument-started` contribute one row per target.
+- `field-complete` contributes one row for each field assessed for the target.
+- A target with `field-complete` equal to `"not applicable"` or
+  `"not reached"` contributes one target row for that check.
+- Fields whose branching logic is false contribute no field row.
+
+`raw_disposition` and `effective_disposition` use `"passed"`, `"failed"`,
+`"not applicable"`, and `"not reached"`. Verification can change a raw
+`"failed"` field row to an effective `"passed"` row.
+`verification_applied` records that change.
+
+For an assessed field, `branch_satisfied` is `TRUE`. Target check rows store
+`NA` in this column. `reason` uses these exact values where they apply:
+
+| Validation check | `reason` |
+|---|---|
+| `event-row-started` | `"not applicable for classic project"` |
+| `repeat-instance-row-started` | `"not a repeating target"` |
+| `field-complete` after field selection | `"no fields remain after field policy"` |
+| `field-complete` after branching logic | `"no fields apply after branching logic"` |
+
+Other detail rows store `NA_character_` in `reason`.
+
+`value_summary` stores:
+
+| Detail row | Stored value |
+|---|---|
+| Assessed ordinary field | The assessed value converted to character text. |
+| Assessed checkbox root with selected choices | The selected exported checkbox child column names, separated by commas. |
+| Assessed checkbox root with no selected choice | An empty character value. |
+| Target check row | `NA_character_`. |
+
+The report contains record IDs. It can also contain REDCap data entry URLs and,
+when `details = TRUE`, assessed response values in `details$value_summary`.
+Store the report under the same access and retention rules used for the REDCap
+export.
+
+With `details = FALSE`, `details` is `NULL`. `target_results`, `summary`,
+`missing`, and `verification` have the same assessment result in both settings.
+
+## Inspect and present results
+
+```{r inspect, eval = FALSE}
+get_summary(report)
+get_missing(report)
+
+flexify(get_summary(report))
+flex_event_instruments(report)
+flex_html(flexify(get_missing(report)))
 ```
 
-Use the accessor tables for detailed review and `flex_event_forms()` for a
-high-level reporting view. See `?flexify` for compatible input shapes and
-formatting behavior, and `?flex_event_forms` for the complete metric and
-threshold definitions.
+Values within one accessor filter vector are alternatives. Multiple non-`NULL`
+filters are combined by intersection. Matching uses exact raw values and is
+case sensitive; duplicate requested values normalize to one value, and unknown,
+missing, blank, or padded values error. Filtering preserves the stored report
+row order.
+
+When no rows match, `get_summary()` retains the names, order, and storage types
+documented for `report$summary`; `get_missing()` retains those documented for
+`report$missing`. The `redcapmissing_labels` attribute continues to contain
+labels for every event and instrument represented by `report$plan`, including
+labels absent from the returned rows. See `?get_summary`, `?get_missing`,
+`?flex_event_instruments`, and `?flex_html` for their specific arguments and
+return classes.
+
+## Errors and recovery
+
+Validation errors inherit from `redcapmissing_error`:
+
+| Class | Boundary to inspect |
+|---|---|
+| `redcapmissing_error_argument` | Missing arguments, invalid scalar values, or invalid selection vectors. |
+| `redcapmissing_error_schema` | Required columns, storage, identifier or repeat instance values, or duplicate physical row keys. This includes schedule value conversion. |
+| `redcapmissing_error_project` | Project surfaces from `rcon`, project mappings, repeat settings, or branching logic. |
+| `redcapmissing_error_schedule` | Schedule column names and order, missing or unknown selections, duplicate converted rows, or disallowed crossings. |
+| `redcapmissing_error_plan` | Plan class, components, schema version, target order, fingerprint, or changed project structure. |
+| `redcapmissing_error_verification` | Verification schema, values, target contexts, timestamps, or tied latest rows. |
+
+Use the class and message to identify the failing input:
+
+1. For a schema error, check required columns and their storage. For runtime
+   `data`, export every structural column plus each detection, response,
+   checkbox, and branching dependency column required by the frozen targets.
+   Nontarget instruments impose no exclusive response-column requirement.
+2. For a schedule error, check the exact column names and order, duplicates,
+   selected instruments and events, and the event repeat setting in `rcon`.
+3. For a plan error after a REDCap structure change, create a new plan from the
+   current `rcon`.
+4. For a project error involving a reference to another event, review the
+   source rows. The reference requires one row with a missing
+   `redcap_repeat_instance` or, when no such row exists, one row with a
+   positive repeat instance.
+5. For a verification error, validate every row and resolve different rows
+   tied at the latest timestamp for one field context.
+6. For `redcapmissing_warning_empty_arm_extension`, confirm that planner
+   `data` contains records in the scheduled event arm. The warning adds no
+   targets for that arm.
+7. For `redcapmissing_warning_undesignated_extension`, review the REDCap event
+   designations for the named longitudinal instruments. They contributed no
+   builder rows; no eventless longitudinal crossing was created.
+
+After correcting the source input, call the constructor or `run_plan()` again.

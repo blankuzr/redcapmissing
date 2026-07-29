@@ -2,37 +2,60 @@
 % Please edit documentation in R/registry.R
 \name{registry}
 \alias{registry}
-\title{Inspect the redcapmissing validation registry}
+\alias{print.redcapmissing_registry}
+\title{Inspect validation checks and report metadata}
 \usage{
 registry()
+
+\method{print}{redcapmissing_registry}(x, ...)
+}
+\arguments{
+\item{x}{A \code{redcapmissing_registry} returned by \code{\link[=registry]{registry()}}.}
+
+\item{...}{Additional arguments passed to the fallback tibble print method
+when \code{x} is malformed.}
 }
 \value{
-A tibble with class \code{"redcapmissing_registry"} and one row per
-validation check. The returned columns include:
-\describe{
-\item{\code{validation_order}}{The canonical assessment order.}
-\item{\code{downstream_order}}{The order used when applying downstream gating.}
-\item{\code{validation_level}}{The registry validation level:
-\code{"event:form / event:form:instance"}. Report outputs resolve the
-contextual event/form level to \code{"event:form"} or
-\code{"event:form:instance"} from the assessed REDCap context.}
-\item{\code{validation_check}}{The canonical validation-check code.}
-\item{\code{validation_label}}{The canonical validation label.}
-\item{\code{flex_label}}{The flextable display label used by \code{\link[=flexify]{flexify()}}.}
-\item{\code{description}}{A short user-facing description of the check.}
-\item{\code{r_identifier}, \code{component_stem}, \code{step_suffix}}{Internal R-safe
-stems and native validation-step metadata.}
-\item{\code{gates_downstream}}{Whether a failed check removes that context from
-downstream assessment.}
+A tibble with class \code{redcapmissing_registry}, eight rows, and exactly
+these columns:\tabular{lll}{
+   Column \tab Storage \tab What it refers to \cr
+   \code{validation_order} \tab Integer \tab The order in which \code{\link[=run_plan]{run_plan()}} evaluates the check \cr
+   \code{validation_level} \tab Character \tab The value stored in report rows: \code{"event:instrument"} or \code{"event:instrument:instance"} \cr
+   \code{validation_check} \tab Character \tab The check code stored in report rows and accepted by the \code{\link[=get_summary]{get_summary()}} and \code{\link[=get_missing]{get_missing()}} filters \cr
+   \code{flex_label} \tab Character \tab The label used by \code{\link[=flexify]{flexify()}} \cr
+   \code{description} \tab Character \tab For an assessed check, the condition that makes the check pass; this is also the condition shown by \code{print(registry())} \cr
 }
+
+
+Each validation check has one row for each validation level.
+
+\code{x}, invisibly.
 }
 \description{
-\code{registry()} returns the public validation taxonomy used by
-\code{\link[=find_missing]{find_missing()}}. The registry is the package source of truth for validation
-levels, validation checks, display labels, downstream order, and the internal
-R-safe stems used to build report components.
+\code{registry()} returns the four validation checks used by \code{\link[=run_plan]{run_plan()}} and the
+report metadata associated with each check. The returned columns identify
+assessment order, validation level, validation check code, \code{\link[=flexify]{flexify()}} label,
+and concise pass condition.
+}
+\details{
+The four \code{validation_check} values, in \code{validation_order}, are:
+\enumerate{
+\item \code{"event-row-started"};
+\item \code{"repeat-instance-row-started"};
+\item \code{"instrument-started"}; and
+\item \code{"field-complete"}.
+}
+
+Report rows use \code{validation_level = "event:instrument"} when a target has no
+repeat instance and \code{"event:instrument:instance"} when it has a repeat
+instance. See \code{\link[=run_plan]{run_plan()}} for when each check is assessed, marked
+\code{"not applicable"}, or marked \code{"not reached"}, and for field selection,
+branching logic, missing responses, and verification overrides.
 }
 \examples{
 registry()
 
+}
+\seealso{
+\code{\link[=run_plan]{run_plan()}}, \code{\link[=get_summary]{get_summary()}}, \code{\link[=get_missing]{get_missing()}}, \code{\link[=flexify]{flexify()}}
 }

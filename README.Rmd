@@ -8,14 +8,8 @@ output:
 
 ```{r setup, include = FALSE}
 options(width = 120)
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>"
-)
-default_output_hook <- knitr::knit_hooks$get("output")
-knitr::knit_hooks$set(output = function(x, options) {
-  default_output_hook(gsub("[[:blank:]]+(?=\\r?\\n|$)", "", x, perl = TRUE), options)
-})
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+suppressPackageStartupMessages(library(redcapmissing))
 ```
 
 # redcapmissing
@@ -25,10 +19,9 @@ knitr::knit_hooks$set(output = function(x, options) {
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 <!-- badges: end -->
 
-`redcapmissing` builds branching-aware missingness reports from REDCap record
-exports. It distinguishes missing field values from absent event rows, absent
-repeat instances, and forms that were never started, while respecting REDCap
-branching logic and project structure.
+`redcapmissing` records which REDCap record, event, instrument, and repeat
+instance combinations require assessment. `run_plan()` evaluates physical rows,
+instrument start, and field completeness for those combinations.
 
 <p align="center">
   <img src="man/figures/logo.svg" width="160" alt="redcapmissing hex logo" />
@@ -36,22 +29,70 @@ branching logic and project structure.
 
 ## Installation
 
-`redcapmissing` requires R 4.1.0 or later. Install it from GitHub with:
+`redcapmissing` requires R 4.1.0 or later. Install it from GitHub:
 
 ```r
 # install.packages("pak")
 pak::pak("blankuzr/redcapmissing")
 ```
 
-## REDCap inputs
+## First success with a synthetic offline project
 
-For a live project, create a `redcapAPI::redcapConnection()` and export records
-with `redcapAPI::exportRecordsTyped()`. Branching-logic fields must remain in
-REDCap code space, while checkbox and system fields should remain raw. This
-keeps values aligned with the codes used in REDCap logic and preserves the
-system columns needed to identify events and repeat instances.
+This credential-free example uses a `redcapOfflineConnection` and a small
+synthetic classic project to construct, run, and inspect a plan.
+
+```{r first-success}
+library(redcapmissing)
+
+metadata <- data.frame(
+  field_name = c("record_id", "started", "value"),
+  form_name = "baseline",
+  field_type = "text",
+  field_label = c("Record ID", "Started", "Value"),
+  required_field = c("y", "", "y")
+)
+project_info <- data.frame(
+  project_id = "1",
+  is_longitudinal = "0",
+  has_repeating_instruments_or_events = "0"
+)
+rcon <- suppressWarnings(redcapAPI::offlineConnection(
+  meta_data = metadata,
+  project_info = project_info,
+  repeat_instrument = redcapAPI::REDCAP_REPEAT_INSTRUMENT_STRUCTURE
+))
+records <- data.frame(
+  record_id = c("1", "2"),
+  started = c("yes", "yes"),
+  value = c("complete", "")
+)
+
+plan <- plan_from_data(records, rcon, "baseline")
+report <- run_plan(plan, records, rcon, progress = FALSE)
+knitr::kable(
+  get_summary(report)[, c("validation_check", "status", "failed")]
+)
+knitr::kable(
+  get_missing(report)[, c("record_id", "validation_check", "field_name")]
+)
+```
+
+Both records start the instrument; record `2` then fails `field-complete`
+because its required `value` field is blank.
+
+## Prepare a live connection and records
+
+Supported `rcon` objects inherit from `redcapApiConnection`, returned by
+`redcapAPI::redcapConnection()`, or `redcapOfflineConnection`, returned by
+`redcapAPI::offlineConnection()` or `redcapAPI::readPreservedProject()`.
+`instruments` is a character vector of raw REDCap instrument names. Use
+`all_instruments(rcon)` when the plan should include the complete project
+inventory. Keep API tokens outside source files, console output, reports, and
+saved R objects.
 
 ```r
+library(redcapmissing)
+
 records <- redcapAPI::exportRecordsTyped(
   rcon,
   cast = list(
@@ -65,172 +106,176 @@ records <- redcapAPI::exportRecordsTyped(
 )
 ```
 
-To honor field-level issues that a specific REDCap user has already verified,
-pass the data-quality export and that exact username together:
+`plan_from_data()` uses the project record ID field and the applicable
+`redcap_event_name`, `redcap_repeat_instrument`, and `redcap_repeat_instance`
+columns to identify observed crossings. `run_plan()` evaluates their responses.
+
+## 1. Construct an assessment plan
+
+Use `plan_from_data()` to begin with record, event, instrument, and repeat
+instance combinations observed in `records` and permitted by the project
+structure:
 
 ```r
-quality_issues <- redcapAPI::exportDataQuality(rcon)
-
-report <- find_missing(
+plan <- plan_from_data(
   data = records,
   rcon = rcon,
-  forms = "baseline_form",
-  verified = quality_issues,
-  verified_user = "reviewer_username"
+  instruments = instruments
 )
 ```
 
-`find_missing()` validates every supplied issue against the same project's
-cached fields, events, form-event mapping, and repeat structure before
-collapsing or filtering. It groups resolution history by `status_id`, selects
-the greatest `ts`, and uses the greatest numeric `res_id` to break timestamp
-ties. Only that latest resolution is eligible: its `username` must match
-`verified_user`, and both the live issue `query_status` and latest resolution
-`current_query_status` must be `"VERIFIED"`. Historical resolutions never
-authorize an exception, including after another user performs the latest
-verification. Matching can pass only an already-assessed, otherwise-failing
-`field-complete` row at the same record/event/repeat/field context; it does not
-bypass startedness, branching, field selection, or report scope. Review counts
-are in `report$diagnostics$verification`; `verified_rows` counts matching latest
-resolutions, and the supplied issue data are not retained. For regular
-contexts, entirely missing `repeat_instrument` and `instance` columns may use
-any all-`NA` storage type returned by `exportDataQuality()`; other upstream
-`instance` placeholders are ignored. A classic export may carry one positive
-internal event ID, which is normalized to the classic event context. True
-repeating events and instruments still require their instance.
+Build an `extended_schedule` when selected instruments should also be assessed
+at every event where REDCap permits them. The builder's instruments may be all
+plan instruments or a subset:
 
-## First report
-
-This synthetic example runs without REDCap credentials. The connection-like
-object supplies the same metadata and instrument methods used from a live
-connection, and the record values use REDCap codes.
-
-```{r first-report, message = FALSE}
-library(redcapmissing)
-
-metadata <- tibble::tibble(
-  field_name = c("record_id", "branch_flag", "required_note", "conditional_note"),
-  form_name = "baseline_form",
-  field_type = c("text", "yesno", "text", "text"),
-  field_label = c("Record ID", "Branch flag", "Required note", "Conditional note"),
-  select_choices_or_calculations = "",
-  text_validation_type_or_show_slider_number = "",
-  branching_logic = c("", "", "", "[branch_flag] = '1'"),
-  required_field = "y"
+```r
+instruments <- all_instruments(rcon)
+extended_schedule <- build_extended_schedule(
+  rcon = rcon,
+  instruments = c("followup", "diary"),
+  n_repeat_instances = 3L
 )
+```
 
-rcon <- list(
-  metadata = function() metadata,
-  instruments = function() tibble::tibble(
-    instrument_name = "baseline_form",
-    instrument_label = "Baseline form"
-  )
-)
-
-records <- tibble::tibble(
-  record_id = c("r1", "r2"),
-  branch_flag = c("1", "0"),
-  required_note = "entered",
-  conditional_note = ""
-)
-
-report <- find_missing(
+```r
+plan <- plan_from_data(
   data = records,
   rcon = rcon,
-  forms = "baseline_form"
+  instruments = instruments,
+  extended_schedule = extended_schedule
 )
-
-get_summary(report)[
-  ,
-  c("validation_check", "assessed", "failed")
-]
-
-get_missing(
-  report,
-  validation_check = "field-complete"
-)[, c("record_id", "form", "field_name")]
 ```
 
-Record `r1` has an open branch for `conditional_note`, so its blank value is a
-`field-complete` failure. The same branch is closed for `r2`, so that field is
-not assessed for the second record.
+Each extension row expands across records observed in its arm. In a classic
+project, it expands across all observed records. Crossings observed in
+`records` remain in the plan when their rows are absent from
+`extended_schedule`.
 
-## How validation works
+In a classic project, builder rows use `redcap_event_name = NA_character_`;
+repeating instruments receive instances `1` through `n_repeat_instances`. In a
+longitudinal project, the builder returns only concrete instrument/event
+crossings designated in REDCap. A requested project instrument designated to
+no longitudinal event contributes no row and produces one classed warning; the
+builder never invents an eventless longitudinal crossing. Omit
+`extended_schedule` to request observed-only planning.
 
-Checks run in registry order for each record, event, repeat, and form context:
+Use `plan_explicit()` when every assessed combination must have a row in a
+caller supplied `explicit_schedule`:
 
-| Check | What it establishes |
-|---|---|
-| `event-row-started` | The expected REDCap event row exists in the export. |
-| `instance-row-started` | The expected repeat-instance row exists in the export. |
-| `form-started` | The form context contains at least one entered data-capturing field. |
-| `field-complete` | Each applicable field is answered after branching logic and field selection are applied. |
-
-Blank strings and `NA` values are missing only when the field is expected in
-that context. A checkbox question is answered when at least one exported child
-choice is selected; its unselected siblings are not separate missing fields.
-By default, `find_missing()` assesses required fields and excludes descriptive
-fields. Use `required_fields`, `exclude_types`, and `ignore_fields` when the
-report needs a different field scope.
-
-When a check fails, that context is removed from every downstream check. An
-absent event row, for example, is reported at `event-row-started` instead of
-being counted again as a form that was not started and as several missing
-fields. Use `registry()` to inspect the validation checks and their labels.
-
-## Explore and format results
-
-Use `get_summary()` for validation counts and rates and `get_missing()` for the
-failed record or field rows. Both accessors can filter by validation check,
-event, or form; their reference topics document the complete schemas and
-filtering rules.
-
-```{r format-results, eval = FALSE}
-field_summary <- get_summary(
-  report,
-  validation_check = "field-complete"
+```r
+plan <- plan_explicit(
+  data = records,
+  rcon = rcon,
+  instruments = instruments,
+  explicit_schedule = explicit_schedule
 )
-
-field_missing <- get_missing(
-  report,
-  validation_check = "field-complete"
-)
-
-flexify(field_summary)
-flexify(field_missing)
-flex_event_forms(report)
-flex_html(flexify(field_summary))
 ```
 
-`flexify()` formats an accessor result as a flextable,
-`flex_event_forms()` creates a reduced event/form view, and `flex_html()`
-serializes either kind of flextable for HTML workflows. Filter and select rows
-or columns before formatting when a smaller table is needed.
+Each row in `explicit_schedule` creates one permitted target. A target may name
+a record that is absent from `records`. During `run_plan()`, an absent
+longitudinal event fails `event-row-started`; a present event with an absent
+repeat instance fails `repeat-instance-row-started`; and an absent classic
+target with `repeat_instance = NA_integer_` has both row checks marked
+`"not applicable"` and fails `instrument-started`.
 
-## Events, records, and repeats
+Both constructors return a `redcapmissing_plan`. The plan contains the selected
+instruments, `assessible_targets`, project identity, project structure
+fingerprint, construction value, and schema version. Source records and `rcon`
+remain outside the plan.
 
-The main scoping arguments to `find_missing()` answer different questions:
+## 2. Run the plan
 
-- `events` selects the REDCap events on which a requested form should be
-  assessed, including events that REDCap may omit entirely from an export
-  because no row was started.
-- `records` restricts record eligibility by raw event name and, when needed,
-  by form or repeat instance.
-- `instances` declares expected repeat-instance IDs, including instances that
-  REDCap may omit entirely from an export because no row was started.
+```r
+report <- run_plan(
+  plan = plan,
+  data = records,
+  rcon = rcon
+)
+```
 
-Forms that are regular on some events and repeating on others are assessed in
-their actual context: regular event rows use `event-row-started`, while repeat
-rows use `instance-row-started`. See `?find_missing` for the accepted argument
-shapes and the package vignette for runnable longitudinal and repeat examples.
+The runner evaluates four checks in order:
+
+1. `event-row-started`
+2. `repeat-instance-row-started`
+3. `instrument-started`
+4. `field-complete`
+
+Classic event checks have status `"not applicable"`. Repeat instance checks
+have that status when a target stores `NA_integer_` in `repeat_instance`. A
+failed physical row check gives later checks status `"not reached"`.
+`instrument-started` uses data entry metadata fields other than the record ID
+field and fields of type `descriptive` or `calc`. Checkbox roots require at
+least one selected exported child column. This detection set is independent of
+`required_fields`, `exclude_types`, and `ignore_fields`. Those three arguments
+affect `field-complete`, in that order. When no fields remain,
+`field-complete` has status `"not applicable"` and reason
+`"no fields remain after field policy"`.
+
+`run_plan()` accepts a newer record export when the REDCap project structure
+matches the stored fingerprint. The plan continues to supply its
+`assessible_targets`.
+
+Runtime response requirements follow the frozen targets, not every instrument
+retained in the plan's declared scope. `run_plan()` requires the detection and
+assessment fields for instruments represented in `assessible_targets`, along
+with any fields needed to evaluate their branching logic and the structural
+columns needed to match targets. An instrument with no target imposes no
+exclusive response-column requirement.
+
+### Verified field failures
+
+Supply caller provided `verified` and `verified_user` together to apply the
+latest exact `"VERIFIED"` status for an assessed `field-complete` failure:
+
+```r
+report <- run_plan(
+  plan,
+  records,
+  rcon,
+  verified = verified,
+  verified_user = verified_user
+)
+```
+
+See `?run_plan` for the required verification columns, accepted timestamps, and
+the exact field context used for matching. The `verification` component contains
+counts for the supplied rows and applied results.
+
+## 3. Inspect results
+
+```r
+registry()
+get_summary(report)
+get_missing(report, validation_check = "field-complete")
+get_summary(report, instruments = instruments)
+```
+
+`registry()` documents the exact check codes, report levels, assessment order,
+presentation labels, and pass conditions used throughout the package.
+
+The result contains `plan`, `target_results`, `summary`, `missing`,
+`verification`, `diagnostics`, and `details`. Structural absence uses typed
+`NA` values.
+
+### Stored field values
+
+With `details = TRUE`, `details$value_summary` stores each assessed ordinary
+field value as character. For a checkbox field,
+`details$value_summary` contains the names of its selected exported checkbox
+child columns. Reports also contain record IDs and may contain REDCap data entry
+URLs.
+
+With `details = FALSE`, the result contains `details = NULL`. Apply the same
+storage, access, retention, and sharing rules to each report that apply to its
+REDCap export.
 
 ## Learn more
 
-- Read the [getting started vignette](vignettes/redcapmissing.Rmd) for branching,
-  event, record-eligibility, and repeat-instance examples; after installation,
-  open the local copy with `vignette("redcapmissing", package = "redcapmissing")`.
-- Open `?find_missing`, `?get_summary`, `?get_missing`, `?flexify`, or
-  `?flex_event_forms` for the full function contracts.
-- Review [NEWS.md](NEWS.md) for changes by version.
-- Report bugs and request features in
-  [GitHub issues](https://github.com/blankuzr/redcapmissing/issues).
+- Run `vignette("redcapmissing")` for complete schedule schemas, missing value
+  rules, repeating structure, branching logic, verification, and recovery from
+  validation errors.
+- Open `?all_instruments`, `?build_extended_schedule`, `?plan_from_data`,
+  `?plan_explicit`, and `?run_plan` for exact argument and return value
+  descriptions.
+- Read [NEWS](NEWS.md) for release changes.
+- Report problems through [GitHub Issues](https://github.com/blankuzr/redcapmissing/issues).

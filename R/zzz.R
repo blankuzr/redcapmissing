@@ -5,18 +5,18 @@
     return(invisible())
   }
 
-  packageStartupMessage(.redcapmissing_startup_build_message(pkgname = pkgname))
+  packageStartupMessage(.startup_build_message(pkgname = pkgname))
   invisible()
 }
 
-.redcapmissing_startup_build_message <- function(
+.startup_build_message <- function(
   pkgname = "redcapmissing",
-  version = .redcapmissing_startup_get_version(pkgname)
+  version = .startup_get_version(pkgname)
 ) {
   release_name <- "eye-spy"
   release_update <- "Improved scope reporting"
 
-  message_lines <- .redcapmissing_startup_banner_lines(
+  message_lines <- .startup_build_banner_lines(
     pkgname = pkgname,
     version = version,
     release_name = release_name,
@@ -26,7 +26,7 @@
   paste(message_lines, collapse = "\n")
 }
 
-.redcapmissing_startup_get_version <- function(pkgname) {
+.startup_get_version <- function(pkgname) {
   version <- suppressWarnings(
     utils::packageDescription(pkgname, fields = "Version")
   )
@@ -38,7 +38,7 @@
   version
 }
 
-.redcapmissing_startup_banner_lines <- function(
+.startup_build_banner_lines <- function(
   pkgname,
   version,
   release_name,

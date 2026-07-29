@@ -4,23 +4,72 @@
 \name{redcapmissing-package}
 \alias{redcapmissing}
 \alias{redcapmissing-package}
-\title{redcapmissing: Branching-Aware Missingness Reports for REDCap Exports}
+\title{Plan and Run Missingness Assessment for REDCap Exports}
 \description{
-Build missingness reports for REDCap record exports while respecting
-branching logic, form-event mappings, and repeat contexts. Start with
-\code{\link[=find_missing]{find_missing()}}, inspect results with \code{\link[=get_summary]{get_summary()}} or \code{\link[=get_missing]{get_missing()}},
-and format them with \code{\link[=flexify]{flexify()}} or \code{\link[=flex_event_forms]{flex_event_forms()}}.
+Construct \code{assessible_targets} for REDCap, then evaluate physical rows,
+instrument start, branching logic, and field completeness against a record
+export. Exported functions use \emph{instrument} for raw REDCap instrument names.
 }
 \details{
-A typical workflow creates a \code{redcapAPI::redcapConnection()}, exports typed
-records with \code{redcapAPI::exportRecordsTyped()}, and passes both objects to
-\code{\link[=find_missing]{find_missing()}}. The package uses \code{redcapAPI} project metadata and REDCap
-blank-value semantics to determine which contexts and fields are expected.
+The package workflow has three steps:
+\enumerate{
+\item Choose raw instrument names directly or retrieve the project inventory
+with \code{\link[=all_instruments]{all_instruments()}}. \code{\link[=plan_from_data]{plan_from_data()}} combines allowable crossings
+observed in the export with an optional extension, which
+\code{\link[=build_extended_schedule]{build_extended_schedule()}} can construct from project structure.
+\code{\link[=plan_explicit]{plan_explicit()}} uses an exact schedule that includes a record ID for
+every target.
+\item \code{\link[=run_plan]{run_plan()}} evaluates the targets stored in the plan.
+\item \code{\link[=get_summary]{get_summary()}} and \code{\link[=get_missing]{get_missing()}} inspect results, while \code{\link[=flexify]{flexify()}} and
+\code{\link[=flex_event_instruments]{flex_event_instruments()}} format them.
+}
+
+Constructors discover the record ID field and project structure from \code{rcon}.
+A plan contains \code{schema_version}, \code{construction}, \code{instruments},
+\code{assessible_targets}, \code{project}, and \code{structure_fingerprint}. Source records
+and the live connection remain outside the plan.
+
+A report contains the plan, target results, summaries, unresolved failures,
+verification counts, diagnostics, and optional field details. With
+\code{details = TRUE}, \code{details$value_summary} stores assessed ordinary field
+values as character. For checkbox fields, it stores selected exported
+checkbox child column names. Reports contain record IDs and may
+contain REDCap data entry URLs. Store each report under the same access,
+retention, and sharing rules as its source REDCap export.
+
+Structural dimensions use typed missing values when they do not apply. In
+\code{plan$assessible_targets}, \code{redcap_event_name} is \code{NA_character_} for classic
+projects. \code{repeat_instrument} contains the raw instrument name for a
+repeating instrument target; it is \code{NA_character_} for a repeating event
+target or a target where neither the event nor instrument repeats.
+\code{repeat_instance} contains a positive integer for repeating event and
+repeating instrument targets; it is \code{NA_integer_} when neither repeats. See
+\code{\link[=plan_from_data]{plan_from_data()}} for structural normalization and \code{\link[=run_plan]{run_plan()}} for field
+and verification missing values.
+
+Validation failures inherit from \code{redcapmissing_error} and use subclasses for
+argument, schema, project, schedule, plan, and verification failures.
+Extensions into arms with zero observed records use the
+\code{redcapmissing_warning_empty_arm_extension} warning.
+\code{\link[=build_extended_schedule]{build_extended_schedule()}} uses
+\code{redcapmissing_warning_undesignated_extension} when a valid requested
+instrument in a longitudinal project is designated to no event and therefore
+contributes no schedule row. Classic project crossings use
+\code{redcap_event_name = NA_character_} natively and do not produce this warning.
+
+Supported \code{rcon} objects inherit from \code{redcapApiConnection}, created by
+\code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, or \code{redcapOfflineConnection}, created by
+\code{\link[redcapAPI:offlineConnection]{redcapAPI::offlineConnection()}} or \code{\link[redcapAPI:readPreservedProject]{redcapAPI::readPreservedProject()}}.
+Online workflows commonly use \code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}. Keep REDCap
+API tokens outside source, logs, reports, and saved R objects.
 }
 \seealso{
-\code{\link[=find_missing]{find_missing()}}, \code{\link[=get_summary]{get_summary()}}, \code{\link[=get_missing]{get_missing()}}, \code{\link[=flexify]{flexify()}},
-\code{\link[=registry]{registry()}}, \code{\link[=flex_event_forms]{flex_event_forms()}}, \code{\link[=flex_html]{flex_html()}},
-\code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}
+\code{\link[=all_instruments]{all_instruments()}}, \code{\link[=build_extended_schedule]{build_extended_schedule()}},
+\code{\link[=plan_from_data]{plan_from_data()}}, \code{\link[=plan_explicit]{plan_explicit()}}, \code{\link[=run_plan]{run_plan()}}, \code{\link[=get_summary]{get_summary()}},
+\code{\link[=get_missing]{get_missing()}}, \code{\link[=registry]{registry()}}, \code{\link[=flexify]{flexify()}},
+\code{\link[=flex_event_instruments]{flex_event_instruments()}}, \code{\link[=flex_html]{flex_html()}},
+\code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:offlineConnection]{redcapAPI::offlineConnection()}},
+\code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}
 }
 \author{
 \strong{Maintainer}: blankuzr \email{blankuzr@users.noreply.github.com}

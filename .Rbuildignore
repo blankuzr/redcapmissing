@@ -20,4 +20,5 @@
 ^doc$
 ^Meta$
 ^\.codex/.*$
-^tools/benchmark-find-missing\.R$
+^tools/benchmark-plan-run\.R$
+^tests/README\.md$

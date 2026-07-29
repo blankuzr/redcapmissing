@@ -14,14 +14,17 @@ A character scalar containing rendered HTML.
 }
 \description{
 \code{flex_html()} renders a \code{flextable} object, such as one returned by
-\code{\link[=flexify]{flexify()}} or \code{\link[=flex_event_forms]{flex_event_forms()}}, to the HTML string used by email and
-report insertion workflows.
+\code{\link[=flexify]{flexify()}} or \code{\link[=flex_event_instruments]{flex_event_instruments()}}, to the HTML string used by email and
+report insertion workflows. The optional packages \code{flextable} and
+\code{htmltools} are required when this function is called; the error lists
+each missing package.
 }
 \examples{
 \dontrun{
+# report is caller supplied.
 summary_html <- flex_html(flexify(get_summary(report)))
 missing_html <- flex_html(flexify(get_missing(report)))
-event_form_html <- flex_html(flex_event_forms(report))
+event_instrument_html <- flex_html(flex_event_instruments(report))
 }
 
 }
