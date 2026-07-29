@@ -85,8 +85,10 @@ because its required `value` field is blank.
 Supported `rcon` objects inherit from `redcapApiConnection`, returned by
 `redcapAPI::redcapConnection()`, or `redcapOfflineConnection`, returned by
 `redcapAPI::offlineConnection()` or `redcapAPI::readPreservedProject()`.
-`instruments` is a character vector of raw REDCap instrument names. Keep API
-tokens outside source files, console output, reports, and saved R objects.
+`instruments` is a character vector of raw REDCap instrument names. Use
+`all_instruments(rcon)` when the plan should include the complete project
+inventory. Keep API tokens outside source files, console output, reports, and
+saved R objects.
 
 ```r
 library(redcapmissing)
@@ -122,7 +124,18 @@ plan <- plan_from_data(
 )
 ```
 
-Pass a caller supplied `extended_schedule` to add permitted combinations:
+Build an `extended_schedule` when selected instruments should also be assessed
+at every event where REDCap permits them. The builder's instruments may be all
+plan instruments or a subset:
+
+```r
+instruments <- all_instruments(rcon)
+extended_schedule <- build_extended_schedule(
+  rcon = rcon,
+  instruments = c("followup", "diary"),
+  n_repeat_instances = 3L
+)
+```
 
 ```r
 plan <- plan_from_data(
@@ -137,6 +150,14 @@ Each extension row expands across records observed in its arm. In a classic
 project, it expands across all observed records. Crossings observed in
 `records` remain in the plan when their rows are absent from
 `extended_schedule`.
+
+In a classic project, builder rows use `redcap_event_name = NA_character_`;
+repeating instruments receive instances `1` through `n_repeat_instances`. In a
+longitudinal project, the builder returns only concrete instrument/event
+crossings designated in REDCap. A requested project instrument designated to
+no longitudinal event contributes no row and produces one classed warning; the
+builder never invents an eventless longitudinal crossing. Omit
+`extended_schedule` to request observed-only planning.
 
 Use `plan_explicit()` when every assessed combination must have a row in a
 caller supplied `explicit_schedule`:
@@ -194,6 +215,13 @@ affect `field-complete`, in that order. When no fields remain,
 matches the stored fingerprint. The plan continues to supply its
 `assessible_targets`.
 
+Runtime response requirements follow the frozen targets, not every instrument
+retained in the plan's declared scope. `run_plan()` requires the detection and
+assessment fields for instruments represented in `assessible_targets`, along
+with any fields needed to evaluate their branching logic and the structural
+columns needed to match targets. An instrument with no target imposes no
+exclusive response-column requirement.
+
 ### Verified field failures
 
 Supply caller provided `verified` and `verified_user` together to apply the
@@ -246,7 +274,8 @@ REDCap export.
 - Run `vignette("redcapmissing")` for complete schedule schemas, missing value
   rules, repeating structure, branching logic, verification, and recovery from
   validation errors.
-- Open `?plan_from_data`, `?plan_explicit`, and `?run_plan` for exact argument
-  and return value descriptions.
+- Open `?all_instruments`, `?build_extended_schedule`, `?plan_from_data`,
+  `?plan_explicit`, and `?run_plan` for exact argument and return value
+  descriptions.
 - Read [NEWS](NEWS.md) for release changes.
 - Report problems through [GitHub Issues](https://github.com/blankuzr/redcapmissing/issues).

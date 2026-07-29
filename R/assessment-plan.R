@@ -26,7 +26,9 @@
 #'   `instrument`, `redcap_event_name`, and `repeat_instance`, in that order.
 #'   Each row adds its exact crossing for every record observed in the applicable
 #'   arm; in a classic project it adds the crossing for every observed record.
-#'   `NULL` and a correctly typed empty table mean observed only planning.
+#'   `NULL` and a correctly typed empty table mean observed only planning. Use
+#'   [build_extended_schedule()] to construct this table from allowable project
+#'   crossings.
 #'
 #' @section `assessible_targets` rule:
 #' `plan_from_data()` implements:
@@ -134,6 +136,8 @@
 #' An extension into an arm with no observed records emits
 #' `redcapmissing_warning_empty_arm_extension`, which also inherits from
 #' `redcapmissing_warning`.
+#' A selected longitudinal instrument designated to no event contributes no
+#' target and does not warn. Selection alone does not invent an event crossing.
 #'
 #' @return A validated `redcapmissing_plan` as described in **Returned plan**.
 #'
@@ -146,7 +150,8 @@
 #' )
 #' }
 #'
-#' @seealso [plan_explicit()], [run_plan()]
+#' @seealso [all_instruments()], [build_extended_schedule()],
+#'   [plan_explicit()], [run_plan()]
 #' @export
 plan_from_data <- function(data, rcon, instruments, extended_schedule = NULL) {
   if (missing(data) || is.null(data)) {
@@ -225,7 +230,14 @@ plan_from_data <- function(data, rcon, instruments, extended_schedule = NULL) {
 #' [plan_from_data()] apply here as well.
 #'
 #' @inheritSection plan_from_data Returned plan
-#' @inheritSection plan_from_data Conditions
+#'
+#' @section Conditions:
+#' Validation failures inherit from `redcapmissing_error`, with the more
+#' specific classes `redcapmissing_error_argument`,
+#' `redcapmissing_error_schema`, `redcapmissing_error_project`,
+#' `redcapmissing_error_schedule`, or `redcapmissing_error_plan` as applicable.
+#' Omitting a selected instrument from `explicit_schedule` is not a warning:
+#' explicit rows are the complete requested target set.
 #'
 #' @return A validated `redcapmissing_plan` as described in **Returned plan**,
 #'   with `construction = "explicit"` and `target_source = "explicit"` for
@@ -239,7 +251,7 @@ plan_from_data <- function(data, rcon, instruments, extended_schedule = NULL) {
 #' )
 #' }
 #'
-#' @seealso [plan_from_data()], [run_plan()]
+#' @seealso [all_instruments()], [plan_from_data()], [run_plan()]
 #' @export
 plan_explicit <- function(data, rcon, instruments, explicit_schedule) {
   if (missing(data) || is.null(data)) {

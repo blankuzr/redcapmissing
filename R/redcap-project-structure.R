@@ -1,5 +1,42 @@
 # REDCap connection and normalized project-structure contracts.
 
+#' List every REDCap instrument in a project
+#'
+#' `all_instruments()` returns the project instrument inventory in REDCap
+#' order. Inventory membership is distinct from schedulability: in a
+#' longitudinal project, the result includes instruments that are currently
+#' designated to no event.
+#'
+#' @param rcon A `redcapAPI` connection inheriting from
+#'   `redcapApiConnection`, as created by [redcapAPI::redcapConnection()], or
+#'   `redcapOfflineConnection`, as created by [redcapAPI::offlineConnection()]
+#'   or [redcapAPI::readPreservedProject()]. The connection must expose its
+#'   project instrument surface.
+#'
+#' @return A character vector of unique raw REDCap instrument names, in the
+#'   order supplied by `rcon`.
+#'
+#' @section Conditions:
+#' A missing or `NULL` connection produces
+#' `redcapmissing_error_argument`. An unsupported connection or malformed
+#' instrument surface produces `redcapmissing_error_project`.
+#'
+#' @examples
+#' \dontrun{
+#' instruments <- all_instruments(rcon)
+#' }
+#'
+#' @seealso [build_extended_schedule()], [plan_from_data()],
+#'   [plan_explicit()]
+#' @export
+all_instruments <- function(rcon) {
+  if (missing(rcon) || is.null(rcon)) {
+    .condition_signal_error("`rcon` is required and cannot be `NULL`.", "argument")
+  }
+  .rcon_validate_class(rcon)
+  .project_structure_read_instruments(rcon)$instrument
+}
+
 .rcon_validate_class <- function(rcon) {
   supported_classes <- c("redcapApiConnection", "redcapOfflineConnection")
   is_supported <- any(vapply(
@@ -83,6 +120,12 @@
   }
   label <- if (is.null(label_col)) instrument else .schema_normalize_nullable_character(data[[label_col]], "instrument labels")
   tibble::tibble(instrument = instrument, instrument_label = label)
+}
+
+.project_structure_read_instruments <- function(rcon) {
+  .project_structure_normalize_instruments(
+    .project_structure_read_surface(rcon, "instruments", "project instruments")
+  )
 }
 
 .project_structure_normalize_mapping <- function(data) {
@@ -259,7 +302,7 @@
   }
   if (anyDuplicated(metadata$field_name)) .condition_signal_error("Metadata field names must be unique.", "project")
   .metadata_validate_checkbox_fields(metadata)
-  instruments <- .project_structure_normalize_instruments(.project_structure_read_surface(rcon, "instruments", "project instruments"))
+  instruments <- .project_structure_read_instruments(rcon)
   info <- .project_structure_read_surface(rcon, c("projectInformation", "project_information", "projectInfo"), "project information")
   .schema_require_columns(info, c("project_id", "is_longitudinal"), "rcon$projectInformation()")
   if (nrow(info) != 1) .condition_signal_error("Project information must contain exactly one row.", "project")

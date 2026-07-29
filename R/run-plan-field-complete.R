@@ -13,13 +13,24 @@
   selected <- metadata[metadata$form_name %in% instruments, , drop = FALSE]
   unknown_ignore <- setdiff(ignore_fields, unique(as.character(selected$field_name)))
   if (length(unknown_ignore)) {
-    .condition_signal_error(paste0("`ignore_fields` contains fields outside the selected instruments: ",
+    .condition_signal_error(paste0(
+      "`ignore_fields` contains fields outside instruments represented by ",
+      "frozen targets: ",
       paste(unknown_ignore, collapse = ", "), "."), "argument")
   }
-  if (isTRUE(required_fields) && !"required_field" %in% names(metadata)) {
-    .condition_signal_error("`rcon` metadata must contain `required_field` when `required_fields = TRUE`.", "project")
+  if (isTRUE(required_fields) && length(instruments)) {
+    if (!"required_field" %in% names(metadata)) {
+      .condition_signal_error(
+        "`rcon` metadata must contain `required_field` when `required_fields = TRUE`.",
+        "project"
+      )
+    }
+    selected <- selected[
+      .schema_require_values(selected$required_field),
+      ,
+      drop = FALSE
+    ]
   }
-  if (isTRUE(required_fields)) selected <- selected[.schema_require_values(selected$required_field), , drop = FALSE]
   unknown_types <- setdiff(exclude_types, unique(as.character(selected$field_type)))
   if (length(unknown_types) && isTRUE(strict_exclude_types)) {
     .condition_signal_error(paste0("`exclude_types` contains types unused by the resolved field policy: ",

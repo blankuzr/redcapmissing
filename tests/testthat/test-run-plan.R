@@ -1010,6 +1010,352 @@ test_that("explicit plans with no targets return typed empty report tables", {
   expect_type(result$summary$pass_rate, "double")
 })
 
+run_plan_target_scope_rcon <- function() {
+  metadata <- dplyr::bind_rows(
+    meta_row("record_id", "active_form", required = "y"),
+    meta_row("active_start", "active_form"),
+    meta_row("active_value", "active_form", required = "y"),
+    meta_row("inactive_note", "inactive_form", field_type = "notes"),
+    meta_row(
+      "inactive_checkbox",
+      "inactive_form",
+      field_type = "checkbox",
+      choices = "1, First | 2, Second"
+    )
+  )
+  connection <- list(
+    url = "https://example.test/api/",
+    metadata = function() metadata,
+    instruments = function() tibble::tibble(
+      instrument_name = c("active_form", "inactive_form"),
+      instrument_label = c("Active form", "Inactive form")
+    ),
+    projectInformation = function() tibble::tibble(
+      project_id = "77",
+      is_longitudinal = 1L
+    ),
+    arms = function() tibble::tibble(arm_num = 1L, name = "Arm 1"),
+    events = function() tibble::tibble(
+      event_id = 101L,
+      unique_event_name = "baseline_arm_1",
+      event_name = "Baseline",
+      arm_num = 1L
+    ),
+    mapping = function() tibble::tibble(
+      arm_num = 1L,
+      unique_event_name = "baseline_arm_1",
+      form = "active_form"
+    ),
+    repeatInstrumentEvent = function() tibble::tibble(
+      event_name = character(),
+      form_name = character()
+    ),
+    version = function() "15.0.0"
+  )
+  redcap_api_connection_fixture(connection)
+}
+
+run_plan_target_scope_data <- function() {
+  tibble::tibble(
+    record_id = "1",
+    redcap_event_name = "baseline_arm_1",
+    active_start = "started",
+    active_value = "complete",
+    inactive_note = "not targeted",
+    inactive_checkbox___1 = "1",
+    inactive_checkbox___2 = "0"
+  )
+}
+
+test_that("run_plan scopes runtime response requirements to frozen target instruments", {
+  rcon <- run_plan_target_scope_rcon()
+  planner_data <- run_plan_target_scope_data()
+  plan <- plan_from_data(
+    planner_data,
+    rcon,
+    c("active_form", "inactive_form")
+  )
+  runtime_data <- planner_data[
+    ,
+    !names(planner_data) %in% c(
+      "inactive_note",
+      "inactive_checkbox___1",
+      "inactive_checkbox___2"
+    ),
+    drop = FALSE
+  ]
+
+  expect_identical(plan$instruments, c("active_form", "inactive_form"))
+  expect_identical(
+    unique(plan$assessible_targets$instrument),
+    "active_form"
+  )
+  expect_false(any(grepl("^inactive_checkbox___", names(runtime_data))))
+
+  result <- run_plan(
+    plan,
+    runtime_data,
+    rcon,
+    details = TRUE,
+    progress = FALSE
+  )
+  expect_identical(result$target_results$instrument, "active_form")
+  expect_identical(result$target_results$instrument_started, "passed")
+  expect_identical(result$target_results$field_complete, "passed")
+  expect_false("inactive_form" %in% result$summary$instrument)
+  expect_false("inactive_form" %in% result$missing$instrument)
+  expect_false("inactive_form" %in% result$details$instrument)
+
+  expect_error(
+    run_plan(
+      plan,
+      runtime_data,
+      rcon,
+      ignore_fields = "inactive_note",
+      progress = FALSE
+    ),
+    class = "redcapmissing_error_argument"
+  )
+  expect_error(
+    run_plan(
+      plan,
+      runtime_data,
+      rcon,
+      exclude_types = "notes",
+      progress = FALSE
+    ),
+    class = "redcapmissing_error_argument"
+  )
+
+  missing_detection_field <- runtime_data[
+    ,
+    names(runtime_data) != "active_start",
+    drop = FALSE
+  ]
+  expect_error(
+    run_plan(plan, missing_detection_field, rcon, progress = FALSE),
+    regexp = "instrument start detection.*active_start",
+    class = "redcapmissing_error_schema"
+  )
+
+  missing_target_field <- runtime_data[
+    ,
+    names(runtime_data) != "active_value",
+    drop = FALSE
+  ]
+  expect_error(
+    run_plan(plan, missing_target_field, rcon, progress = FALSE),
+    regexp = "active_value",
+    class = "redcapmissing_error_schema"
+  )
+})
+
+test_that("run_plan retains non-target branching dependencies and drops unrelated fields", {
+  metadata <- dplyr::bind_rows(
+    meta_row("record_id", "target_form", required = "y"),
+    meta_row("target_start", "target_form"),
+    meta_row(
+      "target_value",
+      "target_form",
+      branching = "[context_flag] = '1'",
+      required = "y"
+    ),
+    meta_row("context_flag", "context_form"),
+    meta_row("context_unused", "context_form")
+  )
+  rcon <- redcap_api_connection_fixture(list(
+    metadata = function() metadata,
+    instruments = function() tibble::tibble(
+      instrument_name = c("target_form", "context_form"),
+      instrument_label = c("Target form", "Context form")
+    ),
+    projectInformation = function() tibble::tibble(
+      project_id = "77",
+      is_longitudinal = 0L
+    ),
+    repeatInstrumentEvent = function() tibble::tibble(
+      event_name = character(),
+      form_name = character()
+    ),
+    version = function() "15.0.0"
+  ))
+  planner_data <- tibble::tibble(
+    record_id = "1",
+    target_start = "started",
+    target_value = "",
+    context_flag = "1",
+    context_unused = "not needed"
+  )
+  plan <- plan_from_data(planner_data, rcon, "target_form")
+  runtime_data <- planner_data[
+    ,
+    names(planner_data) != "context_unused",
+    drop = FALSE
+  ]
+
+  result <- run_plan(
+    plan,
+    runtime_data,
+    rcon,
+    details = TRUE,
+    progress = FALSE
+  )
+  expect_identical(result$target_results$instrument, "target_form")
+  expect_identical(result$target_results$field_complete, "failed")
+  expect_true("target_value" %in% result$details$field_name)
+
+  missing_dependency <- runtime_data[
+    ,
+    names(runtime_data) != "context_flag",
+    drop = FALSE
+  ]
+  expect_error(
+    run_plan(plan, missing_dependency, rcon, progress = FALSE),
+    regexp = "branching logic evaluation.*context_flag",
+    class = "redcapmissing_error_schema"
+  )
+})
+
+test_that("zero-target plans require only REDCap structural columns", {
+  classic_rcon <- run_plan_rcon()
+  classic_metadata <- classic_rcon$metadata()
+  classic_metadata$required_field <- NULL
+  classic_rcon$metadata <- function() classic_metadata
+  empty_schedule <- run_plan_explicit_schedule()[0, , drop = FALSE]
+  empty_plan <- plan_explicit(
+    run_plan_data(),
+    classic_rcon,
+    "baseline_form",
+    empty_schedule
+  )
+
+  empty <- run_plan(
+    empty_plan,
+    tibble::tibble(record_id = "1"),
+    classic_rcon,
+    progress = FALSE
+  )
+  expect_identical(nrow(empty$target_results), 0L)
+  expect_identical(nrow(empty$summary), 0L)
+  expect_identical(nrow(empty$missing), 0L)
+  expect_error(
+    run_plan(
+      empty_plan,
+      tibble::tibble(record_id = "1"),
+      classic_rcon,
+      ignore_fields = "start_marker",
+      progress = FALSE
+    ),
+    class = "redcapmissing_error_argument"
+  )
+  expect_error(
+    run_plan(
+      empty_plan,
+      tibble::tibble(record_id = "1"),
+      classic_rcon,
+      exclude_types = "text",
+      progress = FALSE
+    ),
+    class = "redcapmissing_error_argument"
+  )
+
+  longitudinal_rcon <- run_plan_target_scope_rcon()
+  targetless_plan <- plan_from_data(
+    run_plan_target_scope_data(),
+    longitudinal_rcon,
+    "inactive_form"
+  )
+  expect_identical(nrow(targetless_plan$assessible_targets), 0L)
+  targetless <- run_plan(
+    targetless_plan,
+    tibble::tibble(
+      record_id = "1",
+      redcap_event_name = "baseline_arm_1"
+    ),
+    longitudinal_rcon,
+    progress = FALSE
+  )
+  expect_identical(nrow(targetless$target_results), 0L)
+  expect_identical(nrow(targetless$summary), 0L)
+  expect_identical(nrow(targetless$missing), 0L)
+})
+
+test_that("classic repeating targets bypass the event gate and retain the instance gate", {
+  repeat_table <- tibble::tibble(
+    event_name = NA_character_,
+    form_name = "baseline_form"
+  )
+  rcon <- run_plan_rcon(repeat_table = repeat_table)
+  data <- run_plan_data()
+  data$redcap_repeat_instrument <- "baseline_form"
+  data$redcap_repeat_instance <- 1L
+  schedule <- tibble::tibble(
+    record_id = c("1", "1"),
+    instrument = c("baseline_form", "baseline_form"),
+    redcap_event_name = c(NA_character_, NA_character_),
+    repeat_instance = c(1L, 2L)
+  )
+  plan <- plan_explicit(data, rcon, "baseline_form", schedule)
+  result <- run_plan(plan, data, rcon, progress = FALSE)
+
+  expect_identical(
+    result$target_results$event_row_started,
+    c("not applicable", "not applicable")
+  )
+  expect_identical(
+    result$target_results$repeat_instance_row_started,
+    c("passed", "failed")
+  )
+  expect_identical(
+    result$target_results$instrument_started,
+    c("passed", "not reached")
+  )
+})
+
+test_that("longitudinal repeating-instrument targets distinguish event and instance absence", {
+  repeat_table <- tibble::tibble(
+    event_name = "baseline_arm_1",
+    form_name = "baseline_form"
+  )
+  rcon <- run_plan_rcon(
+    longitudinal = TRUE,
+    repeat_table = repeat_table
+  )
+  data <- run_plan_data(record_id = "2")
+  data$redcap_event_name <- "baseline_arm_1"
+  data$redcap_repeat_instrument <- "baseline_form"
+  data$redcap_repeat_instance <- 1L
+  schedule <- tibble::tibble(
+    record_id = c("1", "2"),
+    instrument = c("baseline_form", "baseline_form"),
+    redcap_event_name = c("baseline_arm_1", "baseline_arm_1"),
+    repeat_instance = c(2L, 2L)
+  )
+  plan <- plan_explicit(data, rcon, "baseline_form", schedule)
+  result <- run_plan(plan, data, rcon, progress = FALSE)
+
+  expect_identical(
+    result$target_results$repeat_instrument,
+    c("baseline_form", "baseline_form")
+  )
+  expect_identical(
+    result$target_results$event_row_started,
+    c("failed", "passed")
+  )
+  expect_identical(
+    result$target_results$repeat_instance_row_started,
+    c("not reached", "failed")
+  )
+  expect_identical(
+    result$target_results$instrument_started,
+    c("not reached", "not reached")
+  )
+  expect_identical(
+    result$target_results$field_complete,
+    c("not reached", "not reached")
+  )
+})
+
 test_that("longitudinal event gates use any physical row in the record and event", {
   metadata <- dplyr::bind_rows(
     meta_row("record_id", "alpha", required = "y"),

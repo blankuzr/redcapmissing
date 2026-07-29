@@ -31,7 +31,9 @@ project. Their order determines target ordering.}
 \code{instrument}, \code{redcap_event_name}, and \code{repeat_instance}, in that order.
 Each row adds its exact crossing for every record observed in the applicable
 arm; in a classic project it adds the crossing for every observed record.
-\code{NULL} and a correctly typed empty table mean observed only planning.}
+\code{NULL} and a correctly typed empty table mean observed only planning. Use
+\code{\link[=build_extended_schedule]{build_extended_schedule()}} to construct this table from allowable project
+crossings.}
 }
 \value{
 A validated \code{redcapmissing_plan} as described in \strong{Returned plan}.
@@ -156,6 +158,8 @@ specific classes \code{redcapmissing_error_argument},
 An extension into an arm with no observed records emits
 \code{redcapmissing_warning_empty_arm_extension}, which also inherits from
 \code{redcapmissing_warning}.
+A selected longitudinal instrument designated to no event contributes no
+target and does not warn. Selection alone does not invent an event crossing.
 }
 
 \examples{
@@ -169,5 +173,6 @@ extended_plan <- plan_from_data(
 
 }
 \seealso{
+\code{\link[=all_instruments]{all_instruments()}}, \code{\link[=build_extended_schedule]{build_extended_schedule()}},
 \code{\link[=plan_explicit]{plan_explicit()}}, \code{\link[=run_plan]{run_plan()}}
 }

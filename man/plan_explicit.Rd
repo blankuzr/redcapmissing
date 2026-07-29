@@ -76,6 +76,16 @@ structural identifier and repeat instance rejection rules documented for
 \code{\link[=plan_from_data]{plan_from_data()}} apply here as well.
 }
 
+\section{Conditions}{
+
+Validation failures inherit from \code{redcapmissing_error}, with the more
+specific classes \code{redcapmissing_error_argument},
+\code{redcapmissing_error_schema}, \code{redcapmissing_error_project},
+\code{redcapmissing_error_schedule}, or \code{redcapmissing_error_plan} as applicable.
+Omitting a selected instrument from \code{explicit_schedule} is not a warning:
+explicit rows are the complete requested target set.
+}
+
 \section{Returned plan}{
 
 The returned object has class \code{redcapmissing_plan} and these components:\tabular{ll}{
@@ -123,17 +133,6 @@ value is independent of source table row order. The stored plan excludes
 \code{data} and the live connection.
 }
 
-\section{Conditions}{
-
-Validation failures inherit from \code{redcapmissing_error}, with the more
-specific classes \code{redcapmissing_error_argument},
-\code{redcapmissing_error_schema}, \code{redcapmissing_error_project},
-\code{redcapmissing_error_schedule}, or \code{redcapmissing_error_plan} as applicable.
-An extension into an arm with no observed records emits
-\code{redcapmissing_warning_empty_arm_extension}, which also inherits from
-\code{redcapmissing_warning}.
-}
-
 \examples{
 \dontrun{
 # records, rcon, instruments, and explicit_schedule are caller supplied.
@@ -144,5 +143,5 @@ explicit_plan <- plan_explicit(
 
 }
 \seealso{
-\code{\link[=plan_from_data]{plan_from_data()}}, \code{\link[=run_plan]{run_plan()}}
+\code{\link[=all_instruments]{all_instruments()}}, \code{\link[=plan_from_data]{plan_from_data()}}, \code{\link[=run_plan]{run_plan()}}
 }

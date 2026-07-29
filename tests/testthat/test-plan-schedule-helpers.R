@@ -1,0 +1,395 @@
+.schedule_helper_connection <- function(longitudinal = TRUE) {
+  calls <- new.env(parent = emptyenv())
+  surface_names <- c(
+    "metadata", "instruments", "projectInformation",
+    "repeatInstrumentEvent", "mapping", "events", "arms",
+    "exportRecords"
+  )
+  for (surface in surface_names) calls[[surface]] <- 0L
+  bump <- function(surface) {
+    calls[[surface]] <- calls[[surface]] + 1L
+    invisible(NULL)
+  }
+
+  instrument_names <- c(
+    "baseline", "partial", "diary", "event_form", "inactive", "retired"
+  )
+  instruments <- tibble::tibble(
+    instrument_name = instrument_names,
+    instrument_label = paste(instrument_names, "label")
+  )
+  metadata <- tibble::tibble(
+    field_name = c(
+      "record_id", "partial_value", "diary_value", "event_value",
+      "inactive_value", "retired_value"
+    ),
+    form_name = instrument_names,
+    field_type = rep("text", length(instrument_names))
+  )
+
+  if (isTRUE(longitudinal)) {
+    project_information <- tibble::tibble(
+      project_id = 700L,
+      is_longitudinal = 1L
+    )
+    arms <- tibble::tibble(
+      arm_num = c(2L, 1L),
+      name = c("Second", "First")
+    )
+    events <- tibble::tibble(
+      event_id = c(201L, 104L, 101L, 103L, 102L),
+      unique_event_name = c(
+        "baseline_arm_2", "repeat_visit_arm_1", "baseline_arm_1",
+        "diary_arm_1", "followup_arm_1"
+      ),
+      event_name = c(
+        "Baseline 2", "Repeating visit", "Baseline 1", "Diary", "Follow-up"
+      ),
+      arm_num = c(2L, 1L, 1L, 1L, 1L)
+    )
+    mapping <- tibble::tibble(
+      arm_num = c(1L, 1L, 2L, 1L, 1L, 1L),
+      unique_event_name = c(
+        "repeat_visit_arm_1", "repeat_visit_arm_1", "baseline_arm_2",
+        "diary_arm_1", "followup_arm_1", "baseline_arm_1"
+      ),
+      form = c(
+        "event_form", "diary", "baseline", "diary", "partial", "baseline"
+      )
+    )
+    repeats <- tibble::tibble(
+      event_name = c("diary_arm_1", "repeat_visit_arm_1"),
+      form_name = c("diary", NA_character_)
+    )
+  } else {
+    project_information <- tibble::tibble(
+      project_id = 701L,
+      is_longitudinal = 0L
+    )
+    arms <- NULL
+    events <- NULL
+    mapping <- NULL
+    repeats <- tibble::tibble(
+      event_name = NA_character_,
+      form_name = "diary"
+    )
+  }
+
+  connection <- list(
+    metadata = function() {
+      bump("metadata")
+      metadata
+    },
+    instruments = function() {
+      bump("instruments")
+      instruments
+    },
+    projectInformation = function() {
+      bump("projectInformation")
+      project_information
+    },
+    repeatInstrumentEvent = function() {
+      bump("repeatInstrumentEvent")
+      repeats
+    },
+    mapping = function() {
+      bump("mapping")
+      mapping
+    },
+    events = function() {
+      bump("events")
+      events
+    },
+    arms = function() {
+      bump("arms")
+      arms
+    },
+    exportRecords = function(...) {
+      bump("exportRecords")
+      stop("schedule helpers and plan constructors must not export records")
+    }
+  )
+  connection <- structure(
+    connection,
+    class = c("redcapApiConnection", "redcapConnection")
+  )
+  list(rcon = connection, calls = calls, instruments = instrument_names)
+}
+
+.schedule_helper_longitudinal_data <- function() {
+  tibble::tibble(
+    record_id = c("r1", "r2"),
+    redcap_event_name = c("baseline_arm_1", "baseline_arm_2"),
+    redcap_repeat_instrument = c(NA_character_, NA_character_),
+    redcap_repeat_instance = c(NA_integer_, NA_integer_)
+  )
+}
+
+test_that("all_instruments returns the complete ordered project inventory", {
+  fixture <- .schedule_helper_connection()
+
+  expect_identical(all_instruments(fixture$rcon), fixture$instruments)
+  expect_identical(fixture$calls$instruments, 1L)
+  unrelated <- c(
+    "metadata", "projectInformation", "repeatInstrumentEvent",
+    "mapping", "events", "arms", "exportRecords"
+  )
+  expect_identical(
+    vapply(unrelated, function(surface) fixture$calls[[surface]], integer(1)),
+    stats::setNames(rep(0L, length(unrelated)), unrelated)
+  )
+
+  expect_error(all_instruments(), class = "redcapmissing_error_argument")
+  expect_error(all_instruments(NULL), class = "redcapmissing_error_argument")
+  expect_error(
+    all_instruments(structure(list(), class = "redcapConnection")),
+    class = "redcapmissing_error_project"
+  )
+
+  malformed <- .schedule_helper_connection()
+  malformed$rcon$instruments <- function() {
+    tibble::tibble(instrument_name = c("baseline", "baseline"))
+  }
+  expect_error(
+    all_instruments(malformed$rcon),
+    class = "redcapmissing_error_project"
+  )
+})
+
+test_that("build_extended_schedule validates arguments and returns its exact schema", {
+  rcon <- .schedule_helper_connection(longitudinal = FALSE)$rcon
+
+  expect_error(
+    build_extended_schedule(),
+    class = "redcapmissing_error_argument"
+  )
+  expect_error(
+    build_extended_schedule(NULL, "baseline"),
+    class = "redcapmissing_error_argument"
+  )
+  expect_error(
+    build_extended_schedule(
+      structure(list(), class = "redcapConnection"), "baseline"
+    ),
+    class = "redcapmissing_error_project"
+  )
+  expect_error(
+    build_extended_schedule(rcon),
+    class = "redcapmissing_error_argument"
+  )
+  expect_error(
+    build_extended_schedule(rcon, NULL),
+    class = "redcapmissing_error_argument"
+  )
+  expect_error(
+    build_extended_schedule(rcon, character()),
+    class = "redcapmissing_error_argument"
+  )
+  expect_error(
+    build_extended_schedule(rcon, c("baseline", "baseline")),
+    class = "redcapmissing_error_argument"
+  )
+  expect_error(
+    build_extended_schedule(rcon, factor("baseline")),
+    class = "redcapmissing_error_argument"
+  )
+  expect_error(
+    build_extended_schedule(rcon, " baseline"),
+    class = "redcapmissing_error_argument"
+  )
+  expect_error(
+    build_extended_schedule(rcon, "unknown"),
+    class = "redcapmissing_error_schedule"
+  )
+
+  invalid_counts <- list(
+    NULL, numeric(), TRUE, "2", c(1, 2), NA_real_, NaN, Inf,
+    0, -1, 1.5, .Machine$integer.max + 1, as.Date("2026-01-01"),
+    as.difftime(1, units = "days")
+  )
+  for (count in invalid_counts) {
+    expect_error(
+      build_extended_schedule(rcon, "baseline", count),
+      class = "redcapmissing_error_argument"
+    )
+  }
+
+  expect_identical(
+    build_extended_schedule(rcon, "baseline", 1),
+    tibble::tibble(
+      instrument = "baseline",
+      redcap_event_name = NA_character_,
+      repeat_instance = NA_integer_
+    )
+  )
+})
+
+test_that("classic schedules preserve native eventless crossings", {
+  rcon <- .schedule_helper_connection(longitudinal = FALSE)$rcon
+
+  expect_no_warning(
+    schedule <- build_extended_schedule(
+      rcon,
+      instruments = c("diary", "baseline", "inactive"),
+      n_repeat_instances = 3L
+    )
+  )
+  expect_identical(
+    schedule,
+    tibble::tibble(
+      instrument = c(rep("diary", 3L), "baseline", "inactive"),
+      redcap_event_name = rep(NA_character_, 5L),
+      repeat_instance = c(1:3, NA_integer_, NA_integer_)
+    )
+  )
+})
+
+test_that("longitudinal schedules expand every allowable crossing in native order", {
+  rcon <- .schedule_helper_connection()$rcon
+
+  expect_no_warning(
+    schedule <- build_extended_schedule(
+      rcon,
+      instruments = c("baseline", "diary", "event_form", "partial"),
+      n_repeat_instances = 2L
+    )
+  )
+  expect_identical(
+    schedule,
+    tibble::tibble(
+      instrument = c(
+        "baseline", "baseline", "diary", "diary", "diary", "diary",
+        "event_form", "event_form", "partial"
+      ),
+      redcap_event_name = c(
+        "baseline_arm_1", "baseline_arm_2",
+        "diary_arm_1", "diary_arm_1",
+        "repeat_visit_arm_1", "repeat_visit_arm_1",
+        "repeat_visit_arm_1", "repeat_visit_arm_1", "followup_arm_1"
+      ),
+      repeat_instance = c(
+        NA_integer_, NA_integer_, 1L, 2L, 1L, 2L, 1L, 2L, NA_integer_
+      )
+    )
+  )
+  expect_false(anyNA(schedule$redcap_event_name))
+})
+
+test_that("undesignated longitudinal extension requests warn once and omit rows", {
+  rcon <- .schedule_helper_connection()$rcon
+  warnings <- list()
+  mixed <- withCallingHandlers(
+    build_extended_schedule(
+      rcon,
+      instruments = c("retired", "partial", "inactive"),
+      n_repeat_instances = 2L
+    ),
+    warning = function(warning) {
+      warnings[[length(warnings) + 1L]] <<- warning
+      invokeRestart("muffleWarning")
+    }
+  )
+
+  expect_length(warnings, 1L)
+  expect_s3_class(
+    warnings[[1L]],
+    "redcapmissing_warning_undesignated_extension"
+  )
+  expect_s3_class(warnings[[1L]], "redcapmissing_warning")
+  expect_identical(warnings[[1L]]$instruments, c("retired", "inactive"))
+  expect_identical(
+    conditionMessage(warnings[[1L]]),
+    paste0(
+      "`build_extended_schedule()` could not add rows for requested ",
+      "longitudinal instrument(s) designated to no REDCap event: ",
+      "retired, inactive."
+    )
+  )
+  expect_identical(
+    mixed,
+    tibble::tibble(
+      instrument = "partial",
+      redcap_event_name = "followup_arm_1",
+      repeat_instance = NA_integer_
+    )
+  )
+
+  empty_warnings <- list()
+  empty <- withCallingHandlers(
+    build_extended_schedule(rcon, c("inactive", "retired"), 4L),
+    warning = function(warning) {
+      empty_warnings[[length(empty_warnings) + 1L]] <<- warning
+      invokeRestart("muffleWarning")
+    }
+  )
+  expect_length(empty_warnings, 1L)
+  expect_identical(empty_warnings[[1L]]$instruments, c("inactive", "retired"))
+  expect_identical(
+    empty,
+    tibble::tibble(
+      instrument = character(),
+      redcap_event_name = character(),
+      repeat_instance = integer()
+    )
+  )
+})
+
+test_that("built extended schedules compose with plan_from_data", {
+  fixture <- .schedule_helper_connection()
+  rcon <- fixture$rcon
+  data <- .schedule_helper_longitudinal_data()
+  extension <- build_extended_schedule(rcon, "partial")
+
+  expect_identical(
+    names(extension),
+    c("instrument", "redcap_event_name", "repeat_instance")
+  )
+  expect_no_warning(
+    plan <- plan_from_data(
+      data,
+      rcon,
+      instruments = all_instruments(rcon),
+      extended_schedule = extension
+    )
+  )
+  expect_identical(
+    plan$assessible_targets[
+      , c("record_id", "instrument", "redcap_event_name", "target_source")
+    ],
+    tibble::tibble(
+      record_id = c("r1", "r2", "r1"),
+      instrument = c("baseline", "baseline", "partial"),
+      redcap_event_name = c(
+        "baseline_arm_1", "baseline_arm_2", "followup_arm_1"
+      ),
+      target_source = c("observed", "observed", "extended")
+    )
+  )
+  expect_false(any(plan$assessible_targets$instrument %in% c("inactive", "retired")))
+
+  expect_error(
+    plan_from_data(data, rcon, "baseline", extension),
+    class = "redcapmissing_error_schedule"
+  )
+
+  expect_no_warning(
+    inactive_plan <- plan_from_data(data, rcon, "inactive")
+  )
+  expect_identical(nrow(inactive_plan$assessible_targets), 0L)
+
+  invalid_crossing <- tibble::tibble(
+    instrument = "inactive",
+    redcap_event_name = "followup_arm_1",
+    repeat_instance = NA_integer_
+  )
+  expect_error(
+    plan_from_data(data, rcon, "inactive", invalid_crossing),
+    class = "redcapmissing_error_schedule"
+  )
+  invalid_eventless <- invalid_crossing
+  invalid_eventless$redcap_event_name <- NA_character_
+  expect_error(
+    plan_from_data(data, rcon, "inactive", invalid_eventless),
+    class = "redcapmissing_error_schedule"
+  )
+})

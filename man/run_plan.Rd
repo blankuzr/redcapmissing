@@ -24,11 +24,13 @@ uniqueness, target provenance, and deterministic ordering are revalidated
 against \code{rcon}; malformed plans and plans edited by hand are rejected.}
 
 \item{data}{A data frame containing physical REDCap rows and every response,
-checkbox child, and branching dependency column needed by the selected
-checks. Structural columns follow \code{\link[=plan_from_data]{plan_from_data()}} normalization, and all
-columns must use ordinary atomic vector storage. A correctly structured
-empty data frame is allowed. Plan targets stay fixed when \code{data} contains
-additional rows; absent planned rows remain targets and follow the checks below.}
+checkbox child, and branching dependency column needed by the frozen
+targets. Instruments that occur in \code{plan$instruments} but have no target do
+not impose response-column requirements. Structural columns follow
+\code{\link[=plan_from_data]{plan_from_data()}} normalization, and all columns must use ordinary atomic
+vector storage. A correctly structured empty data frame is allowed. Plan
+targets stay fixed when \code{data} contains additional rows; absent planned
+rows remain targets and follow the checks below.}
 
 \item{rcon}{A \code{redcapAPI} connection inheriting from
 \code{redcapApiConnection}, as created by \code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, or
@@ -44,9 +46,10 @@ field-complete assessment to fields marked required in REDCap metadata;
 exclusions.}
 
 \item{ignore_fields}{\code{NULL}, \code{character(0)}, or a character vector of unique,
-nonmissing, nonblank, unpadded raw metadata field names on selected
-instruments. Supply checkbox root names. Exported checkbox child names are
-invalid. Unknown names and names unused after earlier policy steps are
+nonmissing, nonblank, unpadded raw metadata field names on instruments
+represented by frozen targets. Supply checkbox root names. Exported
+checkbox child names are invalid. Unknown names, fields belonging only to
+zero-target instruments, and names unused after earlier policy steps are
 errors.}
 
 \item{exclude_types}{\code{NULL}, \code{character(0)}, or a character vector of unique,
@@ -120,22 +123,24 @@ target with \code{repeat_instance = NA_integer_} has both row checks marked not
 applicable and fails \code{instrument-started}.
 
 \code{instrument-started} uses an independent detection set: every data entry
-metadata field on the selected instrument except the project record ID field
-and \code{descriptive} or \code{calc} fields. Checkbox roots require a nonblank,
-unambiguous metadata choice definition and expand to exported child columns.
+metadata field on an instrument represented by a frozen target except the
+project record ID field and \code{descriptive} or \code{calc} fields. Checkbox roots
+require a nonblank, unambiguous metadata choice definition and expand to
+exported child columns.
 An ordinary detection field starts the instrument when its response is
 nonmissing. A checkbox root starts the instrument when at least one child is
 selected. Child values \code{0}, \code{"unchecked"}, \code{"false"}, and \code{"no"}, matched in
-any letter case, are unselected. A selected instrument with no
-usable detection fields, or a missing detection column, is an error.
-\code{field-complete} runs only after this check passes.
+any letter case, are unselected. A targeted instrument with no usable
+detection fields, or a missing detection column, is an error. A selected
+instrument with no frozen target is not evaluated and imposes no
+response-column requirement. \code{field-complete} runs only after this check passes.
 }
 
 \section{Field-complete policy}{
 
 The field set is resolved in this exact order:
 
-\if{html}{\out{<div class="sourceCode text">}}\preformatted{all fields on the selected instrument
+\if{html}{\out{<div class="sourceCode text">}}\preformatted{all fields on instruments represented by frozen targets
 -> retain required fields when required_fields = TRUE
 -> exclude_types removal
 -> ignore_fields removal
@@ -158,8 +163,10 @@ multiple source rows with positive repeat instances are ambiguous and raise
 a project error because no single instance can be selected.
 Fields closed by branching logic are not assessed.
 Checkbox roots are complete when at least one exported child choice is
-selected. Every selected response, checkbox child, and branching dependency
-column must be present; absence is an error.
+selected. Every targeted response, checkbox child, and branching dependency
+column needed by those target fields must be present; absence is an error. A
+branching dependency remains required when its field belongs to a
+non-targeted instrument.
 }
 
 \section{Response missingness}{

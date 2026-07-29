@@ -215,12 +215,35 @@ test_that("plan_from_data unions observed and applicable arm extensions", {
 
 test_that("extensions into an arm with no observed records warn and add no targets", {
   rcon <- .plan_longitudinal_rcon()
+  original_events <- rcon$events()
+  original_mapping <- rcon$mapping()
+  rcon$events <- function() {
+    dplyr::bind_rows(
+      original_events,
+      tibble::tibble(
+        event_id = 202L,
+        unique_event_name = "visit_arm_2",
+        event_name = "Visit",
+        arm_num = 2L
+      )
+    )
+  }
+  rcon$mapping <- function() {
+    dplyr::bind_rows(
+      original_mapping,
+      tibble::tibble(
+        arm_num = 2L,
+        unique_event_name = "visit_arm_2",
+        form = "demographics"
+      )
+    )
+  }
   data <- .plan_longitudinal_data()
   data <- data[data$record_id == "r1", ]
   extension <- tibble::tibble(
-    instrument = "demographics",
-    redcap_event_name = "baseline_arm_2",
-    repeat_instance = NA_integer_
+    instrument = rep("demographics", 2L),
+    redcap_event_name = c("baseline_arm_2", "visit_arm_2"),
+    repeat_instance = rep(NA_integer_, 2L)
   )
   warnings <- list()
   plan <- withCallingHandlers(
@@ -233,7 +256,12 @@ test_that("extensions into an arm with no observed records warn and add no targe
   expect_length(warnings, 1L)
   expect_s3_class(warnings[[1L]], "redcapmissing_warning_empty_arm_extension")
   expect_s3_class(warnings[[1L]], "redcapmissing_warning")
-  expect_false(any(plan$assessible_targets$redcap_event_name == "baseline_arm_2"))
+  expect_identical(
+    warnings[[1L]]$events,
+    c("baseline_arm_2", "visit_arm_2")
+  )
+  expect_false(any(plan$assessible_targets$redcap_event_name %in%
+    c("baseline_arm_2", "visit_arm_2")))
 })
 
 test_that("plan_explicit freezes exact targets including records absent from data", {
@@ -389,9 +417,17 @@ test_that("repeating events expand every mapped instrument at the exact instance
   repeated <- plan$assessible_targets[
     plan$assessible_targets$redcap_event_name == "visit_arm_1",
   ]
-  expect_setequal(repeated$instrument, c("notes", "diary"))
-  expect_true(all(repeated$repeat_instance == 2L))
-  expect_true(all(is.na(repeated$repeat_instrument)))
+  expect_identical(
+    repeated,
+    tibble::tibble(
+      record_id = c("r1", "r1"),
+      instrument = c("notes", "diary"),
+      redcap_event_name = c("visit_arm_1", "visit_arm_1"),
+      repeat_instrument = c(NA_character_, NA_character_),
+      repeat_instance = c(2L, 2L),
+      target_source = c("observed", "observed")
+    )
+  )
 })
 
 test_that("fingerprint table normalization ignores row and column order", {
@@ -1033,6 +1069,67 @@ test_that("event missingness is contextual for classic and longitudinal planning
       class = "redcapmissing_error_schedule"
     )
   }
+
+  classic_extended <- tibble::tibble(
+    instrument = "demographics",
+    redcap_event_name = "baseline_arm_1",
+    repeat_instance = NA_integer_
+  )
+  expect_error(
+    plan_from_data(
+      tibble::tibble(record_id = "r1"),
+      classic_rcon,
+      "demographics",
+      classic_extended
+    ),
+    class = "redcapmissing_error_schedule"
+  )
+  classic_explicit <- tibble::add_column(
+    classic_extended,
+    record_id = "r1",
+    .before = 1L
+  )
+  expect_error(
+    plan_explicit(
+      tibble::tibble(record_id = "r1"),
+      classic_rcon,
+      "demographics",
+      classic_explicit
+    ),
+    class = "redcapmissing_error_schedule"
+  )
+
+  longitudinal_explicit <- tibble::tibble(
+    record_id = "r1",
+    instrument = "demographics",
+    redcap_event_name = NA_character_,
+    repeat_instance = NA_integer_
+  )
+  expect_error(
+    plan_explicit(
+      .plan_longitudinal_data(),
+      longitudinal_rcon,
+      "demographics",
+      longitudinal_explicit
+    ),
+    class = "redcapmissing_error_schedule"
+  )
+
+  edited_plan <- plan_from_data(
+    .plan_longitudinal_data(),
+    longitudinal_rcon,
+    "demographics"
+  )
+  edited_plan$assessible_targets$redcap_event_name <- NA_character_
+  expect_error(
+    run_plan(
+      edited_plan,
+      .plan_longitudinal_data(),
+      longitudinal_rcon,
+      progress = FALSE
+    ),
+    class = "redcapmissing_error_plan"
+  )
 })
 
 test_that("target dimensions normalize across classic longitudinal and repeat modes", {
@@ -1331,11 +1428,21 @@ test_that("constructors retrieve project surfaces and make zero record export ca
   expect_false(exists("exportRecords", counts, inherits = FALSE))
 })
 
-test_that("target construction excludes unselected and unmapped physical rows", {
+test_that("selected longitudinal instruments use only designated physical contexts", {
   rcon <- .plan_longitudinal_rcon()
-  data <- .plan_longitudinal_data()[c(1, 3), ]
+  data <- .plan_longitudinal_data()[c(1, 2), ]
   plan <- plan_from_data(data, rcon, "notes")
-  expect_identical(plan$assessible_targets, redcapmissing:::.assessible_target_build_prototype())
+  expect_identical(
+    plan$assessible_targets,
+    tibble::tibble(
+      record_id = "r1",
+      instrument = "notes",
+      redcap_event_name = "visit_arm_1",
+      repeat_instrument = NA_character_,
+      repeat_instance = NA_integer_,
+      target_source = "observed"
+    )
+  )
 })
 
 test_that("explicit omissions exclude observed crossings and absent selected instruments", {
@@ -1356,7 +1463,7 @@ test_that("explicit omissions exclude observed crossings and absent selected ins
   expect_identical(empty_plan$assessible_targets, redcapmissing:::.assessible_target_build_prototype())
 })
 
-test_that("unknown and unmapped schedule crossings fail before intersection", {
+test_that("unknown identifiers and non-designated crossings fail before intersection", {
   rcon <- .plan_longitudinal_rcon()
   data <- .plan_longitudinal_data()
   schedules <- list(
@@ -1499,6 +1606,45 @@ test_that("repeat configuration must be explicit and consistent with project sta
     plan_from_data(repeat_data, contradictory, "diary"),
     class = "redcapmissing_error_project"
   )
+  classic_concrete_event <- .plan_fake_rcon(repeats = tibble::tibble(
+    event_name = "baseline_arm_1",
+    form_name = "diary"
+  ))
+  expect_error(
+    plan_from_data(data, classic_concrete_event, "diary"),
+    class = "redcapmissing_error_project"
+  )
+
+  classic_repeating_event <- .plan_fake_rcon(repeats = tibble::tibble(
+    event_name = "baseline_arm_1",
+    form_name = NA_character_
+  ))
+  expect_error(
+    plan_from_data(data, classic_repeating_event, "demographics"),
+    class = "redcapmissing_error_project"
+  )
+
+  longitudinal_missing_event <- .plan_longitudinal_rcon(tibble::tibble(
+    event_name = NA_character_,
+    form_name = "diary"
+  ))
+  expect_error(
+    plan_from_data(.plan_longitudinal_data(), longitudinal_missing_event, "diary"),
+    class = "redcapmissing_error_project"
+  )
+
+  longitudinal_undesignated_repeat <- .plan_longitudinal_rcon(tibble::tibble(
+    event_name = "baseline_arm_1",
+    form_name = "notes"
+  ))
+  expect_error(
+    plan_from_data(
+      .plan_longitudinal_data(),
+      longitudinal_undesignated_repeat,
+      "notes"
+    ),
+    class = "redcapmissing_error_project"
+  )
 })
 
 test_that("nonmissing factor repeat instances are rejected", {
@@ -1581,4 +1727,32 @@ test_that("all public condition subclasses inherit from package base classes", {
     expect_s3_class(conditions[[subclass]], "redcapmissing_error")
     expect_s3_class(conditions[[subclass]], "error")
   }
+  warning_rcon <- .plan_longitudinal_rcon()
+  warning_metadata <- dplyr::bind_rows(
+    .plan_metadata(),
+    tibble::tibble(
+      field_name = "inactive_value",
+      form_name = "inactive_form",
+      field_type = "text"
+    )
+  )
+  warning_instruments <- tibble::tibble(
+    instrument_name = c("demographics", "notes", "diary", "inactive_form"),
+    instrument_label = c(
+      "demographics label", "notes label", "diary label", "inactive form label"
+    )
+  )
+  warning_rcon$metadata <- function() warning_metadata
+  warning_rcon$instruments <- function() warning_instruments
+  undesignated_warning <- tryCatch(
+    build_extended_schedule(warning_rcon, "inactive_form"),
+    warning = identity
+  )
+  expect_s3_class(
+    undesignated_warning,
+    "redcapmissing_warning_undesignated_extension"
+  )
+  expect_s3_class(undesignated_warning, "redcapmissing_warning")
+  expect_s3_class(undesignated_warning, "warning")
+  expect_identical(undesignated_warning$instruments, "inactive_form")
 })

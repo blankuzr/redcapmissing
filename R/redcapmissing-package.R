@@ -7,9 +7,12 @@
 #' @details
 #' The package workflow has three steps:
 #'
-#' 1. [plan_from_data()] combines allowable crossings observed in the export
-#'    with an optional extension. [plan_explicit()] uses an exact schedule that
-#'    includes a record ID for every target.
+#' 1. Choose raw instrument names directly or retrieve the project inventory
+#'    with [all_instruments()]. [plan_from_data()] combines allowable crossings
+#'    observed in the export with an optional extension, which
+#'    [build_extended_schedule()] can construct from project structure.
+#'    [plan_explicit()] uses an exact schedule that includes a record ID for
+#'    every target.
 #' 2. [run_plan()] evaluates the targets stored in the plan.
 #' 3. [get_summary()] and [get_missing()] inspect results, while [flexify()] and
 #'    [flex_event_instruments()] format them.
@@ -41,6 +44,11 @@
 #' argument, schema, project, schedule, plan, and verification failures.
 #' Extensions into arms with zero observed records use the
 #' `redcapmissing_warning_empty_arm_extension` warning.
+#' [build_extended_schedule()] uses
+#' `redcapmissing_warning_undesignated_extension` when a valid requested
+#' instrument in a longitudinal project is designated to no event and therefore
+#' contributes no schedule row. Classic project crossings use
+#' `redcap_event_name = NA_character_` natively and do not produce this warning.
 #'
 #' Supported `rcon` objects inherit from `redcapApiConnection`, created by
 #' [redcapAPI::redcapConnection()], or `redcapOfflineConnection`, created by
@@ -48,8 +56,9 @@
 #' Online workflows commonly use [redcapAPI::exportRecordsTyped()]. Keep REDCap
 #' API tokens outside source, logs, reports, and saved R objects.
 #'
-#' @seealso [plan_from_data()], [plan_explicit()], [run_plan()],
-#'   [get_summary()], [get_missing()], [registry()], [flexify()],
+#' @seealso [all_instruments()], [build_extended_schedule()],
+#'   [plan_from_data()], [plan_explicit()], [run_plan()], [get_summary()],
+#'   [get_missing()], [registry()], [flexify()],
 #'   [flex_event_instruments()], [flex_html()],
 #'   [redcapAPI::redcapConnection()], [redcapAPI::offlineConnection()],
 #'   [redcapAPI::exportRecordsTyped()]

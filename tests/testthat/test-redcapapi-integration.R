@@ -1,4 +1,4 @@
-test_that("genuine redcapAPI offline connections support the plan and run workflow", {
+test_that("a genuine offline connection supports helper plan and run workflow", {
   metadata <- data.frame(
     field_name = c("record_id", "started", "value"),
     form_name = "baseline",
@@ -25,7 +25,14 @@ test_that("genuine redcapAPI offline connections support the plan and run workfl
     stringsAsFactors = FALSE
   )
 
-  plan <- plan_from_data(data, rcon, "baseline")
+  instruments <- all_instruments(rcon)
+  expect_no_warning(
+    extended_schedule <- build_extended_schedule(
+      rcon,
+      instruments
+    )
+  )
+  plan <- plan_from_data(data, rcon, instruments, extended_schedule)
   result <- run_plan(plan, data, rcon, progress = FALSE)
   summary <- get_summary(result)
   missing <- get_missing(result)
@@ -34,6 +41,15 @@ test_that("genuine redcapAPI offline connections support the plan and run workfl
   expect_s3_class(plan, "redcapmissing_plan")
   expect_s3_class(result, "redcapmissing")
   expect_identical(plan$assessible_targets$record_id, c("1", "2"))
+  expect_identical(instruments, "baseline")
+  expect_identical(
+    extended_schedule,
+    tibble::tibble(
+      instrument = "baseline",
+      redcap_event_name = NA_character_,
+      repeat_instance = NA_integer_
+    )
+  )
   expect_identical(
     summary$validation_check,
     c(

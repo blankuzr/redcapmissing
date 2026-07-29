@@ -6,6 +6,15 @@
   across code, diagnostics, documentation, and errors. Field selection and
   branching now use the clearer reasons `"no fields remain after field policy"`
   and `"no fields apply after branching logic"`.
+- Added `all_instruments()` for the ordered REDCap instrument inventory and
+  `build_extended_schedule()` for deterministic three-column extensions over
+  every allowable crossing of a requested instrument subset. Classic projects
+  retain native eventless crossings; wholly undesignated longitudinal
+  instruments warn and contribute no extension row.
+- Scoped `run_plan()` response-column preflight to instruments represented by
+  frozen `assessible_targets`, plus checkbox and branching dependencies.
+  Selected instruments with no targets no longer require their exclusive
+  response fields at runtime.
 - Limited the documented and validated `rcon` contract to redcapAPI classes
   `redcapApiConnection` and `redcapOfflineConnection`.
 - Reduced `registry()` to the five columns used by package outputs and

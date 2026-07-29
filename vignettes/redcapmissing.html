@@ -48,9 +48,8 @@ overflow: visible;
 }
 </style>
 <style type="text/css" data-origin="pandoc">
-html { -webkit-text-size-adjust: 100%; }
 pre > code.sourceCode { white-space: pre; position: relative; }
-pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span { line-height: 1.25; }
 pre > code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode > span { color: inherit; text-decoration: inherit; }
@@ -391,11 +390,14 @@ and recovery</a></li>
 <p><code>redcapmissing</code> separates target selection from
 assessment:</p>
 <ol style="list-style-type: decimal">
+<li><code>all_instruments()</code> and
+<code>build_extended_schedule()</code> help declare project instrument
+scope and optional schedule extensions.</li>
 <li><code>plan_from_data()</code> or <code>plan_explicit()</code>
-selects the record, event, instrument, and repeat instance crossings
+freezes the record, event, instrument, and repeat instance crossings
 stored in <code>assessible_targets</code>.</li>
 <li><code>run_plan()</code> evaluates the physical rows, instruments,
-and fields for the targets stored in the plan.</li>
+and fields for those frozen targets.</li>
 </ol>
 <p>This vignette explains the complete workflow from record export
 through result inspection.</p>
@@ -418,15 +420,17 @@ through result inspection.</p>
 <tbody>
 <tr class="odd">
 <td><code>rcon</code></td>
-<td>Every constructor and <code>run_plan()</code></td>
+<td>Planning helpers, both constructors, and
+<code>run_plan()</code></td>
 <td>A <code>redcapAPI</code> object inheriting from
 <code>redcapApiConnection</code> or <code>redcapOfflineConnection</code>
 that represents the project used for <code>data</code>.</td>
 </tr>
 <tr class="even">
 <td><code>instruments</code></td>
-<td>Both constructors</td>
-<td>A character vector of raw REDCap instrument names.</td>
+<td>The schedule builder and both constructors</td>
+<td>A character vector of raw REDCap instrument names, optionally
+returned by <code>all_instruments(rcon)</code>.</td>
 </tr>
 <tr class="odd">
 <td><code>records</code></td>
@@ -495,26 +499,38 @@ whose response values are all missing.</p>
 <tr class="header">
 <th>Function</th>
 <th>Arguments</th>
-<th>Target source</th>
+<th>Result</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
+<td><code>all_instruments()</code></td>
+<td><code>rcon</code></td>
+<td>The complete ordered raw instrument inventory.</td>
+</tr>
+<tr class="even">
+<td><code>build_extended_schedule()</code></td>
+<td><code>rcon</code>, <code>instruments</code>, and optional
+<code>n_repeat_instances</code></td>
+<td>A three-column extension containing every allowable crossing for the
+requested instruments.</td>
+</tr>
+<tr class="odd">
 <td><code>plan_from_data()</code></td>
 <td><code>data</code>, <code>rcon</code>, <code>instruments</code>, and
 optional <code>extended_schedule</code></td>
-<td>Allowable crossings observed in <code>data</code>, plus allowable
-crossings added by <code>extended_schedule</code>.</td>
+<td>Frozen targets observed in <code>data</code>, plus those added by
+the extension.</td>
 </tr>
 <tr class="even">
 <td><code>plan_explicit()</code></td>
 <td><code>data</code>, <code>rcon</code>, <code>instruments</code>, and
 required <code>explicit_schedule</code></td>
-<td>Allowable crossings named in <code>explicit_schedule</code>.</td>
+<td>Frozen targets named in <code>explicit_schedule</code>.</td>
 </tr>
 </tbody>
 </table>
-<p>For both functions:</p>
+<p>For both constructors:</p>
 <ul>
 <li><code>data</code> is a data frame or tibble from the project
 represented by <code>rcon</code>.</li>
@@ -551,6 +567,34 @@ zero row extension with the complete schema has the same result.</p>
 </div>
 <div id="add-crossings-with-extended_schedule" class="section level2">
 <h2>Add crossings with <code>extended_schedule</code></h2>
+<p>Use <code>all_instruments()</code> when the plan should declare the
+complete project inventory, then pass all or a subset of that vector to
+the builder:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>instruments <span class="ot">&lt;-</span> <span class="fu">all_instruments</span>(rcon)</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>extension_instruments <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;followup&quot;</span>, <span class="st">&quot;diary&quot;</span>)</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>extended_schedule <span class="ot">&lt;-</span> <span class="fu">build_extended_schedule</span>(</span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>  <span class="at">rcon =</span> rcon,</span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>  <span class="at">instruments =</span> extension_instruments,</span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a>  <span class="at">n_repeat_instances =</span> <span class="dv">3</span><span class="dt">L</span></span>
+<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a>)</span></code></pre></div>
+<p>The builder requires a nonempty vector of unique project instrument
+names. <code>NULL</code> does not mean all instruments; call
+<code>all_instruments(rcon)</code> explicitly.</p>
+<p>The result has exactly <code>instrument</code>,
+<code>redcap_event_name</code>, and <code>repeat_instance</code>, with
+character, character, and integer storage.</p>
+<p>Classic project rows use the native eventless crossing represented by
+<code>redcap_event_name = NA_character_</code>. A classic repeating
+instrument receives instances <code>1</code> through
+<code>n_repeat_instances</code>. Longitudinal rows always use a concrete
+event designated for that instrument. A valid longitudinal instrument
+designated to no event contributes no row and emits one
+<code>redcapmissing_warning_undesignated_extension</code> warning; the
+builder never creates a longitudinal crossing with a missing event.</p>
+<p>If none of the requested longitudinal instruments is designated to an
+event, the builder warns and returns a correctly typed zero-row
+schedule. To request no extension, omit <code>extended_schedule</code>
+from <code>plan_from_data()</code>.</p>
 <p>The extension has exactly these columns in this order:</p>
 <table>
 <colgroup>
@@ -605,12 +649,12 @@ character, integer, or double storage for <code>repeat_instance</code>.
 Column order is checked even when the table has no rows. Extra columns,
 duplicate rows after value conversion, unknown names, and crossings
 disallowed by <code>rcon</code> produce an error.</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>extended_plan <span class="ot">&lt;-</span> <span class="fu">plan_from_data</span>(</span>
-<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  <span class="at">data =</span> records,</span>
-<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">rcon =</span> rcon,</span>
-<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>  <span class="at">instruments =</span> instruments,</span>
-<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>  <span class="at">extended_schedule =</span> extended_schedule</span>
-<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a>)</span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>extended_plan <span class="ot">&lt;-</span> <span class="fu">plan_from_data</span>(</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>  <span class="at">data =</span> records,</span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>  <span class="at">rcon =</span> rcon,</span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>  <span class="at">instruments =</span> instruments,</span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>  <span class="at">extended_schedule =</span> extended_schedule</span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a>)</span></code></pre></div>
 <p>Each row adds its exact instrument, event, and repeat instance
 crossing for records observed in the applicable arm. In a classic
 project, it adds the crossing for every observed record. An arm with no
@@ -689,12 +733,12 @@ for the extension, with character, factor, integer, or double storage
 for <code>record_id</code>. It creates a valid plan with no targets.
 <code>explicit_schedule = NULL</code> and an omitted
 <code>explicit_schedule</code> produce an error.</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>explicit_plan <span class="ot">&lt;-</span> <span class="fu">plan_explicit</span>(</span>
-<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>  <span class="at">data =</span> records,</span>
-<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>  <span class="at">rcon =</span> rcon,</span>
-<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>  <span class="at">instruments =</span> instruments,</span>
-<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>  <span class="at">explicit_schedule =</span> explicit_schedule</span>
-<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>)</span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>explicit_plan <span class="ot">&lt;-</span> <span class="fu">plan_explicit</span>(</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>  <span class="at">data =</span> records,</span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>  <span class="at">rcon =</span> rcon,</span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>  <span class="at">instruments =</span> instruments,</span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>  <span class="at">explicit_schedule =</span> explicit_schedule</span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>)</span></code></pre></div>
 <p>Each schedule row creates its exact target. A record ID absent from
 <code>data</code> remains in the plan. During <code>run_plan()</code>,
 an absent longitudinal event fails <code>event-row-started</code>; a
@@ -703,7 +747,10 @@ present event with an absent repeat instance fails
 with <code>repeat_instance = NA_integer_</code> has both row checks
 marked <code>&quot;not applicable&quot;</code> and fails
 <code>instrument-started</code>. For a longitudinal project, a record
-already observed in one arm must be scheduled within that arm.</p>
+already observed in one arm must be scheduled within that arm. A
+selected instrument with no explicit schedule row contributes no target
+and produces no warning: omission means that the target was not
+requested.</p>
 <p>The absence rules differ:</p>
 <table>
 <colgroup>
@@ -815,11 +862,17 @@ row data frame with every structural column required by the project.</p>
 <div id="classic-longitudinal-and-repeating-projects" class="section level2">
 <h2>Classic, longitudinal, and repeating projects</h2>
 <p>Classic projects store <code>NA_character_</code> for
-<code>redcap_event_name</code>. An extension applies to all observed
-records.</p>
+<code>redcap_event_name</code> because they have no event dimension. An
+extension applies to all observed records. A classic repeating
+instrument uses positive instances at that eventless crossing; neither
+case is an undesignated instrument or produces that warning.</p>
 <p>Longitudinal projects require one raw event name on every physical
 row. Extensions apply to records observed in the arm that contains the
-scheduled event.</p>
+scheduled event. An instrument mapped at only some events is assessible
+only at those events. A project instrument designated to no longitudinal
+event remains part of the project inventory but contributes no observed,
+extended, or explicit target unless REDCap later designates it to an
+event.</p>
 <p>A row where neither its event nor its instrument repeats stores
 <code>NA_character_</code> in <code>redcap_repeat_instrument</code> and
 <code>NA_integer_</code> in <code>redcap_repeat_instance</code>. A row
@@ -936,11 +989,11 @@ components exclude the input <code>data</code> and
 </div>
 <div id="run-a-plan" class="section level2">
 <h2>Run a plan</h2>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>report <span class="ot">&lt;-</span> <span class="fu">run_plan</span>(</span>
-<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>  <span class="at">plan =</span> extended_plan,</span>
-<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>  <span class="at">data =</span> records,</span>
-<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>  <span class="at">rcon =</span> rcon</span>
-<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>)</span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>report <span class="ot">&lt;-</span> <span class="fu">run_plan</span>(</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>  <span class="at">plan =</span> extended_plan,</span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>  <span class="at">data =</span> records,</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>  <span class="at">rcon =</span> rcon</span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>)</span></code></pre></div>
 <table>
 <colgroup>
 <col width="18%" />
@@ -972,9 +1025,9 @@ fingerprint.</td>
 <td><code>data</code></td>
 <td align="right">Yes</td>
 <td>None</td>
-<td>A data frame or tibble with structural columns and every response or
-branching column used by the checks. A complete zero row table is
-valid.</td>
+<td>A data frame or tibble with structural columns, response columns
+needed by frozen target instruments, and branching dependencies for
+those responses. A complete zero row table is valid.</td>
 <td>Supplies the rows and response values assessed during this
 call.</td>
 </tr>
@@ -1060,7 +1113,14 @@ repeat instance after a present event fails
 <code>repeat-instance-row-started</code>, and a missing classic target
 with <code>repeat_instance = NA_integer_</code> fails
 <code>instrument-started</code> after both row checks receive
-<code>&quot;not applicable&quot;</code>.</p>
+<code>&quot;not applicable&quot;</code>. Runtime field preflight is target-scoped.
+It derives instrument scope from <code>plan$assessible_targets</code>,
+then requires detection fields, retained assessment fields, checkbox
+child columns, branching dependencies for those fields, and the
+structural columns needed to match targets. A selected plan instrument
+with no frozen target imposes no exclusive response-column requirement.
+A field on a nontarget instrument remains required when target branching
+logic references it.</p>
 <div id="execution-stages" class="section level3">
 <h3>Execution stages</h3>
 <p><code>diagnostics</code> records these stages in order:</p>
@@ -1174,65 +1234,65 @@ check.</p>
 <code>&quot;not reached&quot;</code>. <code>instrument-started</code> then checks
 its own field set. <code>field-complete</code> runs after
 <code>instrument-started</code> passes.</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">registry</span>()</span>
-<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a><span class="co">#&gt; validation registry</span></span>
-<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a><span class="co">#&gt; 4 checks; 2 levels</span></span>
-<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a><span class="co">#&gt; +---------------------------+-----------------------------+--------------------------------+</span></span>
-<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a><span class="co">#&gt; | level                     | check                       | condition                      |</span></span>
-<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a><span class="co">#&gt; +---------------------------+-----------------------------+--------------------------------+</span></span>
-<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a><span class="co">#&gt; | event:instrument          | event-row-started           | At least one physical row      |</span></span>
-<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a><span class="co">#&gt; |                           |                             | exists in the export for the   |</span></span>
-<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a><span class="co">#&gt; |                           |                             | target record and event.       |</span></span>
-<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a><span class="co">#&gt; | event:instrument:instance | event-row-started           | At least one physical row      |</span></span>
-<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a><span class="co">#&gt; |                           |                             | exists in the export for the   |</span></span>
-<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a><span class="co">#&gt; |                           |                             | target record and event.       |</span></span>
-<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a><span class="co">#&gt; | event:instrument          | repeat-instance-row-started | The exact physical row exists  |</span></span>
-<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a><span class="co">#&gt; |                           |                             | in the export for the target   |</span></span>
-<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a><span class="co">#&gt; |                           |                             | record, event, repeat          |</span></span>
-<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a><span class="co">#&gt; |                           |                             | instrument, and repeat         |</span></span>
-<span id="cb8-17"><a href="#cb8-17" tabindex="-1"></a><span class="co">#&gt; |                           |                             | instance.                      |</span></span>
-<span id="cb8-18"><a href="#cb8-18" tabindex="-1"></a><span class="co">#&gt; | event:instrument:instance | repeat-instance-row-started | The exact physical row exists  |</span></span>
-<span id="cb8-19"><a href="#cb8-19" tabindex="-1"></a><span class="co">#&gt; |                           |                             | in the export for the target   |</span></span>
-<span id="cb8-20"><a href="#cb8-20" tabindex="-1"></a><span class="co">#&gt; |                           |                             | record, event, repeat          |</span></span>
-<span id="cb8-21"><a href="#cb8-21" tabindex="-1"></a><span class="co">#&gt; |                           |                             | instrument, and repeat         |</span></span>
-<span id="cb8-22"><a href="#cb8-22" tabindex="-1"></a><span class="co">#&gt; |                           |                             | instance.                      |</span></span>
-<span id="cb8-23"><a href="#cb8-23" tabindex="-1"></a><span class="co">#&gt; | event:instrument          | instrument-started          | The exact target row exists,   |</span></span>
-<span id="cb8-24"><a href="#cb8-24" tabindex="-1"></a><span class="co">#&gt; |                           |                             | and at least one ordinary      |</span></span>
-<span id="cb8-25"><a href="#cb8-25" tabindex="-1"></a><span class="co">#&gt; |                           |                             | detection field has a present  |</span></span>
-<span id="cb8-26"><a href="#cb8-26" tabindex="-1"></a><span class="co">#&gt; |                           |                             | response or one checkbox       |</span></span>
-<span id="cb8-27"><a href="#cb8-27" tabindex="-1"></a><span class="co">#&gt; |                           |                             | detection field has a          |</span></span>
-<span id="cb8-28"><a href="#cb8-28" tabindex="-1"></a><span class="co">#&gt; |                           |                             | selected child.                |</span></span>
-<span id="cb8-29"><a href="#cb8-29" tabindex="-1"></a><span class="co">#&gt; | event:instrument:instance | instrument-started          | The exact target row exists,   |</span></span>
-<span id="cb8-30"><a href="#cb8-30" tabindex="-1"></a><span class="co">#&gt; |                           |                             | and at least one ordinary      |</span></span>
-<span id="cb8-31"><a href="#cb8-31" tabindex="-1"></a><span class="co">#&gt; |                           |                             | detection field has a present  |</span></span>
-<span id="cb8-32"><a href="#cb8-32" tabindex="-1"></a><span class="co">#&gt; |                           |                             | response or one checkbox       |</span></span>
-<span id="cb8-33"><a href="#cb8-33" tabindex="-1"></a><span class="co">#&gt; |                           |                             | detection field has a          |</span></span>
-<span id="cb8-34"><a href="#cb8-34" tabindex="-1"></a><span class="co">#&gt; |                           |                             | selected child.                |</span></span>
-<span id="cb8-35"><a href="#cb8-35" tabindex="-1"></a><span class="co">#&gt; | event:instrument          | field-complete              | Every field selected by field  |</span></span>
-<span id="cb8-36"><a href="#cb8-36" tabindex="-1"></a><span class="co">#&gt; |                           |                             | policy and branching logic is  |</span></span>
-<span id="cb8-37"><a href="#cb8-37" tabindex="-1"></a><span class="co">#&gt; |                           |                             | complete: each ordinary field  |</span></span>
-<span id="cb8-38"><a href="#cb8-38" tabindex="-1"></a><span class="co">#&gt; |                           |                             | has a present response or      |</span></span>
-<span id="cb8-39"><a href="#cb8-39" tabindex="-1"></a><span class="co">#&gt; |                           |                             | eligible verification          |</span></span>
-<span id="cb8-40"><a href="#cb8-40" tabindex="-1"></a><span class="co">#&gt; |                           |                             | override, and each checkbox    |</span></span>
-<span id="cb8-41"><a href="#cb8-41" tabindex="-1"></a><span class="co">#&gt; |                           |                             | has a selected child or        |</span></span>
-<span id="cb8-42"><a href="#cb8-42" tabindex="-1"></a><span class="co">#&gt; |                           |                             | eligible verification          |</span></span>
-<span id="cb8-43"><a href="#cb8-43" tabindex="-1"></a><span class="co">#&gt; |                           |                             | override.                      |</span></span>
-<span id="cb8-44"><a href="#cb8-44" tabindex="-1"></a><span class="co">#&gt; | event:instrument:instance | field-complete              | Every field selected by field  |</span></span>
-<span id="cb8-45"><a href="#cb8-45" tabindex="-1"></a><span class="co">#&gt; |                           |                             | policy and branching logic is  |</span></span>
-<span id="cb8-46"><a href="#cb8-46" tabindex="-1"></a><span class="co">#&gt; |                           |                             | complete: each ordinary field  |</span></span>
-<span id="cb8-47"><a href="#cb8-47" tabindex="-1"></a><span class="co">#&gt; |                           |                             | has a present response or      |</span></span>
-<span id="cb8-48"><a href="#cb8-48" tabindex="-1"></a><span class="co">#&gt; |                           |                             | eligible verification          |</span></span>
-<span id="cb8-49"><a href="#cb8-49" tabindex="-1"></a><span class="co">#&gt; |                           |                             | override, and each checkbox    |</span></span>
-<span id="cb8-50"><a href="#cb8-50" tabindex="-1"></a><span class="co">#&gt; |                           |                             | has a selected child or        |</span></span>
-<span id="cb8-51"><a href="#cb8-51" tabindex="-1"></a><span class="co">#&gt; |                           |                             | eligible verification          |</span></span>
-<span id="cb8-52"><a href="#cb8-52" tabindex="-1"></a><span class="co">#&gt; |                           |                             | override.                      |</span></span>
-<span id="cb8-53"><a href="#cb8-53" tabindex="-1"></a><span class="co">#&gt; +---------------------------+-----------------------------+--------------------------------+</span></span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="fu">registry</span>()</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a><span class="co">#&gt; validation registry</span></span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a><span class="co">#&gt; 4 checks; 2 levels</span></span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a><span class="co">#&gt; +---------------------------+-----------------------------+--------------------------------+</span></span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a><span class="co">#&gt; | level                     | check                       | condition                      |</span></span>
+<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a><span class="co">#&gt; +---------------------------+-----------------------------+--------------------------------+</span></span>
+<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a><span class="co">#&gt; | event:instrument          | event-row-started           | At least one physical row      |</span></span>
+<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a><span class="co">#&gt; |                           |                             | exists in the export for the   |</span></span>
+<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a><span class="co">#&gt; |                           |                             | target record and event.       |</span></span>
+<span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a><span class="co">#&gt; | event:instrument:instance | event-row-started           | At least one physical row      |</span></span>
+<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a><span class="co">#&gt; |                           |                             | exists in the export for the   |</span></span>
+<span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a><span class="co">#&gt; |                           |                             | target record and event.       |</span></span>
+<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a><span class="co">#&gt; | event:instrument          | repeat-instance-row-started | The exact physical row exists  |</span></span>
+<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a><span class="co">#&gt; |                           |                             | in the export for the target   |</span></span>
+<span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a><span class="co">#&gt; |                           |                             | record, event, repeat          |</span></span>
+<span id="cb9-16"><a href="#cb9-16" tabindex="-1"></a><span class="co">#&gt; |                           |                             | instrument, and repeat         |</span></span>
+<span id="cb9-17"><a href="#cb9-17" tabindex="-1"></a><span class="co">#&gt; |                           |                             | instance.                      |</span></span>
+<span id="cb9-18"><a href="#cb9-18" tabindex="-1"></a><span class="co">#&gt; | event:instrument:instance | repeat-instance-row-started | The exact physical row exists  |</span></span>
+<span id="cb9-19"><a href="#cb9-19" tabindex="-1"></a><span class="co">#&gt; |                           |                             | in the export for the target   |</span></span>
+<span id="cb9-20"><a href="#cb9-20" tabindex="-1"></a><span class="co">#&gt; |                           |                             | record, event, repeat          |</span></span>
+<span id="cb9-21"><a href="#cb9-21" tabindex="-1"></a><span class="co">#&gt; |                           |                             | instrument, and repeat         |</span></span>
+<span id="cb9-22"><a href="#cb9-22" tabindex="-1"></a><span class="co">#&gt; |                           |                             | instance.                      |</span></span>
+<span id="cb9-23"><a href="#cb9-23" tabindex="-1"></a><span class="co">#&gt; | event:instrument          | instrument-started          | The exact target row exists,   |</span></span>
+<span id="cb9-24"><a href="#cb9-24" tabindex="-1"></a><span class="co">#&gt; |                           |                             | and at least one ordinary      |</span></span>
+<span id="cb9-25"><a href="#cb9-25" tabindex="-1"></a><span class="co">#&gt; |                           |                             | detection field has a present  |</span></span>
+<span id="cb9-26"><a href="#cb9-26" tabindex="-1"></a><span class="co">#&gt; |                           |                             | response or one checkbox       |</span></span>
+<span id="cb9-27"><a href="#cb9-27" tabindex="-1"></a><span class="co">#&gt; |                           |                             | detection field has a          |</span></span>
+<span id="cb9-28"><a href="#cb9-28" tabindex="-1"></a><span class="co">#&gt; |                           |                             | selected child.                |</span></span>
+<span id="cb9-29"><a href="#cb9-29" tabindex="-1"></a><span class="co">#&gt; | event:instrument:instance | instrument-started          | The exact target row exists,   |</span></span>
+<span id="cb9-30"><a href="#cb9-30" tabindex="-1"></a><span class="co">#&gt; |                           |                             | and at least one ordinary      |</span></span>
+<span id="cb9-31"><a href="#cb9-31" tabindex="-1"></a><span class="co">#&gt; |                           |                             | detection field has a present  |</span></span>
+<span id="cb9-32"><a href="#cb9-32" tabindex="-1"></a><span class="co">#&gt; |                           |                             | response or one checkbox       |</span></span>
+<span id="cb9-33"><a href="#cb9-33" tabindex="-1"></a><span class="co">#&gt; |                           |                             | detection field has a          |</span></span>
+<span id="cb9-34"><a href="#cb9-34" tabindex="-1"></a><span class="co">#&gt; |                           |                             | selected child.                |</span></span>
+<span id="cb9-35"><a href="#cb9-35" tabindex="-1"></a><span class="co">#&gt; | event:instrument          | field-complete              | Every field selected by field  |</span></span>
+<span id="cb9-36"><a href="#cb9-36" tabindex="-1"></a><span class="co">#&gt; |                           |                             | policy and branching logic is  |</span></span>
+<span id="cb9-37"><a href="#cb9-37" tabindex="-1"></a><span class="co">#&gt; |                           |                             | complete: each ordinary field  |</span></span>
+<span id="cb9-38"><a href="#cb9-38" tabindex="-1"></a><span class="co">#&gt; |                           |                             | has a present response or      |</span></span>
+<span id="cb9-39"><a href="#cb9-39" tabindex="-1"></a><span class="co">#&gt; |                           |                             | eligible verification          |</span></span>
+<span id="cb9-40"><a href="#cb9-40" tabindex="-1"></a><span class="co">#&gt; |                           |                             | override, and each checkbox    |</span></span>
+<span id="cb9-41"><a href="#cb9-41" tabindex="-1"></a><span class="co">#&gt; |                           |                             | has a selected child or        |</span></span>
+<span id="cb9-42"><a href="#cb9-42" tabindex="-1"></a><span class="co">#&gt; |                           |                             | eligible verification          |</span></span>
+<span id="cb9-43"><a href="#cb9-43" tabindex="-1"></a><span class="co">#&gt; |                           |                             | override.                      |</span></span>
+<span id="cb9-44"><a href="#cb9-44" tabindex="-1"></a><span class="co">#&gt; | event:instrument:instance | field-complete              | Every field selected by field  |</span></span>
+<span id="cb9-45"><a href="#cb9-45" tabindex="-1"></a><span class="co">#&gt; |                           |                             | policy and branching logic is  |</span></span>
+<span id="cb9-46"><a href="#cb9-46" tabindex="-1"></a><span class="co">#&gt; |                           |                             | complete: each ordinary field  |</span></span>
+<span id="cb9-47"><a href="#cb9-47" tabindex="-1"></a><span class="co">#&gt; |                           |                             | has a present response or      |</span></span>
+<span id="cb9-48"><a href="#cb9-48" tabindex="-1"></a><span class="co">#&gt; |                           |                             | eligible verification          |</span></span>
+<span id="cb9-49"><a href="#cb9-49" tabindex="-1"></a><span class="co">#&gt; |                           |                             | override, and each checkbox    |</span></span>
+<span id="cb9-50"><a href="#cb9-50" tabindex="-1"></a><span class="co">#&gt; |                           |                             | has a selected child or        |</span></span>
+<span id="cb9-51"><a href="#cb9-51" tabindex="-1"></a><span class="co">#&gt; |                           |                             | eligible verification          |</span></span>
+<span id="cb9-52"><a href="#cb9-52" tabindex="-1"></a><span class="co">#&gt; |                           |                             | override.                      |</span></span>
+<span id="cb9-53"><a href="#cb9-53" tabindex="-1"></a><span class="co">#&gt; +---------------------------+-----------------------------+--------------------------------+</span></span></code></pre></div>
 </div>
 </div>
 <div id="instrument-detection-and-field-selection" class="section level2">
 <h2>Instrument detection and field selection</h2>
 <p><code>instrument-started</code> uses every data entry metadata field
-on the selected instrument except:</p>
+on each instrument represented in the frozen targets except:</p>
 <ul>
 <li>the project record ID field;</li>
 <li>fields with type <code>descriptive</code>; and</li>
@@ -1243,18 +1303,20 @@ detection field starts the instrument when its response is present. A
 checkbox root starts the instrument when at least one exported child
 column is selected. The values <code>&quot;0&quot;</code>,
 <code>&quot;unchecked&quot;</code>, <code>&quot;false&quot;</code>, and <code>&quot;no&quot;</code>
-are unselected regardless of letter case. A selected instrument with no
-usable detection fields produces an error.</p>
+are unselected regardless of letter case. A targeted instrument with no
+usable detection fields produces an error; a selected instrument with no
+target does not enter this check.</p>
 <p><code>required_fields</code>, <code>exclude_types</code>, and
 <code>ignore_fields</code> resolve the <code>field-complete</code> set
 in this order:</p>
-<pre class="text"><code>all fields on the selected instrument
+<pre class="text"><code>all fields on each targeted instrument
 -&gt; retain fields marked required when required_fields = TRUE
 -&gt; remove field types named by exclude_types
 -&gt; remove field names named by ignore_fields</code></pre>
 <p><code>ignore_fields</code> contains raw metadata field names. A
 checkbox uses its root field name. Unknown, duplicate, missing, blank,
-padded, and unused names or types produce an error.</p>
+padded, and unused names or types produce an error. Explicit field
+policies remain strict against the target-scoped field set.</p>
 <p>These three arguments change <code>field-complete</code> only.
 Detection fields remain available to <code>instrument-started</code>.
 When the policy leaves no fields, <code>field-complete</code>
@@ -1331,9 +1393,12 @@ receives:</p>
 </tbody>
 </table>
 <p>A checkbox root passes <code>field-complete</code> when at least one
-exported child column is selected. <code>run_plan()</code> requires
-every detection column, selected response column, checkbox child column,
-and branching dependency column before assessment begins.</p>
+exported child column is selected. Before assessment,
+<code>run_plan()</code> requires every detection column, selected
+response column, checkbox child column, and branching dependency for the
+frozen targets. A branching dependency may belong to an instrument with
+no target of its own. Other fields exclusive to nontarget instruments
+are not required.</p>
 </div>
 <div id="verification" class="section level2">
 <h2>Verification</h2>
@@ -1447,14 +1512,14 @@ blank. A nonmissing value is an error and is never discarded to make
 verification evidence match a classic target. For a longitudinal
 project, every <code>event_id</code> must identify a known project
 event.</p>
-<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>verified_report <span class="ot">&lt;-</span> <span class="fu">run_plan</span>(</span>
-<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a>  <span class="at">plan =</span> explicit_plan,</span>
-<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a>  <span class="at">data =</span> records,</span>
-<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a>  <span class="at">rcon =</span> rcon,</span>
-<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a>  <span class="at">verified =</span> verified,</span>
-<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a>  <span class="at">verified_user =</span> verified_user,</span>
-<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a>  <span class="at">details =</span> <span class="cn">TRUE</span></span>
-<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a>)</span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a>verified_report <span class="ot">&lt;-</span> <span class="fu">run_plan</span>(</span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a>  <span class="at">plan =</span> explicit_plan,</span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a>  <span class="at">data =</span> records,</span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a>  <span class="at">rcon =</span> rcon,</span>
+<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a>  <span class="at">verified =</span> verified,</span>
+<span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a>  <span class="at">verified_user =</span> verified_user,</span>
+<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a>  <span class="at">details =</span> <span class="cn">TRUE</span></span>
+<span id="cb11-8"><a href="#cb11-8" tabindex="-1"></a>)</span></code></pre></div>
 <p>Rows matching <code>verified_user</code> are grouped by record,
 event, repeat instrument, repeat instance, and field. The latest
 <code>ts</code> in each group is retained. Identical rows tied at that
@@ -1861,12 +1926,12 @@ assessment result in both settings.</p>
 </div>
 <div id="inspect-and-present-results" class="section level2">
 <h2>Inspect and present results</h2>
-<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a><span class="fu">get_summary</span>(report)</span>
-<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a><span class="fu">get_missing</span>(report)</span>
-<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a></span>
-<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a><span class="fu">flexify</span>(<span class="fu">get_summary</span>(report))</span>
-<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a><span class="fu">flex_event_instruments</span>(report)</span>
-<span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a><span class="fu">flex_html</span>(<span class="fu">flexify</span>(<span class="fu">get_missing</span>(report)))</span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a><span class="fu">get_summary</span>(report)</span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a><span class="fu">get_missing</span>(report)</span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a></span>
+<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a><span class="fu">flexify</span>(<span class="fu">get_summary</span>(report))</span>
+<span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a><span class="fu">flex_event_instruments</span>(report)</span>
+<span id="cb12-6"><a href="#cb12-6" tabindex="-1"></a><span class="fu">flex_html</span>(<span class="fu">flexify</span>(<span class="fu">get_missing</span>(report)))</span></code></pre></div>
 <p>Accessor filters match exact values and respect case. Their
 <code>redcapmissing_labels</code> attribute contains named
 <code>events</code> and <code>instruments</code> character vectors for
@@ -1925,9 +1990,10 @@ latest rows.</td>
 <p>Use the class and message to identify the failing input:</p>
 <ol style="list-style-type: decimal">
 <li>For a schema error, check required columns and their storage. For
-runtime <code>data</code>, export every structural, detection, response,
-checkbox, and branching dependency column required by the selected
-instruments.</li>
+runtime <code>data</code>, export every structural column plus each
+detection, response, checkbox, and branching dependency column required
+by the frozen targets. Nontarget instruments impose no exclusive
+response-column requirement.</li>
 <li>For a schedule error, check the exact column names and order,
 duplicates, selected instruments and events, and the event repeat
 setting in <code>rcon</code>.</li>
@@ -1942,6 +2008,10 @@ rows tied at the latest timestamp for one field context.</li>
 <li>For <code>redcapmissing_warning_empty_arm_extension</code>, confirm
 that planner <code>data</code> contains records in the scheduled event
 arm. The warning adds no targets for that arm.</li>
+<li>For <code>redcapmissing_warning_undesignated_extension</code>,
+review the REDCap event designations for the named longitudinal
+instruments. They contributed no builder rows; no eventless longitudinal
+crossing was created.</li>
 </ol>
 <p>After correcting the source input, call the constructor or
 <code>run_plan()</code> again.</p>

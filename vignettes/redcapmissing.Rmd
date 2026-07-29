@@ -17,10 +17,12 @@ library(redcapmissing)
 
 `redcapmissing` separates target selection from assessment:
 
-1. `plan_from_data()` or `plan_explicit()` selects the record, event,
+1. `all_instruments()` and `build_extended_schedule()` help declare project
+   instrument scope and optional schedule extensions.
+2. `plan_from_data()` or `plan_explicit()` freezes the record, event,
    instrument, and repeat instance crossings stored in `assessible_targets`.
-2. `run_plan()` evaluates the physical rows, instruments, and fields for the
-   targets stored in the plan.
+3. `run_plan()` evaluates the physical rows, instruments, and fields for those
+   frozen targets.
 
 This vignette explains the complete workflow from record export through result
 inspection.
@@ -31,8 +33,8 @@ The examples assume that the caller has supplied these objects:
 
 | Object | Required for | Contents |
 |---|---|---|
-| `rcon` | Every constructor and `run_plan()` | A `redcapAPI` object inheriting from `redcapApiConnection` or `redcapOfflineConnection` that represents the project used for `data`. |
-| `instruments` | Both constructors | A character vector of raw REDCap instrument names. |
+| `rcon` | Planning helpers, both constructors, and `run_plan()` | A `redcapAPI` object inheriting from `redcapApiConnection` or `redcapOfflineConnection` that represents the project used for `data`. |
+| `instruments` | The schedule builder and both constructors | A character vector of raw REDCap instrument names, optionally returned by `all_instruments(rcon)`. |
 | `records` | Both constructors and `run_plan()` | Records exported from the project represented by `rcon`. |
 | `extended_schedule` | Optional use of `plan_from_data()` | A table with the exact three column schema described below. |
 | `explicit_schedule` | `plan_explicit()` | A table with the exact four column schema described below. |
@@ -70,12 +72,14 @@ row as observed, including rows whose response values are all missing.
 
 ## Planning functions
 
-| Function | Arguments | Target source |
+| Function | Arguments | Result |
 |---|---|---|
-| `plan_from_data()` | `data`, `rcon`, `instruments`, and optional `extended_schedule` | Allowable crossings observed in `data`, plus allowable crossings added by `extended_schedule`. |
-| `plan_explicit()` | `data`, `rcon`, `instruments`, and required `explicit_schedule` | Allowable crossings named in `explicit_schedule`. |
+| `all_instruments()` | `rcon` | The complete ordered raw instrument inventory. |
+| `build_extended_schedule()` | `rcon`, `instruments`, and optional `n_repeat_instances` | A three-column extension containing every allowable crossing for the requested instruments. |
+| `plan_from_data()` | `data`, `rcon`, `instruments`, and optional `extended_schedule` | Frozen targets observed in `data`, plus those added by the extension. |
+| `plan_explicit()` | `data`, `rcon`, `instruments`, and required `explicit_schedule` | Frozen targets named in `explicit_schedule`. |
 
-For both functions:
+For both constructors:
 
 - `data` is a data frame or tibble from the project represented by `rcon`.
 - `rcon` supplies project identity, metadata, instruments, repeat settings,
@@ -116,6 +120,37 @@ optional during planning.
 with the complete schema has the same result.
 
 ## Add crossings with `extended_schedule`
+
+Use `all_instruments()` when the plan should declare the complete project
+inventory, then pass all or a subset of that vector to the builder:
+
+```{r build_extension, eval = FALSE}
+instruments <- all_instruments(rcon)
+extension_instruments <- c("followup", "diary")
+extended_schedule <- build_extended_schedule(
+  rcon = rcon,
+  instruments = extension_instruments,
+  n_repeat_instances = 3L
+)
+```
+
+The builder requires a nonempty vector of unique project instrument names.
+`NULL` does not mean all instruments; call `all_instruments(rcon)` explicitly.
+
+The result has exactly `instrument`, `redcap_event_name`, and
+`repeat_instance`, with character, character, and integer storage.
+
+Classic project rows use the native eventless crossing represented by
+`redcap_event_name = NA_character_`. A classic repeating instrument receives
+instances `1` through `n_repeat_instances`. Longitudinal rows always use a
+concrete event designated for that instrument. A valid longitudinal instrument
+designated to no event contributes no row and emits one
+`redcapmissing_warning_undesignated_extension` warning; the builder never
+creates a longitudinal crossing with a missing event.
+
+If none of the requested longitudinal instruments is designated to an event,
+the builder warns and returns a correctly typed zero-row schedule. To request
+no extension, omit `extended_schedule` from `plan_from_data()`.
 
 The extension has exactly these columns in this order:
 
@@ -191,6 +226,8 @@ remains in the plan. During `run_plan()`, an absent longitudinal event fails
 and fails `instrument-started`.
 For a longitudinal project, a record already observed in one arm must be
 scheduled within that arm.
+A selected instrument with no explicit schedule row contributes no target and
+produces no warning: omission means that the target was not requested.
 
 The absence rules differ:
 
@@ -226,12 +263,17 @@ by the project.
 
 ## Classic, longitudinal, and repeating projects
 
-Classic projects store `NA_character_` for `redcap_event_name`. An extension
-applies to all observed records.
+Classic projects store `NA_character_` for `redcap_event_name` because they
+have no event dimension. An extension applies to all observed records. A
+classic repeating instrument uses positive instances at that eventless
+crossing; neither case is an undesignated instrument or produces that warning.
 
 Longitudinal projects require one raw event name on every physical row.
 Extensions apply to records observed in the arm that contains the scheduled
-event.
+event. An instrument mapped at only some events is assessible only at those
+events. A project instrument designated to no longitudinal event remains part
+of the project inventory but contributes no observed, extended, or explicit
+target unless REDCap later designates it to an event.
 
 A row where neither its event nor its instrument repeats stores
 `NA_character_` in `redcap_repeat_instrument` and `NA_integer_` in
@@ -290,7 +332,7 @@ report <- run_plan(
 | Argument | Required | Default | Accepted values | Effect |
 |---|---:|---|---|---|
 | `plan` | Yes | None | A validated `redcapmissing_plan`. | Supplies the stored targets, selected instruments, `target_source` provenance, project data, and fingerprint. |
-| `data` | Yes | None | A data frame or tibble with structural columns and every response or branching column used by the checks. A complete zero row table is valid. | Supplies the rows and response values assessed during this call. |
+| `data` | Yes | None | A data frame or tibble with structural columns, response columns needed by frozen target instruments, and branching dependencies for those responses. A complete zero row table is valid. | Supplies the rows and response values assessed during this call. |
 | `rcon` | Yes | None | The connection or supported object for the same project structure represented by `plan`. | Supplies current project identity and structure. |
 | `required_fields` | No | `TRUE` | One nonmissing logical value. | `TRUE` retains fields marked required before later removals; `FALSE` retains required and optional fields. |
 | `ignore_fields` | No | `NULL` | `NULL`, `character(0)`, or unique nonmissing, nonblank, unpadded raw metadata field names that remain after the `required_fields` filter and `exclude_types` removal. Unknown names and names removed by an earlier step produce an error. | Removes those names from `field-complete`. |
@@ -308,6 +350,13 @@ missing repeat instance after a present event fails
 `repeat-instance-row-started`, and a missing classic target with
 `repeat_instance = NA_integer_` fails `instrument-started` after both row
 checks receive `"not applicable"`.
+Runtime field preflight is target-scoped. It derives instrument scope from
+`plan$assessible_targets`, then requires detection fields, retained assessment
+fields, checkbox child columns, branching dependencies for those fields, and
+the structural columns needed to match targets. A selected plan instrument
+with no frozen target imposes no exclusive response-column requirement. A
+field on a nontarget instrument remains required when target branching logic
+references it.
 
 ### Execution stages
 
@@ -356,8 +405,8 @@ registry()
 
 ## Instrument detection and field selection
 
-`instrument-started` uses every data entry metadata field on the selected
-instrument except:
+`instrument-started` uses every data entry metadata field on each instrument
+represented in the frozen targets except:
 
 - the project record ID field;
 - fields with type `descriptive`; and
@@ -367,14 +416,14 @@ A checkbox root expands to its exported child columns. An ordinary detection
 field starts the instrument when its response is present. A checkbox root
 starts the instrument when at least one exported child column is selected. The
 values `"0"`, `"unchecked"`, `"false"`, and `"no"` are unselected regardless
-of letter case. A selected instrument with no usable detection fields produces
-an error.
+of letter case. A targeted instrument with no usable detection fields produces
+an error; a selected instrument with no target does not enter this check.
 
 `required_fields`, `exclude_types`, and `ignore_fields` resolve the
 `field-complete` set in this order:
 
 ```text
-all fields on the selected instrument
+all fields on each targeted instrument
 -> retain fields marked required when required_fields = TRUE
 -> remove field types named by exclude_types
 -> remove field names named by ignore_fields
@@ -382,7 +431,8 @@ all fields on the selected instrument
 
 `ignore_fields` contains raw metadata field names. A checkbox uses its root
 field name. Unknown, duplicate, missing, blank, padded, and unused names or
-types produce an error.
+types produce an error. Explicit field policies remain strict against the
+target-scoped field set.
 
 These three arguments change `field-complete` only. Detection fields remain
 available to `instrument-started`. When the policy leaves no fields,
@@ -420,9 +470,11 @@ A target whose selected fields all have false branching logic receives:
 | field counts | Zero. |
 
 A checkbox root passes `field-complete` when at least one exported child column
-is selected. `run_plan()` requires every detection column, selected response
-column, checkbox child column, and branching dependency column before
-assessment begins.
+is selected. Before assessment, `run_plan()` requires every detection column,
+selected response column, checkbox child column, and branching dependency for
+the frozen targets. A branching dependency may belong to an instrument with no
+target of its own. Other fields exclusive to nontarget instruments are not
+required.
 
 ## Verification
 
@@ -629,8 +681,9 @@ Validation errors inherit from `redcapmissing_error`:
 Use the class and message to identify the failing input:
 
 1. For a schema error, check required columns and their storage. For runtime
-   `data`, export every structural, detection, response, checkbox, and branching
-   dependency column required by the selected instruments.
+   `data`, export every structural column plus each detection, response,
+   checkbox, and branching dependency column required by the frozen targets.
+   Nontarget instruments impose no exclusive response-column requirement.
 2. For a schedule error, check the exact column names and order, duplicates,
    selected instruments and events, and the event repeat setting in `rcon`.
 3. For a plan error after a REDCap structure change, create a new plan from the
@@ -644,5 +697,8 @@ Use the class and message to identify the failing input:
 6. For `redcapmissing_warning_empty_arm_extension`, confirm that planner
    `data` contains records in the scheduled event arm. The warning adds no
    targets for that arm.
+7. For `redcapmissing_warning_undesignated_extension`, review the REDCap event
+   designations for the named longitudinal instruments. They contributed no
+   builder rows; no eventless longitudinal crossing was created.
 
 After correcting the source input, call the constructor or `run_plan()` again.

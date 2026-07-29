@@ -9,11 +9,13 @@
 #'   uniqueness, target provenance, and deterministic ordering are revalidated
 #'   against `rcon`; malformed plans and plans edited by hand are rejected.
 #' @param data A data frame containing physical REDCap rows and every response,
-#'   checkbox child, and branching dependency column needed by the selected
-#'   checks. Structural columns follow [plan_from_data()] normalization, and all
-#'   columns must use ordinary atomic vector storage. A correctly structured
-#'   empty data frame is allowed. Plan targets stay fixed when `data` contains
-#'   additional rows; absent planned rows remain targets and follow the checks below.
+#'   checkbox child, and branching dependency column needed by the frozen
+#'   targets. Instruments that occur in `plan$instruments` but have no target do
+#'   not impose response-column requirements. Structural columns follow
+#'   [plan_from_data()] normalization, and all columns must use ordinary atomic
+#'   vector storage. A correctly structured empty data frame is allowed. Plan
+#'   targets stay fixed when `data` contains additional rows; absent planned
+#'   rows remain targets and follow the checks below.
 #' @param rcon A `redcapAPI` connection inheriting from
 #'   `redcapApiConnection`, as created by [redcapAPI::redcapConnection()], or
 #'   `redcapOfflineConnection`, as created by [redcapAPI::offlineConnection()]
@@ -26,9 +28,10 @@
 #'   `FALSE` retains required and optional fields before the remaining policy
 #'   exclusions.
 #' @param ignore_fields `NULL`, `character(0)`, or a character vector of unique,
-#'   nonmissing, nonblank, unpadded raw metadata field names on selected
-#'   instruments. Supply checkbox root names. Exported checkbox child names are
-#'   invalid. Unknown names and names unused after earlier policy steps are
+#'   nonmissing, nonblank, unpadded raw metadata field names on instruments
+#'   represented by frozen targets. Supply checkbox root names. Exported
+#'   checkbox child names are invalid. Unknown names, fields belonging only to
+#'   zero-target instruments, and names unused after earlier policy steps are
 #'   errors.
 #' @param exclude_types `NULL`, `character(0)`, or a character vector of unique,
 #'   nonmissing, nonblank, unpadded REDCap metadata field types. `NULL` and
@@ -85,21 +88,23 @@
 #' applicable and fails `instrument-started`.
 #'
 #' `instrument-started` uses an independent detection set: every data entry
-#' metadata field on the selected instrument except the project record ID field
-#' and `descriptive` or `calc` fields. Checkbox roots require a nonblank,
-#' unambiguous metadata choice definition and expand to exported child columns.
+#' metadata field on an instrument represented by a frozen target except the
+#' project record ID field and `descriptive` or `calc` fields. Checkbox roots
+#' require a nonblank, unambiguous metadata choice definition and expand to
+#' exported child columns.
 #' An ordinary detection field starts the instrument when its response is
 #' nonmissing. A checkbox root starts the instrument when at least one child is
 #' selected. Child values `0`, `"unchecked"`, `"false"`, and `"no"`, matched in
-#' any letter case, are unselected. A selected instrument with no
-#' usable detection fields, or a missing detection column, is an error.
-#' `field-complete` runs only after this check passes.
+#' any letter case, are unselected. A targeted instrument with no usable
+#' detection fields, or a missing detection column, is an error. A selected
+#' instrument with no frozen target is not evaluated and imposes no
+#' response-column requirement. `field-complete` runs only after this check passes.
 #'
 #' @section Field-complete policy:
 #' The field set is resolved in this exact order:
 #'
 #' ```text
-#' all fields on the selected instrument
+#' all fields on instruments represented by frozen targets
 #' -> retain required fields when required_fields = TRUE
 #' -> exclude_types removal
 #' -> ignore_fields removal
@@ -122,8 +127,10 @@
 #' a project error because no single instance can be selected.
 #' Fields closed by branching logic are not assessed.
 #' Checkbox roots are complete when at least one exported child choice is
-#' selected. Every selected response, checkbox child, and branching dependency
-#' column must be present; absence is an error.
+#' selected. Every targeted response, checkbox child, and branching dependency
+#' column needed by those target fields must be present; absence is an error. A
+#' branching dependency remains required when its field belongs to a
+#' non-targeted instrument.
 #'
 #' @section Response missingness:
 #' One missingness predicate is used for ordinary instrument detection fields
@@ -314,6 +321,8 @@ run_plan <- function(
   if (missing(rcon) || is.null(rcon)) .condition_signal_error("`rcon` is required.", "project")
   snapshot <- .project_structure_build_snapshot(rcon)
   plan <- .plan_validate_object(plan, snapshot = snapshot)
+  targets <- tibble::as_tibble(plan$assessible_targets)
+  target_instruments <- unique(targets$instrument)
   normalized_data <- .record_normalize_export(data, snapshot, require_nonempty = FALSE,
                                          response_columns = NULL)
   if (is.list(normalized_data) && "data" %in% names(normalized_data)) {
@@ -332,7 +341,7 @@ run_plan <- function(
   field_dictionary <- .metadata_build_field_dictionary(metadata)
   detection <- .instrument_started_build_detection_plan(
     metadata,
-    plan$instruments,
+    target_instruments,
     id_field,
     field_dictionary = field_dictionary
   )
@@ -343,7 +352,7 @@ run_plan <- function(
   started <- Sys.time()
   field_plan <- .field_complete_build_field_plan(
     metadata,
-    plan$instruments,
+    target_instruments,
     required_fields,
     ignore_fields,
     exclude_types,
@@ -362,7 +371,6 @@ run_plan <- function(
   complete_stage(started)
 
   started <- Sys.time()
-  targets <- tibble::as_tibble(plan$assessible_targets)
   joins <- .assessible_target_join_records(targets, normalized_data,
                                  isTRUE(snapshot$project$longitudinal))
   complete_stage(started)
@@ -414,7 +422,7 @@ run_plan <- function(
     field_plan = field_plan,
     field_dictionary = field_dictionary,
     branch_fields = branch_fields,
-    instruments = plan$instruments,
+    instruments = target_instruments,
     retain_passed_fields = isTRUE(details)
   )
   field_status <- assessment$field_status

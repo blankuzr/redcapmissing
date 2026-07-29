@@ -405,7 +405,10 @@ for (name in internal_assignment_names) {
   }
 }
 
-expected_exports <- c("plan_from_data", "plan_explicit", "run_plan")
+expected_exports <- c(
+  "all_instruments", "build_extended_schedule", "plan_from_data",
+  "plan_explicit", "run_plan"
+)
 missing_exports <- setdiff(expected_exports, namespace_exports)
 if (length(missing_exports)) {
   add_failure(paste0(
@@ -415,6 +418,10 @@ if (length(missing_exports)) {
 }
 
 expected_formals <- list(
+  all_instruments = formals(function(rcon) NULL),
+  build_extended_schedule = formals(function(
+    rcon, instruments, n_repeat_instances = 1L
+  ) NULL),
   plan_from_data = formals(function(
     data, rcon, instruments, extended_schedule = NULL
   ) NULL),

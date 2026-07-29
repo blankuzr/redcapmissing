@@ -13,9 +13,12 @@ export. Exported functions use \emph{instrument} for raw REDCap instrument names
 \details{
 The package workflow has three steps:
 \enumerate{
-\item \code{\link[=plan_from_data]{plan_from_data()}} combines allowable crossings observed in the export
-with an optional extension. \code{\link[=plan_explicit]{plan_explicit()}} uses an exact schedule that
-includes a record ID for every target.
+\item Choose raw instrument names directly or retrieve the project inventory
+with \code{\link[=all_instruments]{all_instruments()}}. \code{\link[=plan_from_data]{plan_from_data()}} combines allowable crossings
+observed in the export with an optional extension, which
+\code{\link[=build_extended_schedule]{build_extended_schedule()}} can construct from project structure.
+\code{\link[=plan_explicit]{plan_explicit()}} uses an exact schedule that includes a record ID for
+every target.
 \item \code{\link[=run_plan]{run_plan()}} evaluates the targets stored in the plan.
 \item \code{\link[=get_summary]{get_summary()}} and \code{\link[=get_missing]{get_missing()}} inspect results, while \code{\link[=flexify]{flexify()}} and
 \code{\link[=flex_event_instruments]{flex_event_instruments()}} format them.
@@ -48,6 +51,11 @@ Validation failures inherit from \code{redcapmissing_error} and use subclasses f
 argument, schema, project, schedule, plan, and verification failures.
 Extensions into arms with zero observed records use the
 \code{redcapmissing_warning_empty_arm_extension} warning.
+\code{\link[=build_extended_schedule]{build_extended_schedule()}} uses
+\code{redcapmissing_warning_undesignated_extension} when a valid requested
+instrument in a longitudinal project is designated to no event and therefore
+contributes no schedule row. Classic project crossings use
+\code{redcap_event_name = NA_character_} natively and do not produce this warning.
 
 Supported \code{rcon} objects inherit from \code{redcapApiConnection}, created by
 \code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, or \code{redcapOfflineConnection}, created by
@@ -56,8 +64,9 @@ Online workflows commonly use \code{\link[redcapAPI:exportRecordsTyped]{redcapAP
 API tokens outside source, logs, reports, and saved R objects.
 }
 \seealso{
-\code{\link[=plan_from_data]{plan_from_data()}}, \code{\link[=plan_explicit]{plan_explicit()}}, \code{\link[=run_plan]{run_plan()}},
-\code{\link[=get_summary]{get_summary()}}, \code{\link[=get_missing]{get_missing()}}, \code{\link[=registry]{registry()}}, \code{\link[=flexify]{flexify()}},
+\code{\link[=all_instruments]{all_instruments()}}, \code{\link[=build_extended_schedule]{build_extended_schedule()}},
+\code{\link[=plan_from_data]{plan_from_data()}}, \code{\link[=plan_explicit]{plan_explicit()}}, \code{\link[=run_plan]{run_plan()}}, \code{\link[=get_summary]{get_summary()}},
+\code{\link[=get_missing]{get_missing()}}, \code{\link[=registry]{registry()}}, \code{\link[=flexify]{flexify()}},
 \code{\link[=flex_event_instruments]{flex_event_instruments()}}, \code{\link[=flex_html]{flex_html()}},
 \code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:offlineConnection]{redcapAPI::offlineConnection()}},
 \code{\link[redcapAPI:exportRecordsTyped]{redcapAPI::exportRecordsTyped()}}

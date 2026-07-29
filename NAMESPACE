@@ -3,6 +3,8 @@
 S3method(flex_event_instruments,redcapmissing)
 S3method(print,redcapmissing_plan)
 S3method(print,redcapmissing_registry)
+export(all_instruments)
+export(build_extended_schedule)
 export(flex_event_instruments)
 export(flex_html)
 export(flexify)
