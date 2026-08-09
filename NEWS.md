@@ -1,5 +1,16 @@
 # redcapmissing 7.0.0
 
+## 2026-08-08
+
+- Improved `run_plan()` performance for high-cardinality plans by reusing
+  target groups, branch parsing and evaluation results, response masks, and
+  metadata lookups; limiting per-instrument branch dependencies; projecting
+  validated runtime data; and materializing field outcomes in one compact pass.
+  Paired synthetic 100-record by 600-instrument benchmarks showed lower median
+  runtime overall with no reproducible regression across core blank, shared,
+  and instrument-specific branching workloads while producing identical
+  reports.
+
 ## 2026-07-27
 
 - Standardized `assessible_targets` as the only name for the plan target table

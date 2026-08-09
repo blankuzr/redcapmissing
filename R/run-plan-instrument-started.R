@@ -29,31 +29,32 @@
 }
 
 .instrument_started_evaluate_targets <- function(
-  targets,
+  target_indices_by_instrument,
   target_row,
   upstream_pass,
-  normalized_data,
+  response_masks,
   detection_fields,
   initial_status
 ) {
   status <- initial_status
-  candidates <- which(upstream_pass & !is.na(target_row))
-  if (!length(candidates)) return(status)
+  candidate <- !is.na(upstream_pass) & upstream_pass & !is.na(target_row)
+  if (!any(candidate)) return(status)
 
   for (instrument in names(detection_fields)) {
-    target_index <- candidates[targets$instrument[candidates] == instrument]
+    target_index <- target_indices_by_instrument[[instrument]]
+    target_index <- target_index[candidate[target_index]]
     if (!length(target_index)) next
 
     data_index <- target_row[target_index]
     started <- rep.int(FALSE, length(target_index))
     for (field in detection_fields[[instrument]]) {
-      value <- normalized_data[[field]][data_index]
       present <- if (grepl("___", field, fixed = TRUE)) {
-        .branching_logic_detect_selected_checkbox(value)
+        .run_plan_response_masks_selected(response_masks, field)[data_index]
       } else {
-        !.field_complete_detect_missing_values(value)
+        .run_plan_response_masks_present(response_masks, field)[data_index]
       }
       started <- started | present
+      if (all(started)) break
     }
     status[target_index] <- ifelse(started, "passed", "failed")
   }

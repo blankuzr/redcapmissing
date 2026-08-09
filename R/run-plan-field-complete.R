@@ -82,14 +82,14 @@
 }
 
 .field_complete_evaluate_checkbox <- function(
-  records,
-  row_index,
+  response_masks,
+  source_rows,
   fields,
   include_summary
 ) {
-  n <- length(row_index)
+  n <- length(source_rows)
   selected <- vapply(fields, function(field) {
-    .branching_logic_detect_selected_checkbox(records[[field]][row_index])
+    .run_plan_response_masks_selected(response_masks, field)[source_rows]
   }, logical(n))
   if (is.null(dim(selected))) {
     selected <- matrix(selected, nrow = n, ncol = length(fields))
@@ -114,31 +114,51 @@
 }
 
 .field_complete_assess_targets <- function(
-  targets,
+  target_indices_by_instrument,
   target_row,
   instrument_status,
   normalized_data,
+  response_masks,
   metadata,
   field_plan,
   field_dictionary,
-  branch_fields,
-  instruments,
+  branch_fields_by_instrument,
   retain_passed_fields
 ) {
-  target_n <- nrow(targets)
+  target_n <- length(instrument_status)
   field_status <- rep.int("not reached", target_n)
   fields_assessed <- integer(target_n)
   fields_failed <- integer(target_n)
   field_reason <- rep.int(NA_character_, target_n)
-  pieces <- list()
+  retain_details <- isTRUE(retain_passed_fields)
+  piece_capacity <- sum(vapply(field_plan$rows, nrow, integer(1)))
+  target_row_chunks <- vector("list", piece_capacity)
+  value_summary_chunks <- if (retain_details) {
+    vector("list", piece_capacity)
+  } else {
+    NULL
+  }
+  passed_chunks <- if (retain_details) {
+    vector("list", piece_capacity)
+  } else {
+    NULL
+  }
+  piece_size <- integer(piece_capacity)
+  piece_field_order <- integer(piece_capacity)
+  piece_field_name <- character(piece_capacity)
+  piece_field_label <- character(piece_capacity)
+  piece_field_type <- character(piece_capacity)
+  piece_branching_logic <- character(piece_capacity)
   piece_n <- 0L
   compiled_branches <- new.env(hash = TRUE, parent = emptyenv())
   project <- list(id_col = ".rcm_record_id", system_fields = .record_list_system_fields())
+  system_fields <- unname(unlist(project$system_fields, use.names = FALSE))
 
-  for (instrument in instruments) {
-    active_targets <- which(
-      targets$instrument == instrument & instrument_status == "passed"
-    )
+  for (instrument in names(target_indices_by_instrument)) {
+    instrument_targets <- target_indices_by_instrument[[instrument]]
+    active_targets <- instrument_targets[
+      instrument_status[instrument_targets] %in% "passed"
+    ]
     if (!length(active_targets)) next
 
     instrument_fields <- field_plan$rows[[instrument]]
@@ -155,24 +175,46 @@
         "schema"
       )
     }
-    needed_columns <- unique(c(
-      ".rcm_record_id",
-      unname(unlist(project$system_fields, use.names = FALSE)),
-      branch_fields,
-      unlist(instrument_fields$export_fields, use.names = FALSE)
-    ))
-    records <- normalized_data[source_rows, needed_columns, drop = FALSE]
-    branch_cache <- .branching_logic_build_cache(
-      records = records,
-      lookup_records = normalized_data,
-      project = project
-    )
+    records <- NULL
+    branch_cache <- NULL
+    evaluated_branch_masks <- NULL
 
     for (field_index in seq_len(nrow(instrument_fields))) {
       logic <- as.character(instrument_fields$branching_logic[[field_index]])
-      branch_satisfied <- tryCatch({
-        branch_plan <- NULL
-        if (!.schema_detect_blank_value(logic)) {
+      branch_satisfied <- if (.schema_detect_blank_value(logic)) {
+        rep.int(TRUE, length(source_rows))
+      } else if (
+        !is.null(evaluated_branch_masks) &&
+          exists(logic, envir = evaluated_branch_masks, inherits = FALSE)
+      ) {
+        get(logic, envir = evaluated_branch_masks, inherits = FALSE)
+      } else {
+        if (is.null(evaluated_branch_masks)) {
+          evaluated_branch_masks <- new.env(hash = TRUE, parent = emptyenv())
+        }
+        if (is.null(records)) {
+          record_columns <- match(
+            unique(c(
+              ".rcm_record_id",
+              system_fields,
+              branch_fields_by_instrument[[instrument]]
+            )),
+            names(normalized_data)
+          )
+          records <- normalized_data[
+            source_rows,
+            record_columns,
+            drop = FALSE
+          ]
+        }
+        if (is.null(branch_cache)) {
+          branch_cache <- .branching_logic_build_cache(
+            records = records,
+            lookup_records = normalized_data,
+            project = project
+          )
+        }
+        value <- tryCatch({
           if (!exists(logic, envir = compiled_branches, inherits = FALSE)) {
             assign(
               logic,
@@ -180,84 +222,93 @@
               envir = compiled_branches
             )
           }
-          branch_plan <- get(logic, envir = compiled_branches, inherits = FALSE)
-        }
-        .branching_logic_evaluate_rows(
-          logic = logic,
-          branch_plan = branch_plan,
-          branch_cache = branch_cache,
-          records = records,
-          lookup_records = normalized_data,
-          meta = metadata,
-          choice_map = field_dictionary$choice_map,
-          project = project
-        )
-      }, error = function(error) {
-        .condition_signal_error(
-          paste0(
-            "Could not evaluate REDCap branching logic `",
-            logic,
-            "`: ",
-            conditionMessage(error)
-          ),
-          "project"
-        )
-      })
+          .branching_logic_evaluate_rows(
+            logic = logic,
+            branch_plan = get(
+              logic,
+              envir = compiled_branches,
+              inherits = FALSE
+            ),
+            branch_cache = branch_cache,
+            records = records,
+            lookup_records = normalized_data,
+            meta = metadata,
+            choice_map = field_dictionary$choice_map,
+            project = project,
+            field_dictionary = field_dictionary
+          )
+        }, error = function(error) {
+          .condition_signal_error(
+            paste0(
+              "Could not evaluate REDCap branching logic `",
+              logic,
+              "`: ",
+              conditionMessage(error)
+            ),
+            "project"
+          )
+        })
+        assign(logic, value, envir = evaluated_branch_masks)
+        value
+      }
       applicable_rows <- which(branch_satisfied)
       if (!length(applicable_rows)) next
 
       target_index <- active_targets[applicable_rows]
+      physical_rows <- source_rows[applicable_rows]
       export_fields <- instrument_fields$export_fields[[field_index]]
       field_type <- as.character(instrument_fields$field_type[[field_index]])
+      value_summary <- NULL
       if (identical(field_type, "checkbox")) {
         outcome <- .field_complete_evaluate_checkbox(
-          records,
-          applicable_rows,
+          response_masks,
+          physical_rows,
           export_fields,
-          include_summary = retain_passed_fields
+          include_summary = retain_details
         )
         passed <- outcome$passed
         value_summary <- outcome$value_summary
       } else {
-        value <- records[[export_fields[[1L]]]][applicable_rows]
-        passed <- !.field_complete_detect_missing_values(value)
-        value_summary <- if (isTRUE(retain_passed_fields)) {
-          .schema_normalize_character_vector(value)
-        } else {
-          rep.int(NA_character_, length(value))
+        passed <- .run_plan_response_masks_present(
+          response_masks,
+          export_fields[[1L]]
+        )[physical_rows]
+        if (retain_details) {
+          value <- normalized_data[[export_fields[[1L]]]][physical_rows]
+          value_summary <- .schema_normalize_character_vector(value)
         }
       }
 
       fields_assessed[target_index] <- fields_assessed[target_index] + 1L
-      failed_targets <- target_index[!passed]
+      failed_rows <- which(!passed)
+      failed_targets <- target_index[failed_rows]
       fields_failed[failed_targets] <- fields_failed[failed_targets] + 1L
 
-      retain <- if (isTRUE(retain_passed_fields)) {
-        rep.int(TRUE, length(passed))
+      retained_rows <- if (retain_details) {
+        seq_along(passed)
       } else {
-        !passed
+        failed_rows
       }
-      if (!any(retain)) next
+      if (!length(retained_rows)) next
 
-      raw_disposition <- ifelse(passed[retain], "passed", "failed")
       piece_n <- piece_n + 1L
-      pieces[[piece_n]] <- tibble::tibble(
-        .target_row = as.integer(target_index[retain]),
-        .field_order = rep.int(as.integer(field_index), sum(retain)),
-        field_name = rep.int(
-          as.character(instrument_fields$field_name[[field_index]]), sum(retain)
-        ),
-        field_label = rep.int(
-          as.character(instrument_fields$field_label[[field_index]]), sum(retain)
-        ),
-        field_type = rep.int(field_type, sum(retain)),
-        branching_logic = rep.int(logic, sum(retain)),
-        branch_satisfied = rep.int(TRUE, sum(retain)),
-        value_summary = value_summary[retain],
-        raw_disposition = raw_disposition,
-        verification_applied = rep.int(FALSE, sum(retain)),
-        effective_disposition = raw_disposition
+      target_row_chunks[[piece_n]] <- as.integer(
+        target_index[retained_rows]
       )
+      piece_size[[piece_n]] <- length(retained_rows)
+      piece_field_order[[piece_n]] <- as.integer(field_index)
+      piece_field_name[[piece_n]] <- as.character(
+        instrument_fields$field_name[[field_index]]
+      )
+      piece_field_label[[piece_n]] <- as.character(
+        instrument_fields$field_label[[field_index]]
+      )
+      piece_field_type[[piece_n]] <- field_type
+      piece_branching_logic[[piece_n]] <- logic
+      if (retain_details) {
+        value_summary_chunks[[piece_n]] <- value_summary
+        passed_chunks[[piece_n]] <- passed
+      }
     }
 
     assessed <- fields_assessed[active_targets] > 0L
@@ -275,15 +326,73 @@
   field_rows <- if (!piece_n) {
     .field_complete_build_empty_rows()
   } else {
-    dplyr::bind_rows(pieces)
-  }
-  if (nrow(field_rows)) {
-    field_rows <- field_rows[
-      order(field_rows$.target_row, field_rows$.field_order, method = "radix"),
-      ,
-      drop = FALSE
-    ]
-    row.names(field_rows) <- NULL
+    piece_index <- seq_len(piece_n)
+    piece_sizes <- piece_size[piece_index]
+    target_rows <- as.integer(unlist(
+      target_row_chunks[piece_index],
+      use.names = FALSE
+    ))
+    field_orders <- rep(
+      piece_field_order[piece_index],
+      times = piece_sizes
+    )
+    field_names <- rep(
+      piece_field_name[piece_index],
+      times = piece_sizes
+    )
+    field_labels <- rep(
+      piece_field_label[piece_index],
+      times = piece_sizes
+    )
+    field_types <- rep(
+      piece_field_type[piece_index],
+      times = piece_sizes
+    )
+    branching_logic <- rep(
+      piece_branching_logic[piece_index],
+      times = piece_sizes
+    )
+    row_order <- order(target_rows, field_orders, method = "radix")
+    target_rows <- target_rows[row_order]
+    field_orders <- field_orders[row_order]
+    field_names <- field_names[row_order]
+    field_labels <- field_labels[row_order]
+    field_types <- field_types[row_order]
+    branching_logic <- branching_logic[row_order]
+    row_n <- length(target_rows)
+
+    if (retain_details) {
+      value_summary <- unlist(
+        value_summary_chunks[piece_index],
+        use.names = FALSE
+      )[row_order]
+      retained_passed <- unlist(
+        passed_chunks[piece_index],
+        use.names = FALSE
+      )[row_order]
+      raw_disposition <- ifelse(
+        retained_passed,
+        "passed",
+        "failed"
+      )
+    } else {
+      value_summary <- rep.int(NA_character_, row_n)
+      raw_disposition <- rep.int("failed", row_n)
+    }
+
+    tibble::tibble(
+      .target_row = target_rows,
+      .field_order = field_orders,
+      field_name = field_names,
+      field_label = field_labels,
+      field_type = field_types,
+      branching_logic = branching_logic,
+      branch_satisfied = rep.int(TRUE, row_n),
+      value_summary = value_summary,
+      raw_disposition = raw_disposition,
+      verification_applied = rep.int(FALSE, row_n),
+      effective_disposition = raw_disposition
+    )
   }
 
   list(

@@ -3,6 +3,7 @@
 .branching_logic_extract_references <- function(logic) {
   logic <- .schema_normalize_character_vector(logic)
   logic <- logic[!.schema_detect_blank_values(logic)]
+  logic <- unique(logic)
   if (!length(logic)) {
     return(tibble::tibble(
       logic = character(), event = character(),
@@ -10,48 +11,72 @@
     ))
   }
 
-  rows <- list()
-  for (value in logic) {
-    event_pattern <- "\\[([^\\]]+)\\]\\[([^\\]]+)\\]"
+  event_pattern <- "\\[([^\\]]+)\\]\\[([^\\]]+)\\]"
+  same_pattern <- "\\[([^\\]]+)\\]"
+  logic_chunks <- vector("list", length(logic))
+  event_chunks <- vector("list", length(logic))
+  field_chunks <- vector("list", length(logic))
+  choice_chunks <- vector("list", length(logic))
+
+  for (logic_index in seq_along(logic)) {
+    value <- logic[[logic_index]]
+    event_values <- event_fields <- event_choices <- character()
     event_matches <- gregexpr(event_pattern, value, perl = TRUE)[[1]]
     if (!identical(event_matches[[1]], -1L)) {
       refs <- regmatches(value, list(event_matches))[[1]]
-      for (ref in refs) {
-        bits <- regmatches(ref, regexec(event_pattern, ref, perl = TRUE))[[1]]
-        parsed <- .branching_logic_parse_reference(bits[[3]])
-        rows[[length(rows) + 1L]] <- tibble::tibble(
-          logic = value,
-          event = bits[[2]],
-          field = parsed$field,
-          choice = parsed$choice %||% NA_character_
-        )
-      }
+      bits <- lapply(refs, function(ref) {
+        regmatches(ref, regexec(event_pattern, ref, perl = TRUE))[[1]]
+      })
+      event_values <- vapply(bits, `[[`, character(1), 2L)
+      event_references <- vapply(bits, `[[`, character(1), 3L)
+      parsed <- lapply(event_references, .branching_logic_parse_reference)
+      event_fields <- vapply(parsed, function(ref) ref$field, character(1))
+      event_choices <- vapply(
+        parsed,
+        function(ref) ref$choice %||% NA_character_,
+        character(1)
+      )
     }
 
     same_value <- gsub(event_pattern, "", value, perl = TRUE)
-    same_pattern <- "\\[([^\\]]+)\\]"
+    same_fields <- same_choices <- character()
     same_matches <- gregexpr(same_pattern, same_value, perl = TRUE)[[1]]
     if (!identical(same_matches[[1]], -1L)) {
       refs <- regmatches(same_value, list(same_matches))[[1]]
-      for (ref in refs) {
-        parsed <- .branching_logic_parse_reference(gsub("^\\[|\\]$", "", ref))
-        rows[[length(rows) + 1L]] <- tibble::tibble(
-          logic = value,
-          event = NA_character_,
-          field = parsed$field,
-          choice = parsed$choice %||% NA_character_
-        )
-      }
+      same_references <- gsub("^\\[|\\]$", "", refs)
+      parsed <- lapply(same_references, .branching_logic_parse_reference)
+      same_fields <- vapply(parsed, function(ref) ref$field, character(1))
+      same_choices <- vapply(
+        parsed,
+        function(ref) ref$choice %||% NA_character_,
+        character(1)
+      )
     }
+
+    reference_n <- length(event_fields) + length(same_fields)
+    logic_chunks[[logic_index]] <- rep.int(value, reference_n)
+    event_chunks[[logic_index]] <- c(
+      event_values,
+      rep.int(NA_character_, length(same_fields))
+    )
+    field_chunks[[logic_index]] <- c(event_fields, same_fields)
+    choice_chunks[[logic_index]] <- c(event_choices, same_choices)
   }
 
-  if (!length(rows)) {
+  if (!sum(lengths(logic_chunks))) {
     return(tibble::tibble(
       logic = character(), event = character(),
       field = character(), choice = character()
     ))
   }
-  unique(dplyr::bind_rows(rows))
+
+  references <- tibble::tibble(
+    logic = unlist(logic_chunks, use.names = FALSE),
+    event = unlist(event_chunks, use.names = FALSE),
+    field = unlist(field_chunks, use.names = FALSE),
+    choice = unlist(choice_chunks, use.names = FALSE)
+  )
+  unique(references)
 }
 
 .branching_logic_evaluate_rows <- function(
@@ -62,7 +87,8 @@
   lookup_records,
   meta,
   choice_map,
-  project
+  project,
+  field_dictionary = NULL
 ) {
   if (.schema_detect_blank_value(logic)) {
     return(rep(TRUE, nrow(records)))
@@ -82,7 +108,8 @@
       meta = meta,
       choice_map = choice_map,
       project = project,
-      branch_cache = branch_cache
+      branch_cache = branch_cache,
+      field_dictionary = field_dictionary
     )
   }
   env$contains <- function(x, pattern) {
@@ -201,6 +228,31 @@
   list(field = bits[[2]], choice = choice)
 }
 
+.branching_logic_resolve_field_entry <- function(field_dictionary, field) {
+  if (is.null(field_dictionary) ||
+      !is.environment(field_dictionary$field_entries)) {
+    return(NULL)
+  }
+  field <- as.character(field)
+  if (length(field) != 1L || is.na(field) || !nzchar(field)) {
+    return(NULL)
+  }
+  field_entry <- get0(
+    field,
+    envir = field_dictionary$field_entries,
+    inherits = FALSE,
+    ifnotfound = NULL
+  )
+  required_names <- c(
+    "export_fields", "field_type", "numeric_field", "choices"
+  )
+  if (!is.list(field_entry) ||
+      !all(required_names %in% names(field_entry))) {
+    return(NULL)
+  }
+  field_entry
+}
+
 .branching_logic_resolve_value <- function(
   records,
   lookup_records,
@@ -210,17 +262,31 @@
   meta,
   choice_map,
   project,
-  branch_cache = NULL
+  branch_cache = NULL,
+  field_dictionary = NULL
 ) {
-  field_type <- .branching_logic_resolve_field_type(meta = meta, field = field)
+  field_entry <- .branching_logic_resolve_field_entry(
+    field_dictionary = field_dictionary,
+    field = field
+  )
+  field_type <- .branching_logic_resolve_field_type(
+    meta = meta,
+    field = field,
+    field_dictionary = field_dictionary,
+    field_entry = field_entry
+  )
 
   if (!is.null(choice) || identical(field_type, "checkbox")) {
     if (is.null(choice)) {
-      child_fields <- .metadata_expand_field_names(meta[
-        meta$field_name == field,
-        ,
-        drop = FALSE
-      ])$export_field_name
+      child_fields <- if (!is.null(field_entry)) {
+        unname(as.character(field_entry$export_fields))
+      } else {
+        .metadata_expand_field_names(meta[
+          meta$field_name == field,
+          ,
+          drop = FALSE
+        ])$export_field_name
+      }
       selected <- vapply(
         child_fields,
         function(child) {
@@ -265,7 +331,9 @@
     value = raw,
     field = field,
     meta = meta,
-    choice_map = choice_map
+    choice_map = choice_map,
+    field_dictionary = field_dictionary,
+    field_entry = field_entry
   )
 }
 
@@ -469,19 +537,39 @@
   result
 }
 
-.branching_logic_normalize_value <- function(value, field, meta, choice_map) {
+.branching_logic_normalize_value <- function(
+  value,
+  field,
+  meta,
+  choice_map,
+  field_dictionary = NULL,
+  field_entry = NULL
+) {
   value <- .schema_normalize_character_vector(value)
   blank <- .schema_detect_blank_values(value)
 
-  if (!all(c("field_name", "code", "label") %in% names(choice_map))) {
-    choice_map <- tibble::tibble(
-      field_name = character(),
-      code = character(),
-      label = character()
+  if (missing(field_entry)) {
+    field_entry <- .branching_logic_resolve_field_entry(
+      field_dictionary = field_dictionary,
+      field = field
     )
   }
+  choices <- NULL
+  if (!is.null(field_entry)) {
+    choices <- field_entry$choices
+  }
+  if (is.null(choices) ||
+      !all(c("code", "label") %in% names(choices))) {
+    if (!all(c("field_name", "code", "label") %in% names(choice_map))) {
+      choice_map <- tibble::tibble(
+        field_name = character(),
+        code = character(),
+        label = character()
+      )
+    }
+    choices <- choice_map[choice_map$field_name == field, , drop = FALSE]
+  }
 
-  choices <- choice_map[choice_map$field_name == field, , drop = FALSE]
   if (nrow(choices) > 0) {
     code_match <- match(value, choices$code)
     label_match <- match(value, choices$label)
@@ -492,7 +580,12 @@
     return(out)
   }
 
-  if (.branching_logic_detect_numeric_field(meta = meta, field = field)) {
+  if (.branching_logic_detect_numeric_field(
+    meta = meta,
+    field = field,
+    field_dictionary = field_dictionary,
+    field_entry = field_entry
+  )) {
     out <- suppressWarnings(as.numeric(value))
     out[blank] <- NA_real_
     return(out)
@@ -502,7 +595,22 @@
   value
 }
 
-.branching_logic_detect_numeric_field <- function(meta, field) {
+.branching_logic_detect_numeric_field <- function(
+  meta,
+  field,
+  field_dictionary = NULL,
+  field_entry = NULL
+) {
+  if (missing(field_entry)) {
+    field_entry <- .branching_logic_resolve_field_entry(
+      field_dictionary = field_dictionary,
+      field = field
+    )
+  }
+  if (!is.null(field_entry)) {
+    return(isTRUE(field_entry$numeric_field))
+  }
+
   idx <- which(meta$field_name == field)
   if (length(idx) == 0) {
     return(FALSE)
@@ -520,7 +628,24 @@
     field_type %in% c("calc")
 }
 
-.branching_logic_resolve_field_type <- function(meta, field) {
+.branching_logic_resolve_field_type <- function(
+  meta,
+  field,
+  field_dictionary = NULL,
+  field_entry = NULL
+) {
+  if (missing(field_entry)) {
+    field_entry <- .branching_logic_resolve_field_entry(
+      field_dictionary = field_dictionary,
+      field = field
+    )
+  }
+  if (!is.null(field_entry)) {
+    return(.schema_normalize_character_scalar(
+      field_entry$field_type
+    ))
+  }
+
   idx <- which(meta$field_name == field)
   if (length(idx) == 0) {
     return(NA_character_)

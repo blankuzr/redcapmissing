@@ -335,6 +335,11 @@ run_plan <- function(
   plan <- .plan_validate_object(plan, snapshot = snapshot)
   targets <- tibble::as_tibble(plan$assessible_targets)
   target_instruments <- unique(targets$instrument)
+  target_indices_by_instrument <- split(
+    seq_len(nrow(targets)),
+    factor(targets$instrument, levels = target_instruments),
+    drop = FALSE
+  )
   normalized_data <- .record_normalize_export(data, snapshot, require_nonempty = FALSE,
                                          response_columns = NULL)
   if (is.list(normalized_data) && "data" %in% names(normalized_data)) {
@@ -357,8 +362,13 @@ run_plan <- function(
     id_field,
     field_dictionary = field_dictionary
   )
-  .run_plan_require_response_columns(normalized_data,
-    unlist(detection$export_fields, use.names = FALSE), "instrument start detection")
+  detection_export_fields <- unique(unlist(
+    detection$export_fields,
+    use.names = FALSE
+  ))
+  .run_plan_require_response_columns(
+    normalized_data, detection_export_fields, "instrument start detection"
+  )
   complete_stage(started)
 
   started <- Sys.time()
@@ -371,15 +381,39 @@ run_plan <- function(
     strict_exclude_types = !exclude_types_was_missing,
     field_dictionary = field_dictionary
   )
-  .run_plan_require_response_columns(normalized_data,
-    unlist(field_plan$export_fields, use.names = FALSE), "field-complete assessment")
-  branch_fields <- .run_plan_resolve_branch_fields(
+  selected_export_fields <- unique(unlist(
+    field_plan$export_fields,
+    use.names = FALSE
+  ))
+  .run_plan_require_response_columns(
+    normalized_data, selected_export_fields, "field-complete assessment"
+  )
+  branch_references <- .branching_logic_extract_references(
+    field_plan$branching_logic
+  )
+  branch_dependencies <- .run_plan_build_branch_dependencies(
     metadata,
-    field_plan$branching_logic,
+    field_plan$rows,
+    references = branch_references,
     field_dictionary = field_dictionary
   )
-  .run_plan_require_response_columns(normalized_data, branch_fields,
-                                    "branching logic evaluation")
+  .run_plan_require_response_columns(
+    normalized_data,
+    branch_dependencies$global_export_fields,
+    "branching logic evaluation"
+  )
+  structural_fields <- c(
+    ".rcm_record_id",
+    unname(unlist(.record_list_system_fields(), use.names = FALSE))
+  )
+  runtime_fields <- unique(c(
+    structural_fields,
+    detection_export_fields,
+    selected_export_fields,
+    branch_dependencies$global_export_fields
+  ))
+  normalized_data <- normalized_data[, runtime_fields, drop = FALSE]
+  response_masks <- .run_plan_response_masks_build(normalized_data)
   complete_stage(started)
 
   started <- Sys.time()
@@ -415,10 +449,10 @@ run_plan <- function(
     !joins$target_present
   instrument_status[missing_target_without_repeat] <- "failed"
   instrument_status <- .instrument_started_evaluate_targets(
-    targets = targets,
+    target_indices_by_instrument = target_indices_by_instrument,
     target_row = joins$target_row,
     upstream_pass = upstream_pass,
-    normalized_data = normalized_data,
+    response_masks = response_masks,
     detection_fields = detection$export_fields,
     initial_status = instrument_status
   )
@@ -426,15 +460,16 @@ run_plan <- function(
 
   started <- Sys.time()
   assessment <- .field_complete_assess_targets(
-    targets = targets,
+    target_indices_by_instrument = target_indices_by_instrument,
     target_row = joins$target_row,
     instrument_status = instrument_status,
     normalized_data = normalized_data,
+    response_masks = response_masks,
     metadata = metadata,
     field_plan = field_plan,
     field_dictionary = field_dictionary,
-    branch_fields = branch_fields,
-    instruments = target_instruments,
+    branch_fields_by_instrument =
+      branch_dependencies$export_fields_by_instrument,
     retain_passed_fields = isTRUE(details)
   )
   field_status <- assessment$field_status
@@ -446,26 +481,31 @@ run_plan <- function(
 
   started <- Sys.time()
   overrides <- 0L
-  if (nrow(field_rows)) {
+  if (nrow(field_rows) && nrow(verification$contexts)) {
     apply <- .verification_match_fields(
       field_rows,
       targets,
       verification$contexts
     )
-    field_rows$verification_applied <- apply
-    field_rows$effective_disposition <- field_rows$raw_disposition
-    field_rows$effective_disposition[apply] <- "passed"
-    overrides <- sum(apply)
-    fields_failed <- tabulate(
-      field_rows$.target_row[field_rows$effective_disposition == "failed"],
-      nbins = nrow(targets)
-    )
-    assessed_targets <- fields_assessed > 0L
-    field_status[assessed_targets] <- ifelse(
-      fields_failed[assessed_targets] > 0L,
-      "failed",
-      "passed"
-    )
+    if (any(apply)) {
+      field_rows$verification_applied[apply] <- TRUE
+      field_rows$effective_disposition[apply] <- "passed"
+      overrides <- sum(apply)
+
+      overridden_targets <- field_rows$.target_row[apply]
+      affected_targets <- unique(overridden_targets)
+      overridden_counts <- tabulate(
+        match(overridden_targets, affected_targets),
+        nbins = length(affected_targets)
+      )
+      fields_failed[affected_targets] <-
+        fields_failed[affected_targets] - overridden_counts
+      field_status[affected_targets] <- ifelse(
+        fields_failed[affected_targets] > 0L,
+        "failed",
+        "passed"
+      )
+    }
   }
   verification$audit$overrides_applied <- as.integer(overrides)
   complete_stage(started)
@@ -555,20 +595,101 @@ run_plan <- function(
   invisible(data)
 }
 
-.run_plan_resolve_branch_fields <- function(
+.run_plan_build_branch_dependencies <- function(
   metadata,
-  logic,
+  field_rows,
+  references,
   field_dictionary = NULL
 ) {
-  field_dictionary <- field_dictionary %||% .metadata_build_field_dictionary(metadata)
-  refs <- .branching_logic_extract_references(logic)
-  if (!nrow(refs)) return(character())
-  unknown <- setdiff(refs$field, as.character(metadata$field_name))
+  field_dictionary <- field_dictionary %||%
+    .metadata_build_field_dictionary(metadata)
+  empty_by_instrument <- lapply(field_rows, function(...) character())
+  if (!nrow(references)) {
+    return(list(
+      global_export_fields = character(),
+      export_fields_by_instrument = empty_by_instrument
+    ))
+  }
+
+  roots <- unique(as.character(references$field))
+  unknown <- setdiff(roots, as.character(metadata$field_name))
   if (length(unknown)) {
     .condition_signal_error(paste0("Branching logic references unknown field(s): ",
       paste(unknown, collapse = ", "), "."), "project")
   }
-  unique(unlist(.run_plan_resolve_export_fields(
-    metadata, unique(refs$field), field_dictionary = field_dictionary
-  ), use.names = FALSE))
+  .metadata_populate_field_dictionary_entries(
+    field_dictionary,
+    metadata,
+    roots
+  )
+  export_fields_by_root <- .run_plan_resolve_export_fields(
+    metadata,
+    roots,
+    field_dictionary = field_dictionary
+  )
+  reference_root_index <- match(as.character(references$field), roots)
+  reference_logic <- unique(as.character(references$logic))
+  reference_logic_index <- match(
+    as.character(references$logic),
+    reference_logic
+  )
+  root_index_by_logic <- unname(split(
+    reference_root_index,
+    factor(
+      reference_logic_index,
+      levels = seq_along(reference_logic)
+    ),
+    drop = FALSE
+  ))
+  export_fields_by_logic <- lapply(root_index_by_logic, function(root_index) {
+    unique(unlist(
+      export_fields_by_root[unique(root_index)],
+      use.names = FALSE
+    ))
+  })
+  logic_index_by_value <- list2env(
+    stats::setNames(as.list(seq_along(reference_logic)), reference_logic),
+    hash = TRUE,
+    parent = emptyenv()
+  )
+  export_fields_by_instrument <- lapply(field_rows, function(instrument_fields) {
+    logic <- .schema_normalize_character_vector(
+      instrument_fields$branching_logic
+    )
+    logic <- unique(logic[!.schema_detect_blank_values(logic)])
+    if (!length(logic)) return(character())
+
+    known_logic <- vapply(
+      logic,
+      exists,
+      logical(1),
+      envir = logic_index_by_value,
+      inherits = FALSE
+    )
+    if (!any(known_logic)) return(character())
+    instrument_logic_index <- as.integer(unlist(
+      mget(
+        logic[known_logic],
+        envir = logic_index_by_value,
+        inherits = FALSE
+      ),
+      use.names = FALSE
+    ))
+    instrument_logic_index <- sort(
+      unique(instrument_logic_index),
+      method = "radix"
+    )
+    unique(unlist(
+      export_fields_by_logic[instrument_logic_index],
+      use.names = FALSE
+    ))
+  })
+
+  list(
+    global_export_fields = unique(unlist(
+      export_fields_by_root,
+      use.names = FALSE
+    )),
+    export_fields_by_instrument = export_fields_by_instrument
+  )
 }
