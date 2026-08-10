@@ -164,8 +164,75 @@
     drop = FALSE
   )
 
+  choice_map <- .metadata_build_choice_map(metadata)
+  field_entries <- new.env(
+    hash = TRUE,
+    parent = emptyenv()
+  )
+
   list(
     export_fields = export_fields,
-    choice_map = .metadata_build_choice_map(metadata)
+    choice_map = choice_map,
+    field_entries = field_entries
   )
+}
+
+.metadata_populate_field_dictionary_entries <- function(
+  field_dictionary,
+  metadata,
+  fields
+) {
+  if (is.null(field_dictionary) ||
+      !is.environment(field_dictionary$field_entries)) {
+    return(invisible(field_dictionary))
+  }
+
+  fields <- unique(as.character(fields))
+  fields <- fields[!is.na(fields) & nzchar(fields)]
+  if (!length(fields)) return(invisible(field_dictionary))
+
+  field_indices <- match(fields, as.character(metadata$field_name))
+  known <- !is.na(field_indices)
+  fields <- fields[known]
+  field_indices <- field_indices[known]
+  if (!length(fields)) return(invisible(field_dictionary))
+
+  field_type <- .schema_normalize_character_vector(
+    metadata$field_type[field_indices]
+  )
+  validation <- if (
+    "text_validation_type_or_show_slider_number" %in% names(metadata)
+  ) {
+    .schema_normalize_character_vector(
+      metadata$text_validation_type_or_show_slider_number[field_indices]
+    )
+  } else {
+    rep.int("", length(fields))
+  }
+  numeric_field <-
+    validation %in% c("number", "integer", "float", "int") |
+    field_type %in% "calc"
+
+  choice_map <- field_dictionary$choice_map
+  choice_rows <- choice_map$field_name %in% fields
+  choices_by_field <- split(
+    choice_map[choice_rows, c("code", "label"), drop = FALSE],
+    factor(choice_map$field_name[choice_rows], levels = fields),
+    drop = FALSE
+  )
+  export_fields <- unname(field_dictionary$export_fields[fields])
+
+  for (field_index in seq_along(fields)) {
+    assign(
+      fields[[field_index]],
+      list(
+        export_fields = unname(as.character(export_fields[[field_index]])),
+        field_type = field_type[[field_index]],
+        numeric_field = isTRUE(numeric_field[[field_index]]),
+        choices = choices_by_field[[field_index]]
+      ),
+      envir = field_dictionary$field_entries
+    )
+  }
+  invisible(field_dictionary)
 }

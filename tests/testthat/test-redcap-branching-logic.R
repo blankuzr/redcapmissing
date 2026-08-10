@@ -1,3 +1,46 @@
+test_that("branch reference extraction preserves schema and first-seen order", {
+  local_logic <- "[branch_flag] = '1'"
+  mixed_logic <- paste0(
+    "[local_first] = '1' and ",
+    "[baseline_arm_1][trigger] = '1' and ",
+    "[checkbox_field(2)] = '1'"
+  )
+  duplicate_reference_logic <-
+    "[branch_flag] = '1' or [branch_flag] = '0'"
+
+  references <- .branching_logic_extract_references(c(
+    NA_character_, "", "  ", local_logic, local_logic,
+    "1 = 1", mixed_logic, mixed_logic, duplicate_reference_logic
+  ))
+
+  expect_identical(
+    references,
+    tibble::tibble(
+      logic = c(
+        local_logic,
+        rep.int(mixed_logic, 3L),
+        duplicate_reference_logic
+      ),
+      event = c(
+        NA_character_, "baseline_arm_1",
+        NA_character_, NA_character_, NA_character_
+      ),
+      field = c(
+        "branch_flag", "trigger", "local_first",
+        "checkbox_field", "branch_flag"
+      ),
+      choice = c(
+        NA_character_, NA_character_, NA_character_, "2", NA_character_
+      )
+    )
+  )
+
+  expect_error(
+    .branching_logic_extract_references("[broken(] = '1'"),
+    "Could not parse REDCap field reference"
+  )
+})
+
 test_that("fields closed by branching report not applicable", {
   rcon <- run_plan_rcon()
   data <- run_plan_data(branch_flag = "0", start_marker = "started")
@@ -319,8 +362,40 @@ test_that("ambiguous unqualified repeated sources fail closed", {
   )
 })
 
+test_that("physical row order does not change repeated branch results", {
+  fixture <- run_plan_repeated_source_fixture()
+  followup_row <- fixture$data$redcap_event_name == "followup_arm_1" &
+    is.na(fixture$data$redcap_repeat_instance)
+  fixture$data$conditional <- "decoy"
+  fixture$data$conditional[followup_row] <- ""
+  plan <- plan_from_data(fixture$data, fixture$rcon, "followup")
+
+  reference <- run_plan(
+    plan,
+    fixture$data,
+    fixture$rcon,
+    details = TRUE,
+    progress = FALSE
+  )
+  permuted <- run_plan(
+    plan,
+    fixture$data[rev(seq_len(nrow(fixture$data))), , drop = FALSE],
+    fixture$rcon,
+    details = TRUE,
+    progress = FALSE
+  )
+  remove_elapsed <- function(report) {
+    report$diagnostics$elapsed_seconds[] <- 0
+    report
+  }
+
+  expect_identical(reference$target_results$field_complete, "failed")
+  expect_identical(remove_elapsed(permuted), remove_elapsed(reference))
+})
+
 test_that("shared branching plans preserve vectorized results and row order", {
   rcon <- run_plan_rcon()
+
   record_n <- 80L
   data <- run_plan_data()[rep.int(1L, record_n), , drop = FALSE]
   data$record_id <- sprintf("%03d", seq_len(record_n))
@@ -346,4 +421,52 @@ test_that("shared branching plans preserve vectorized results and row order", {
   ]
   detail_record_order <- match(field_details$record_id, data$record_id)
   expect_false(is.unsorted(detail_record_order))
+})
+
+test_that("identical logic reuses one successful mask within an instrument", {
+  metadata <- dplyr::bind_rows(
+    run_plan_metadata(),
+    meta_row(
+      "conditional_note_copy",
+      "baseline_form",
+      branching = "[branch_flag] = '1'",
+      required = "y"
+    )
+  )
+  rcon <- run_plan_rcon()
+  rcon$metadata <- function() metadata
+  data <- run_plan_data(branch_flag = "1")
+  data$conditional_note_copy <- ""
+  plan <- plan_from_data(data, rcon, "baseline_form")
+
+  original_evaluate <- .branching_logic_evaluate_rows
+  evaluation_count <- 0L
+  testthat::local_mocked_bindings(
+    .branching_logic_evaluate_rows = function(...) {
+      evaluation_count <<- evaluation_count + 1L
+      original_evaluate(...)
+    },
+    .package = "redcapmissing"
+  )
+  result <- run_plan(
+    plan,
+    data,
+    rcon,
+    details = TRUE,
+    progress = FALSE
+  )
+
+  shared_fields <- result$details[
+    result$details$validation_check == "field-complete" &
+      result$details$field_name %in%
+        c("conditional_note", "conditional_note_copy"),
+    ,
+    drop = FALSE
+  ]
+  expect_identical(evaluation_count, 1L)
+  expect_identical(
+    shared_fields$field_name,
+    c("conditional_note", "conditional_note_copy")
+  )
+  expect_true(all(shared_fields$branch_satisfied))
 })

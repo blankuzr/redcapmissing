@@ -75,7 +75,7 @@ Keep a fixture local when only one test file calls it. Each helper must return a
 - `test-redcapapi-offline-workflow.R` exercises the public workflow against `redcapAPI::offlineConnection()` without credentials or network access.
 - Presentation tests use `skip_if_not_installed()` for optional packages and test `flextable` or HTML results only when their dependencies are installed.
 - `tools/audit-plan-run-boundary.R` verifies the PR 60 planning and assessment source boundary; it does not replace behavior tests.
-- `tools/benchmark-plan-run.R` runs synthetic workloads and checks result equivalence before reporting time or allocation evidence; it is not a unit-test timing threshold.
+- `tools/benchmark-plan-run.R` runs deterministic synthetic workloads and checks result equivalence before reporting time or allocation evidence; it is not a unit-test timing threshold. Its `high-cardinality` family defaults to the U2 (100 records, 600 instruments, 2 fields per instrument) and U10 (100, 600, 10) maintainer baselines. Opt-in scenarios cover shared and per-instrument branching, first/last/absent instrument-start responses, failure density, compact versus detailed reports, disabled/empty/sparse/dense verification, dependency width, unrelated data width, and progress. Timed expressions never run under `Rprofmem()`; requested allocation profiles are separate executions.
 
 ## Commands
 
@@ -102,6 +102,22 @@ Run the `branching` and `detail-allocation` benchmark workloads:
 ```sh
 Rscript -e "Sys.setenv(REDCAPMISSING_BENCH_TIER = 'branching,detail-allocation'); source('tools/benchmark-plan-run.R')"
 ```
+
+Run the Phase 1 high-cardinality U2 and U10 baselines:
+
+```sh
+Rscript -e "Sys.setenv(REDCAPMISSING_BENCH_TIER = 'high-cardinality', REDCAPMISSING_BENCH_SCENARIO = 'U2,U10'); source('tools/benchmark-plan-run.R')"
+```
+
+Use `REDCAPMISSING_BENCH_SCENARIO=all` to run every high-cardinality control, or supply a comma-separated subset from the scenario names printed by an invalid selection. Counts and iteration controls remain available through the documented `REDCAPMISSING_BENCH_*` variables.
+
+Raw iteration rows, raw stage rows, summaries, exact sanitized reports and hashes, the Git commit, and session information can be saved to an untracked RDS artifact. Keep machine-specific artifacts outside the repository, for example:
+
+```sh
+Rscript -e "dir.create('../redcapmissing-benchmarks', showWarnings = FALSE); Sys.setenv(REDCAPMISSING_BENCH_TIER = 'high-cardinality', REDCAPMISSING_BENCH_SCENARIO = 'U2,U10', REDCAPMISSING_BENCH_OUTPUT = '../redcapmissing-benchmarks/phase1-baseline.rds'); source('tools/benchmark-plan-run.R')"
+```
+
+Compare a later run with that artifact by setting `REDCAPMISSING_BENCH_BASELINE` to its path. The comparison requires the same workload descriptor and an `identical()` sanitized report after replacing only `diagnostics$elapsed_seconds` with typed zeroes; all other report values, types, classes, attributes, and ordering remain part of the comparison.
 
 Complete the built-package gate:
 

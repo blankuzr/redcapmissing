@@ -99,6 +99,7 @@
     index <- which(disposition == "failed")
     if (!length(index)) return(NULL)
     tibble::tibble(
+      .target_row = as.integer(index),
       record_id = targets$record_id[index],
       redcap_event_name = targets$redcap_event_name[index],
       repeat_instrument = targets$repeat_instrument[index],
@@ -122,27 +123,29 @@
   )
   effective_failure <- which(field_rows$effective_disposition == "failed")
   if (length(effective_failure)) {
-    public_fields <- .field_complete_build_public_rows(
-      field_rows[effective_failure, , drop = FALSE],
-      targets
-    )
+    target_index <- field_rows$.target_row[effective_failure]
     pieces[[4L]] <- tibble::tibble(
-      record_id = public_fields$record_id,
-      redcap_event_name = public_fields$redcap_event_name,
-      repeat_instrument = public_fields$repeat_instrument,
-      repeat_instance = public_fields$repeat_instance,
-      instrument = public_fields$instrument,
-      validation_check = rep.int("field-complete", nrow(public_fields)),
-      field_name = public_fields$field_name,
-      field_label = public_fields$field_label,
-      field_type = public_fields$field_type,
-      branching_logic = public_fields$branching_logic
+      .target_row = as.integer(target_index),
+      record_id = targets$record_id[target_index],
+      redcap_event_name = targets$redcap_event_name[target_index],
+      repeat_instrument = targets$repeat_instrument[target_index],
+      repeat_instance = targets$repeat_instance[target_index],
+      instrument = targets$instrument[target_index],
+      validation_check = rep.int("field-complete", length(effective_failure)),
+      field_name = field_rows$field_name[effective_failure],
+      field_label = field_rows$field_label[effective_failure],
+      field_type = field_rows$field_type[effective_failure],
+      branching_logic = field_rows$branching_logic[effective_failure]
     )
   }
 
   rows <- dplyr::bind_rows(pieces)
   if (!nrow(rows)) return(empty)
-  rows <- .missing_add_urls(rows, rcon, snapshot)
+  unique_target <- !duplicated(rows$.target_row)
+  target_urls <- .missing_add_urls(rows[unique_target, , drop = FALSE], rcon, snapshot)
+  rows$url <- target_urls$url[
+    match(rows$.target_row, target_urls$.target_row)
+  ]
   rows$validation_context <- .missing_format_validation_context(
     rows$redcap_event_name,
     rows$repeat_instance

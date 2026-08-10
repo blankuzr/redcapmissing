@@ -158,3 +158,29 @@ test_that("instrument-started requires every exported checkbox child", {
     class = "redcapmissing_error_schema"
   )
 })
+
+test_that("instrument evaluation consumes ordered target index groups", {
+  normalized_data <- tibble::tibble(
+    form_a_field = c("", "", "started", ""),
+    form_b_field = c("", "started", "", "started")
+  )
+  status <- .instrument_started_evaluate_targets(
+    target_indices_by_instrument = list(
+      form_b = c(2L, 4L),
+      form_a = c(1L, 3L)
+    ),
+    target_row = 1:4,
+    upstream_pass = c(TRUE, TRUE, TRUE, FALSE),
+    response_masks = .run_plan_response_masks_build(normalized_data),
+    detection_fields = list(
+      form_b = "form_b_field",
+      form_a = "form_a_field"
+    ),
+    initial_status = rep.int("not reached", 4L)
+  )
+
+  expect_identical(
+    status,
+    c("failed", "passed", "passed", "not reached")
+  )
+})
