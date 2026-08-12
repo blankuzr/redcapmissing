@@ -1,5 +1,10 @@
 # redcapmissing 7.0.0
 
+## 2026-08-12
+
+- Set the package startup banner's release label to `run_plan() workflow` for
+  the 7.0.0 release.
+
 ## 2026-08-08
 
 - Improved `run_plan()` performance for high-cardinality plans by reusing

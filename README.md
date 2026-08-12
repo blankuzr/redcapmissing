@@ -15,6 +15,7 @@ physical rows, instrument start, and field completeness for those
 combinations.
 
 <p align="center">
+
 <img src="man/figures/logo.svg" width="160" alt="redcapmissing hex logo" />
 </p>
 

@@ -13,7 +13,7 @@
   pkgname = "redcapmissing",
   version = .startup_get_version(pkgname)
 ) {
-  release_name <- "eye-spy"
+  release_name <- "run_plan() workflow"
   release_update <- "Improved scope reporting"
 
   message_lines <- .startup_build_banner_lines(
