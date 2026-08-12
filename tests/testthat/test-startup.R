@@ -17,17 +17,17 @@ test_that("startup message includes banner and release metadata", {
       "         \u00b7  \u00b7 \u00b7  \u00b7",
       "",
       "       redcapmissing",
-      "       v1.2.3 \u00b7 eye-spy"
+      "       v1.2.3 \u00b7 run_plan() workflow"
     )
   )
   text_tokens <- regmatches(
     message,
-    gregexpr("[[:alnum:]][[:alnum:].-]*", message, perl = TRUE)
+    gregexpr("[[:alnum:]_][[:alnum:]_.()-]*", message, perl = TRUE)
   )[[1]]
 
   expect_identical(
     text_tokens,
-    c("redcapmissing", "v1.2.3", "eye-spy")
+    c("redcapmissing", "v1.2.3", "run_plan()", "workflow")
   )
 })
 
@@ -69,7 +69,7 @@ test_that("startup message includes branch spectrum ANSI styling", {
         "         \u00b7  \u00b7 \u00b7  \u00b7",
         "",
         "       redcapmissing",
-        "       v1.2.3 \u00b7 eye-spy"
+        "       v1.2.3 \u00b7 run_plan() workflow"
       ),
       collapse = "\n"
     )
@@ -103,7 +103,7 @@ test_that("startup hook emits message when enabled", {
 
   expect_message(
     on_attach(NULL, "redcapmissing"),
-    "eye-spy"
+    "run_plan\\(\\) workflow"
   )
 })
 
