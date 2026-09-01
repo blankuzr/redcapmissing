@@ -18,7 +18,9 @@ with \code{\link[=all_instruments]{all_instruments()}}. \code{\link[=plan_from_d
 observed in the export with an optional extension, which
 \code{\link[=build_extended_schedule]{build_extended_schedule()}} can construct from project structure.
 \code{\link[=plan_explicit]{plan_explicit()}} uses an exact schedule that includes a record ID for
-every target.
+every target; \code{\link[=build_explicit_schedule]{build_explicit_schedule()}} can cross project-shaped cohort
+data with selected allowable instrument-event rows. The explicit schedule
+is also the complete instrument scope for that plan.
 \item \code{\link[=run_plan]{run_plan()}} evaluates the targets stored in the plan.
 \item \code{\link[=get_summary]{get_summary()}} and \code{\link[=get_missing]{get_missing()}} inspect results, while \code{\link[=flexify]{flexify()}} and
 \code{\link[=flex_event_instruments]{flex_event_instruments()}} format them.
@@ -64,8 +66,9 @@ Online workflows commonly use \code{\link[redcapAPI:exportRecordsTyped]{redcapAP
 API tokens outside source, logs, reports, and saved R objects.
 }
 \seealso{
-\code{\link[=all_instruments]{all_instruments()}}, \code{\link[=build_extended_schedule]{build_extended_schedule()}},
-\code{\link[=plan_from_data]{plan_from_data()}}, \code{\link[=plan_explicit]{plan_explicit()}}, \code{\link[=run_plan]{run_plan()}}, \code{\link[=get_summary]{get_summary()}},
+\code{\link[=all_instruments]{all_instruments()}}, \code{\link[=build_explicit_schedule]{build_explicit_schedule()}},
+\code{\link[=build_extended_schedule]{build_extended_schedule()}}, \code{\link[=plan_from_data]{plan_from_data()}}, \code{\link[=plan_explicit]{plan_explicit()}},
+\code{\link[=run_plan]{run_plan()}}, \code{\link[=get_summary]{get_summary()}},
 \code{\link[=get_missing]{get_missing()}}, \code{\link[=registry]{registry()}}, \code{\link[=flexify]{flexify()}},
 \code{\link[=flex_event_instruments]{flex_event_instruments()}}, \code{\link[=flex_html]{flex_html()}},
 \code{\link[redcapAPI:redcapConnection]{redcapAPI::redcapConnection()}}, \code{\link[redcapAPI:offlineConnection]{redcapAPI::offlineConnection()}},

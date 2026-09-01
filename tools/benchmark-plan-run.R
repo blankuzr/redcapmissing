@@ -752,7 +752,6 @@ benchmark_baseline_path <- Sys.getenv("REDCAPMISSING_BENCH_BASELINE", unset = ""
       operation = function() plan_explicit(
         longitudinal_data,
         rcon,
-        "diary",
         explicit
       ),
       expected_targets = explicit_count,

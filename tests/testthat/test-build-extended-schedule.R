@@ -66,6 +66,28 @@ test_that("build_extended_schedule validates arguments and returns its exact sch
   )
 })
 
+test_that("build_extended_schedule tolerates padded optional instrument labels", {
+  fixture <- .schedule_helper_connection()
+  instruments <- fixture$rcon$instruments()
+  instruments$instrument_label <- c(
+    " Baseline ", " Partial ", " Diary ",
+    " Event  form ", "   ", NA_character_
+  )
+  fixture$rcon$instruments <- function() instruments
+
+  expect_no_warning(
+    schedule <- build_extended_schedule(fixture$rcon, "baseline")
+  )
+  expect_identical(
+    schedule,
+    tibble::tibble(
+      instrument = rep("baseline", 2L),
+      redcap_event_name = c("baseline_arm_1", "baseline_arm_2"),
+      repeat_instance = rep(NA_integer_, 2L)
+    )
+  )
+})
+
 test_that("classic schedules preserve native eventless crossings", {
   rcon <- .schedule_helper_connection(longitudinal = FALSE)$rcon
 

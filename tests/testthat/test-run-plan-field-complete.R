@@ -254,7 +254,6 @@ test_that("zero-target plans reject irrelevant field policies", {
   plan <- plan_explicit(
     run_plan_data(),
     rcon,
-    "baseline_form",
     empty_schedule
   )
   data <- tibble::tibble(record_id = "1")

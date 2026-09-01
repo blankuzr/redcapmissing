@@ -4,7 +4,7 @@
 \alias{plan_explicit}
 \title{Construct an explicit REDCap assessment plan}
 \usage{
-plan_explicit(data, rcon, instruments, explicit_schedule)
+plan_explicit(data, rcon, explicit_schedule)
 }
 \arguments{
 \item{data}{A data frame exported from the REDCap project represented by
@@ -24,15 +24,12 @@ explicit empty surface represents a project with no repeats. Constructors
 inspect project structure and use caller-supplied \code{data} as their only
 physical-row source. They never export records through \code{rcon}.}
 
-\item{instruments}{A nonempty character vector of unique, nonmissing,
-nonblank, unpadded raw REDCap instrument names. Values must exist in the
-project. Their order determines target ordering.}
-
 \item{explicit_schedule}{A data frame with exactly the columns \code{record_id},
 \code{instrument}, \code{redcap_event_name}, and \code{repeat_instance}, in that order.
 An absent row means do not assess that crossing. A correctly typed empty
 schedule creates a valid plan with no \code{assessible_targets} rows. \code{NULL} and an
-omitted argument are errors.}
+omitted argument are errors. Use \code{\link[=build_explicit_schedule]{build_explicit_schedule()}} to construct
+this table from project-shaped cohort data and an explicit specification.}
 }
 \value{
 A validated \code{redcapmissing_plan} as described in \strong{Returned plan},
@@ -42,10 +39,11 @@ every target.
 \description{
 \code{plan_explicit()} assesses only the exact record, instrument, event, and
 repeat instance crossings declared by \code{explicit_schedule}, after validating
-that each crossing is allowed by \code{rcon}. A schedule row may identify a record
-absent from \code{data}; that absence is evaluated later by \code{\link[=run_plan]{run_plan()}}.
-Caller-supplied \code{data} is the only physical-row source, and the constructor
-never exports records through \code{rcon}.
+that each crossing is allowed by \code{rcon}. The schedule is the complete source
+of instrument scope; no separate instrument vector is supplied. A schedule
+row may identify a record absent from \code{data}; that absence is evaluated later
+by \code{\link[=run_plan]{run_plan()}}. Caller-supplied \code{data} is the only physical-row source, and
+the constructor never exports records through \code{rcon}.
 }
 \section{\code{assessible_targets} rule}{
 
@@ -58,10 +56,12 @@ never exports records through \code{rcon}.
 }\if{html}{\out{</div>}}
 
 Every schedule row identifies exactly one target. Scheduled rows are the
-complete target set; a selected instrument with no schedule rows has no
-targets. A record ID absent from \code{data} is allowed, and \code{\link[=run_plan]{run_plan()}} applies
-its checks according to the target context. An observed record may be
-scheduled only within its observed arm.
+complete target set. \code{plan$instruments} is derived as the unique normalized
+schedule instruments in first-appearance order. A correctly typed zero-row
+schedule therefore produces \code{plan$instruments = character()} and no targets.
+A record ID absent from \code{data} is allowed, and \code{\link[=run_plan]{run_plan()}} applies its checks
+according to the target context. An observed record may be scheduled only
+within its observed arm.
 }
 
 \section{Explicit schedule schema}{
@@ -69,7 +69,7 @@ scheduled only within its observed arm.
 The function accepts only these column names, order, and storage:\tabular{lll}{
    Column \tab Accepted storage and values \tab Normalized storage \cr
    \code{record_id} \tab Character, factor, integer, or finite double; nonmissing, nonblank, and unpadded \tab Character; character leading zeros preserved \cr
-   \code{instrument} \tab Character or factor; one selected raw instrument name per row; no missing, blank, padded, or unknown values \tab Character \cr
+   \code{instrument} \tab Character or factor; one project raw instrument name per row; no missing, blank, padded, or unknown values \tab Character \cr
    \code{redcap_event_name} \tab Character or factor raw event names in longitudinal projects; character/factor blanks or typed missing values only in classic projects \tab Character; \code{NA_character_} in classic projects \cr
    \code{repeat_instance} \tab Positive integer, whole number double, or digit string without leading zeros when the scheduled event or instrument repeats; typed missing or blank only when neither repeats \tab Integer; \code{NA_integer_} when neither the scheduled event nor instrument repeats \cr
 }
@@ -88,8 +88,8 @@ Validation failures inherit from \code{redcapmissing_error}, with the more
 specific classes \code{redcapmissing_error_argument},
 \code{redcapmissing_error_schema}, \code{redcapmissing_error_project},
 \code{redcapmissing_error_schedule}, or \code{redcapmissing_error_plan} as applicable.
-Omitting a selected instrument from \code{explicit_schedule} is not a warning:
-explicit rows are the complete requested target set.
+Instruments absent from \code{explicit_schedule} are outside the explicit plan's
+scope. Explicit rows are the complete requested target set.
 }
 
 \section{Returned plan}{
@@ -98,7 +98,7 @@ The returned object has class \code{redcapmissing_plan} and these components:\ta
    Component \tab Storage and meaning \cr
    \code{schema_version} \tab Integer scalar \code{1L} \cr
    \code{construction} \tab Character scalar \code{"from_data"} or \code{"explicit"} \cr
-   \code{instruments} \tab Character vector of selected raw instrument names in target order \cr
+   \code{instruments} \tab Character vector of raw instrument names in target order. \code{plan_from_data()} stores its selected instruments. \code{plan_explicit()} derives unique instruments from the normalized schedule in first-appearance order and stores \code{character()} for a zero-target plan. \cr
    \code{assessible_targets} \tab Tibble described below \cr
    \code{project} \tab Named project identity and label list described below \cr
    \code{structure_fingerprint} \tab One lowercase SHA-256 value containing 64 characters \cr
@@ -111,7 +111,7 @@ The returned object has class \code{redcapmissing_plan} and these components:\ta
 \code{assessible_targets} has exactly these columns:\tabular{lll}{
    Column \tab Storage \tab Meaning \cr
    \code{record_id} \tab Character \tab Normalized project record ID \cr
-   \code{instrument} \tab Character \tab Selected raw REDCap instrument name \cr
+   \code{instrument} \tab Character \tab Raw REDCap instrument name in plan scope \cr
    \code{redcap_event_name} \tab Character \tab Raw event name, or \code{NA_character_} in a classic project \cr
    \code{repeat_instrument} \tab Character \tab Raw instrument for repeating instrument targets; otherwise \code{NA_character_} \cr
    \code{repeat_instance} \tab Integer \tab Exact positive repeat instance; otherwise \code{NA_integer_} \cr
@@ -120,7 +120,7 @@ The returned object has class \code{redcapmissing_plan} and these components:\ta
 
 
 Targets are unique on the first five columns and deterministically ordered by
-selected instrument order, REDCap event order, record ID, repeat kind, and
+stored instrument order, REDCap event order, record ID, repeat kind, and
 instance.
 
 \code{project} is a named list with exactly these fields:\tabular{ll}{
@@ -142,13 +142,14 @@ connection.
 
 \examples{
 \dontrun{
-# records, rcon, instruments, and explicit_schedule are caller supplied.
+# records, rcon, and explicit_schedule are caller supplied.
 explicit_plan <- plan_explicit(
-  records, rcon, instruments, explicit_schedule
+  records, rcon, explicit_schedule
 )
 }
 
 }
 \seealso{
-\code{\link[=all_instruments]{all_instruments()}}, \code{\link[=plan_from_data]{plan_from_data()}}, \code{\link[=run_plan]{run_plan()}}
+\code{\link[=all_instruments]{all_instruments()}}, \code{\link[=build_explicit_schedule]{build_explicit_schedule()}},
+\code{\link[=plan_from_data]{plan_from_data()}}, \code{\link[=run_plan]{run_plan()}}
 }

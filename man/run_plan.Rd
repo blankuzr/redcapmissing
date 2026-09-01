@@ -19,7 +19,7 @@ run_plan(
 }
 \arguments{
 \item{plan}{A validated \code{redcapmissing_plan}. Its project ID, schema version,
-structure fingerprint, selected instruments, target schema, target
+structure fingerprint, stored instruments, target schema, target
 uniqueness, target provenance, and deterministic ordering are revalidated
 against \code{rcon}; malformed plans and plans edited by hand are rejected.}
 

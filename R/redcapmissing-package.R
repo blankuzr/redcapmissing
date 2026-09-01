@@ -12,7 +12,9 @@
 #'    observed in the export with an optional extension, which
 #'    [build_extended_schedule()] can construct from project structure.
 #'    [plan_explicit()] uses an exact schedule that includes a record ID for
-#'    every target.
+#'    every target; [build_explicit_schedule()] can cross project-shaped cohort
+#'    data with selected allowable instrument-event rows. The explicit schedule
+#'    is also the complete instrument scope for that plan.
 #' 2. [run_plan()] evaluates the targets stored in the plan.
 #' 3. [get_summary()] and [get_missing()] inspect results, while [flexify()] and
 #'    [flex_event_instruments()] format them.
@@ -56,8 +58,9 @@
 #' Online workflows commonly use [redcapAPI::exportRecordsTyped()]. Keep REDCap
 #' API tokens outside source, logs, reports, and saved R objects.
 #'
-#' @seealso [all_instruments()], [build_extended_schedule()],
-#'   [plan_from_data()], [plan_explicit()], [run_plan()], [get_summary()],
+#' @seealso [all_instruments()], [build_explicit_schedule()],
+#'   [build_extended_schedule()], [plan_from_data()], [plan_explicit()],
+#'   [run_plan()], [get_summary()],
 #'   [get_missing()], [registry()], [flexify()],
 #'   [flex_event_instruments()], [flex_html()],
 #'   [redcapAPI::redcapConnection()], [redcapAPI::offlineConnection()],

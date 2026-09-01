@@ -132,7 +132,7 @@ The returned object has class \code{redcapmissing_plan} and these components:\ta
    Component \tab Storage and meaning \cr
    \code{schema_version} \tab Integer scalar \code{1L} \cr
    \code{construction} \tab Character scalar \code{"from_data"} or \code{"explicit"} \cr
-   \code{instruments} \tab Character vector of selected raw instrument names in target order \cr
+   \code{instruments} \tab Character vector of raw instrument names in target order. \code{plan_from_data()} stores its selected instruments. \code{plan_explicit()} derives unique instruments from the normalized schedule in first-appearance order and stores \code{character()} for a zero-target plan. \cr
    \code{assessible_targets} \tab Tibble described below \cr
    \code{project} \tab Named project identity and label list described below \cr
    \code{structure_fingerprint} \tab One lowercase SHA-256 value containing 64 characters \cr
@@ -145,7 +145,7 @@ The returned object has class \code{redcapmissing_plan} and these components:\ta
 \code{assessible_targets} has exactly these columns:\tabular{lll}{
    Column \tab Storage \tab Meaning \cr
    \code{record_id} \tab Character \tab Normalized project record ID \cr
-   \code{instrument} \tab Character \tab Selected raw REDCap instrument name \cr
+   \code{instrument} \tab Character \tab Raw REDCap instrument name in plan scope \cr
    \code{redcap_event_name} \tab Character \tab Raw event name, or \code{NA_character_} in a classic project \cr
    \code{repeat_instrument} \tab Character \tab Raw instrument for repeating instrument targets; otherwise \code{NA_character_} \cr
    \code{repeat_instance} \tab Integer \tab Exact positive repeat instance; otherwise \code{NA_integer_} \cr
@@ -154,7 +154,7 @@ The returned object has class \code{redcapmissing_plan} and these components:\ta
 
 
 Targets are unique on the first five columns and deterministically ordered by
-selected instrument order, REDCap event order, record ID, repeat kind, and
+stored instrument order, REDCap event order, record ID, repeat kind, and
 instance.
 
 \code{project} is a named list with exactly these fields:\tabular{ll}{

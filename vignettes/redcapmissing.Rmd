@@ -17,8 +17,9 @@ library(redcapmissing)
 
 `redcapmissing` separates target selection from assessment:
 
-1. `all_instruments()` and `build_extended_schedule()` help declare project
-   instrument scope and optional schedule extensions.
+1. `all_instruments()`, `build_extended_schedule()`, and
+   `build_explicit_schedule()` help declare project instrument scope and
+   schedules.
 2. `plan_from_data()` or `plan_explicit()` freezes the record, event,
    instrument, and repeat instance crossings stored in `assessible_targets`.
 3. `run_plan()` evaluates the physical rows, instruments, and fields for those
@@ -34,7 +35,7 @@ The examples assume that the caller has supplied these objects:
 | Object | Required for | Contents |
 |---|---|---|
 | `rcon` | Planning helpers, both constructors, and `run_plan()` | A `redcapAPI` object inheriting from `redcapApiConnection` or `redcapOfflineConnection` that represents the project used for `data`. |
-| `instruments` | The schedule builder and both constructors | A character vector of raw REDCap instrument names, optionally returned by `all_instruments(rcon)`. |
+| `instruments` | The extended schedule builder and both constructors | A character vector of raw REDCap instrument names, optionally returned by `all_instruments(rcon)`. |
 | `records` | Both constructors and `run_plan()` | Records exported from the project represented by `rcon`. |
 | `extended_schedule` | Optional use of `plan_from_data()` | A table with the exact three column schema described below. |
 | `explicit_schedule` | `plan_explicit()` | A table with the exact four column schema described below. |
@@ -78,16 +79,20 @@ through `rcon`.
 |---|---|---|
 | `all_instruments()` | `rcon` | The complete ordered raw instrument inventory. |
 | `build_extended_schedule()` | `rcon`, `instruments`, and optional `n_repeat_instances` | A three-column extension containing every allowable crossing for the requested instruments. |
+| `build_explicit_schedule()` | pipe-first `data`, `rcon`, and `explicit_spec` | A four-column explicit schedule crossing unique project record IDs with selected allowable crossings. |
 | `plan_from_data()` | `data`, `rcon`, `instruments`, and optional `extended_schedule` | Frozen targets observed in `data`, plus those added by the extension. |
-| `plan_explicit()` | `data`, `rcon`, `instruments`, and required `explicit_schedule` | Frozen targets named in `explicit_schedule`. |
+| `plan_explicit()` | `data`, `rcon`, and required `explicit_schedule` | Frozen targets and instrument scope named in `explicit_schedule`. |
 
 For both constructors:
 
 - `data` is a data frame or tibble from the project represented by `rcon`.
 - `rcon` supplies project identity, metadata, instruments, repeat settings,
   and the applicable arms, events, and instrument event mappings.
-- `instruments` is a nonempty character vector of unique, nonmissing,
-  nonblank, unpadded raw instrument names. Its order controls target ordering.
+
+For `plan_from_data()`, `instruments` is a nonempty character vector of unique,
+nonmissing, nonblank, unpadded raw instrument names. Its order controls target
+ordering. `plan_explicit()` has no separate `instruments` argument: its complete
+instrument scope is derived from normalized `explicit_schedule` rows.
 
 Caller-supplied `data` is the only physical-row source for both constructors.
 The constructors read project structure from `rcon` but never use it to export
@@ -195,15 +200,61 @@ crossing observed in `data` remains in `assessible_targets`.
 assessible_targets =
   allowable crossings described by rcon
   INTERSECT
-  crossings in explicit_schedule
+crossings in explicit_schedule
 ```
+
+Use `build_explicit_schedule()` to create that exact schedule from cohort data
+and selected project mappings. It discovers the record-ID field from `rcon`;
+the input must retain that exact field name, such as `participant_id`. The
+output always uses canonical `record_id` for `plan_explicit()`.
+
+```{r build_explicit, eval = FALSE}
+explicit_spec_1 <- rcon$mapping() |>
+  dplyr::filter(unique_event_name %in% desired_events_1)
+
+explicit_schedule_1 <- data.frame(
+  participant_id = c("001", "002", "003")
+) |>
+  build_explicit_schedule(rcon, explicit_spec_1)
+
+explicit_spec_2 <- rcon$mapping() |>
+  dplyr::filter(
+    unique_event_name %in% desired_events_2,
+    form == "diary"
+  ) |>
+  dplyr::mutate(repeat_instance = 2L)
+
+explicit_schedule_2 <- data.frame(
+  participant_id = c("008", "009", "010")
+) |>
+  build_explicit_schedule(rcon, explicit_spec_2)
+
+explicit_schedule <- dplyr::bind_rows(
+  explicit_schedule_1,
+  explicit_schedule_2
+)
+```
+
+`explicit_spec` contains exactly one event alias (`unique_event_name` or
+`redcap_event_name`) and one instrument alias (`form` or `instrument`). Extra
+columns such as `arm_num` are ignored, so a filtered `rcon$mapping()` result can
+be passed directly. If `repeat_instance` is absent, the builder supplies
+`NA_integer_`; repeating events and instruments instead require supplied
+positive instances. Specifications are validated against current project
+structure before expansion. Record IDs are unique in first-appearance order,
+and specification rows retain their order within every record.
+
+Schedules made independently can be combined with `dplyr::bind_rows()`.
+Disjoint cohorts and overlapping records with different crossings are valid.
+An exact duplicate target across pieces remains an error when the combined
+schedule is passed to `plan_explicit()`.
 
 The schedule has exactly these columns in this order:
 
 | Column | Accepted storage and values | Accepted missing values | Stored in the plan |
 |---|---|---|---|
 | `record_id` | Character, factor, integer, or finite double; values are nonblank and unpadded. Character leading zeros are preserved. | None. | Character. |
-| `instrument` | Character or factor containing a value from `instruments`; values are nonblank and unpadded. | None. | Character. |
+| `instrument` | Character or factor containing a project raw instrument name; values are nonblank and unpadded. | None. | Character. |
 | `redcap_event_name` | Character or factor containing a raw event name in a longitudinal project. | In a classic project, character or factor blank values and typed `NA` values are accepted. Accepted noncharacter storage is a nonempty atomic vector containing only typed `NA` values. `Date`, `POSIXt`, and `NaN` are rejected even when the complete column is missing. | Character; `NA_character_` for a classic project. |
 | `repeat_instance` | Positive integer, finite whole number double, or character digits matching `[1-9][0-9]*` within R integer range when the scheduled event or instrument repeats. | When neither the scheduled event nor instrument repeats, numeric `NA`, character `NA` or blank, or a nonempty logical or factor column whose every value is `NA` is accepted. `Date`, `POSIXt`, and `NaN` are rejected even when the complete column is missing. | Integer; `NA_integer_` when neither the scheduled event nor instrument repeats. |
 
@@ -216,7 +267,6 @@ omitted `explicit_schedule` produce an error.
 explicit_plan <- plan_explicit(
   data = records,
   rcon = rcon,
-  instruments = instruments,
   explicit_schedule = explicit_schedule
 )
 ```
@@ -229,8 +279,9 @@ remains in the plan. During `run_plan()`, an absent longitudinal event fails
 and fails `instrument-started`.
 For a longitudinal project, a record already observed in one arm must be
 scheduled within that arm.
-A selected instrument with no explicit schedule row contributes no target and
-produces no warning: omission means that the target was not requested.
+An instrument with no explicit schedule row is outside the explicit plan's
+scope and produces no warning. A correctly typed zero-row schedule creates a
+plan with `instruments = character()` and no targets.
 
 The absence rules differ:
 
@@ -335,7 +386,7 @@ report <- run_plan(
 
 | Argument | Required | Default | Accepted values | Effect |
 |---|---:|---|---|---|
-| `plan` | Yes | None | A validated `redcapmissing_plan`. | Supplies the stored targets, selected instruments, `target_source` provenance, project data, and fingerprint. |
+| `plan` | Yes | None | A validated `redcapmissing_plan`. | Supplies the stored targets, instrument scope, `target_source` provenance, project data, and fingerprint. |
 | `data` | Yes | None | A data frame or tibble with structural columns, response columns needed by frozen target instruments, and branching dependencies for those responses. A complete zero row table is valid. | Supplies the rows and response values assessed during this call. |
 | `rcon` | Yes | None | The connection or supported object for the same project structure represented by `plan`. | Supplies current project identity and structure. |
 | `required_fields` | No | `TRUE` | One nonmissing logical value. | `TRUE` retains fields marked required before later removals; `FALSE` retains required and optional fields. |
@@ -697,7 +748,7 @@ Use the class and message to identify the failing input:
    checkbox, and branching dependency column required by the frozen targets.
    Nontarget instruments impose no exclusive response-column requirement.
 2. For a schedule error, check the exact column names and order, duplicates,
-   selected instruments and events, and the event repeat setting in `rcon`.
+   instrument and event names, and the event repeat setting in `rcon`.
 3. For a plan error after a REDCap structure change, create a new plan from the
    current `rcon`.
 4. For a project error involving a reference to another event, review the

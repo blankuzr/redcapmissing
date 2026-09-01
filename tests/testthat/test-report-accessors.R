@@ -272,7 +272,7 @@ missing_report_fixture <- function() {
     list(
       schema_version = 1L,
       construction = "explicit",
-      instruments = c("status", "repeat", "empty"),
+      instruments = c("status", "repeat"),
       assessible_targets = targets,
       project = list(
         project_id = "12", record_id_field = "record_id", longitudinal = TRUE,
@@ -301,7 +301,7 @@ test_that("get_missing exposes normalized typed structural values", {
     attr(result, "redcapmissing_labels"),
     list(
       events = c(baseline_event = "Baseline", followup_event = "Follow up"),
-      instruments = c(status = "Status", "repeat" = "Repeat", empty = "empty")
+      instruments = c(status = "Status", "repeat" = "Repeat")
     )
   )
 })
@@ -321,7 +321,14 @@ test_that("get_missing filters only the completed result", {
   expect_identical(result$repeat_instance, 2L)
   expect_identical(report, original)
 
-  expect_equal(nrow(get_missing(report, instruments = "empty")), 0L)
+  expect_equal(
+    nrow(get_missing(
+      report,
+      events = "followup_event",
+      instruments = "repeat"
+    )),
+    0L
+  )
 })
 
 test_that("get_missing normalizes duplicate filters without reordering rows", {
@@ -352,7 +359,11 @@ test_that("get_missing normalizes duplicate filters without reordering rows", {
 
 test_that("get_missing empty intersections retain types and labels", {
   report <- missing_report_fixture()
-  result <- get_missing(report, instruments = "empty")
+  result <- get_missing(
+    report,
+    events = "followup_event",
+    instruments = "repeat"
+  )
 
   expect_identical(nrow(result), 0L)
   expect_identical(names(result), .missing_list_columns())

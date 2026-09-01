@@ -201,7 +201,6 @@ test_that("zero-row targets retain typed detail dispositions and reasons", {
   plan <- plan_explicit(
     planner_data,
     rcon,
-    "baseline_form",
     run_plan_explicit_schedule("absent")
   )
   result <- run_plan(

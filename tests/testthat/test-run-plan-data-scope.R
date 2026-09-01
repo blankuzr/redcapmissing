@@ -369,7 +369,7 @@ test_that("explicit plans with no targets are accepted at runtime", {
   rcon <- run_plan_rcon()
   data <- run_plan_data()
   schedule <- run_plan_explicit_schedule()[0, ]
-  plan <- plan_explicit(data, rcon, "baseline_form", schedule)
+  plan <- plan_explicit(data, rcon, schedule)
   result <- run_plan(plan, data, rcon, progress = FALSE)
 
   expect_equal(nrow(result$target_results), 0L)
@@ -384,7 +384,6 @@ test_that("zero-target classic plans require only the record identifier", {
   plan <- plan_explicit(
     run_plan_data(),
     rcon,
-    "baseline_form",
     empty_schedule
   )
 

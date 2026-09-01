@@ -1,7 +1,7 @@
 test_that("run_plan freezes targets and gates absent physical rows", {
   rcon <- run_plan_rcon()
   data <- run_plan_data("1")
-  plan <- plan_explicit(data, rcon, "baseline_form", run_plan_explicit_schedule("2"))
+  plan <- plan_explicit(data, rcon, run_plan_explicit_schedule("2"))
   result <- run_plan(plan, data, rcon, progress = FALSE)
 
   expect_identical(result$target_results$record_id, "2")
@@ -27,7 +27,7 @@ test_that("classic repeating targets bypass the event gate and retain the instan
     redcap_event_name = c(NA_character_, NA_character_),
     repeat_instance = c(1L, 2L)
   )
-  plan <- plan_explicit(data, rcon, "baseline_form", schedule)
+  plan <- plan_explicit(data, rcon, schedule)
   result <- run_plan(plan, data, rcon, progress = FALSE)
 
   expect_identical(
@@ -63,7 +63,7 @@ test_that("longitudinal repeating-instrument targets distinguish event and insta
     redcap_event_name = c("baseline_arm_1", "baseline_arm_1"),
     repeat_instance = c(2L, 2L)
   )
-  plan <- plan_explicit(data, rcon, "baseline_form", schedule)
+  plan <- plan_explicit(data, rcon, schedule)
   result <- run_plan(plan, data, rcon, progress = FALSE)
 
   expect_identical(
@@ -132,7 +132,7 @@ test_that("longitudinal event gates use any physical row in the record and event
     redcap_event_name = "baseline_arm_1",
     repeat_instance = NA_integer_
   )
-  plan <- plan_explicit(data, rcon, "beta", schedule)
+  plan <- plan_explicit(data, rcon, schedule)
   result <- run_plan(plan, data, rcon, progress = FALSE)
 
   expect_identical(result$target_results$event_row_started, "passed")
@@ -153,7 +153,7 @@ test_that("repeating event gates distinguish absent events from absent instances
     redcap_event_name = c("visit_arm_1", "visit_arm_1"),
     repeat_instance = c(2L, 2L)
   )
-  plan <- plan_explicit(data, rcon, "diary", schedule)
+  plan <- plan_explicit(data, rcon, schedule)
   result <- run_plan(plan, data, rcon, progress = FALSE)
 
   expect_identical(result$target_results$record_id, c("1", "2"))
@@ -210,7 +210,6 @@ test_that("zero-row runtime data retains explicit targets and gate states", {
   plan <- plan_explicit(
     planner_data,
     rcon,
-    "baseline_form",
     run_plan_explicit_schedule("absent")
   )
   runtime_data <- planner_data[0, , drop = FALSE]

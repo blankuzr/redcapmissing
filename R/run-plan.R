@@ -5,7 +5,7 @@
 #' Target rows come from `plan$assessible_targets`.
 #'
 #' @param plan A validated `redcapmissing_plan`. Its project ID, schema version,
-#'   structure fingerprint, selected instruments, target schema, target
+#'   structure fingerprint, stored instruments, target schema, target
 #'   uniqueness, target provenance, and deterministic ordering are revalidated
 #'   against `rcon`; malformed plans and plans edited by hand are rejected.
 #' @param data A data frame containing physical REDCap rows and every response,

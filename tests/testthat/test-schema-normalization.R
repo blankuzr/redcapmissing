@@ -114,7 +114,7 @@ test_that("nullable structural dimensions accept every typed NA representation",
       redcap_event_name = missing_value,
       repeat_instance = missing_value
     )
-    declared <- plan_explicit(data, rcon, "demographics", explicit)
+    declared <- plan_explicit(data, rcon, explicit)
     expect_identical(declared$assessible_targets$target_source, "explicit")
   }
 
@@ -361,7 +361,7 @@ test_that("empty schedules require complete ordered schemas and allowed storage"
     record_id = integer(), instrument = factor(character()),
     redcap_event_name = character(), repeat_instance = numeric()
   )
-  explicit_plan <- plan_explicit(empty_data, rcon, "demographics", valid_explicit)
+  explicit_plan <- plan_explicit(empty_data, rcon, valid_explicit)
   expect_identical(explicit_plan$assessible_targets, redcapmissing:::.assessible_target_build_prototype())
   absent_explicit <- tibble::tibble(
     record_id = "not_exported",
@@ -370,7 +370,7 @@ test_that("empty schedules require complete ordered schemas and allowed storage"
     repeat_instance = NA_integer_
   )
   absent_plan <- plan_explicit(
-    empty_data, rcon, "demographics", absent_explicit
+    empty_data, rcon, absent_explicit
   )
   expect_identical(absent_plan$assessible_targets$record_id, "not_exported")
   expect_identical(absent_plan$assessible_targets$instrument, "demographics")
@@ -386,7 +386,7 @@ test_that("empty schedules require complete ordered schemas and allowed storage"
   )
   for (schedule in invalid_explicit_schemas) {
     expect_error(
-      plan_explicit(empty_data, rcon, "demographics", schedule),
+      plan_explicit(empty_data, rcon, schedule),
       class = "redcapmissing_error_schedule"
     )
   }
@@ -395,7 +395,7 @@ test_that("empty schedules require complete ordered schemas and allowed storage"
     redcap_event_name = character(), repeat_instance = integer()
   )
   expect_error(
-    plan_explicit(empty_data, rcon, "demographics", invalid_record_storage),
+    plan_explicit(empty_data, rcon, invalid_record_storage),
     class = "redcapmissing_error_schema"
   )
 })
@@ -420,7 +420,7 @@ test_that("normalized schedule collisions error before target construction", {
     repeat_instance = c("", NA_character_)
   )
   expect_error(
-    plan_explicit(data, rcon, "demographics", explicit),
+    plan_explicit(data, rcon, explicit),
     class = "redcapmissing_error_schedule"
   )
 })
@@ -509,7 +509,6 @@ test_that("event missingness is contextual for classic and longitudinal planning
     plan_explicit(
       tibble::tibble(record_id = "r1"),
       classic_rcon,
-      "demographics",
       classic_explicit
     ),
     class = "redcapmissing_error_schedule"
@@ -525,7 +524,6 @@ test_that("event missingness is contextual for classic and longitudinal planning
     plan_explicit(
       .plan_longitudinal_data(),
       longitudinal_rcon,
-      "demographics",
       longitudinal_explicit
     ),
     class = "redcapmissing_error_schedule"

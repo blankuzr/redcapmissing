@@ -163,13 +163,49 @@ Use `plan_explicit()` when every assessed combination must have a row in a
 caller supplied `explicit_schedule`:
 
 ```r
+explicit_spec_1 <- rcon$mapping() |>
+  dplyr::filter(unique_event_name %in% desired_events_1)
+
+explicit_schedule_1 <- data.frame(
+  participant_id = c("001", "002", "003")
+) |>
+  build_explicit_schedule(rcon, explicit_spec_1)
+
+explicit_spec_2 <- rcon$mapping() |>
+  dplyr::filter(
+    unique_event_name %in% desired_events_2,
+    form == "diary"
+  ) |>
+  dplyr::mutate(repeat_instance = 2L)
+
+explicit_schedule_2 <- data.frame(
+  participant_id = c("008", "009", "010")
+) |>
+  build_explicit_schedule(rcon, explicit_spec_2)
+
+explicit_schedule <- dplyr::bind_rows(
+  explicit_schedule_1,
+  explicit_schedule_2
+)
+
 plan <- plan_explicit(
   data = records,
   rcon = rcon,
-  instruments = instruments,
   explicit_schedule = explicit_schedule
 )
 ```
+
+The builder discovers that this example project's ID field is
+`participant_id` and returns the project-independent `record_id` column needed
+by `plan_explicit()`. It ignores mapping columns such as `arm_num`. A missing
+`repeat_instance` column means missing instances; supply positive instances for
+repeating events or instruments. The builder validates every specification row
+against `rcon` before crossing it with the unique cohort IDs.
+
+`explicit_schedule` is the complete instrument scope for `plan_explicit()`.
+The plan derives its unique instrument vector from normalized schedule rows in
+first-appearance order; no separate `instruments` argument is used. A typed
+zero-row schedule produces an explicit plan with `character()` instrument scope.
 
 Each row in `explicit_schedule` creates one permitted target. A target may name
 a record that is absent from `records`. During `run_plan()`, an absent
@@ -178,8 +214,8 @@ repeat instance fails `repeat-instance-row-started`; and an absent classic
 target with `repeat_instance = NA_integer_` has both row checks marked
 `"not applicable"` and fails `instrument-started`.
 
-Both constructors return a `redcapmissing_plan`. The plan contains the selected
-instruments, `assessible_targets`, project identity, project structure
+Both constructors return a `redcapmissing_plan`. The plan contains its stored
+instrument scope, `assessible_targets`, project identity, project structure
 fingerprint, construction value, and schema version. Source records and `rcon`
 remain outside the plan.
 
@@ -274,8 +310,8 @@ REDCap export.
 - Run `vignette("redcapmissing")` for complete schedule schemas, missing value
   rules, repeating structure, branching logic, verification, and recovery from
   validation errors.
-- Open `?all_instruments`, `?build_extended_schedule`, `?plan_from_data`,
-  `?plan_explicit`, and `?run_plan` for exact argument and return value
-  descriptions.
+- Open `?all_instruments`, `?build_explicit_schedule`,
+  `?build_extended_schedule`, `?plan_from_data`, `?plan_explicit`, and
+  `?run_plan` for exact argument and return value descriptions.
 - Read [NEWS](NEWS.md) for release changes.
 - Report problems through [GitHub Issues](https://github.com/blankuzr/redcapmissing/issues).

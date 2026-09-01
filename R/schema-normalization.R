@@ -92,6 +92,26 @@
   value
 }
 
+.schema_normalize_label <- function(x, source) {
+  if (!is.character(x) && !is.factor(x)) {
+    all_typed_missing <- is.atomic(x) &&
+      !inherits(x, c("Date", "POSIXt")) &&
+      (!length(x) || (all(is.na(x)) && !(is.numeric(x) && any(is.nan(x)))))
+    if (all_typed_missing) return(rep(NA_character_, length(x)))
+    .condition_signal_error(
+      paste0(
+        "`", source, "` must use character/factor storage or contain only ",
+        "typed NA values."
+      ),
+      "schema"
+    )
+  }
+  value <- if (is.factor(x)) as.character(x) else x
+  value <- trimws(value)
+  value[is.na(value) | value == ""] <- NA_character_
+  value
+}
+
 .schema_normalize_repeat_instance <- function(x, source) {
   if (is.logical(x) && length(x) > 0 && all(is.na(x))) {
     return(rep(NA_integer_, length(x)))
