@@ -9,6 +9,8 @@ The test suite follows the public workflow established by the package:
 ```text
 all_instruments()
         |
+build_explicit_schedule()
+        |
 plan_from_data() or plan_explicit() -> redcapmissing_plan
         |
 run_plan() -> redcapmissing
@@ -18,7 +20,7 @@ get_summary() or get_missing()
 flexify(), flex_event_instruments(), or flex_html()
 ```
 
-`build_extended_schedule()` supplies an optional schedule to `plan_from_data()`. `registry()` describes the validation checks that `run_plan()` reports.
+`build_extended_schedule()` supplies an optional schedule to `plan_from_data()`. `build_explicit_schedule()` supplies a project-aware exact schedule to `plan_explicit()`, which derives its instrument scope from that schedule. `registry()` describes the validation checks that `run_plan()` reports.
 
 ## Package behavior and test ownership
 
@@ -28,11 +30,12 @@ If a test establishes user-visible behavior that is absent from package document
 
 | Package code or value | Owning test files |
 |---|---|
-| `all_instruments`, `build_extended_schedule`, `plan_from_data`, `plan_explicit`, `run_plan`, `get_summary`, `get_missing`, `registry`, `flexify`, `flex_event_instruments`, and `flex_html`; their formals and S3 registrations; absence of `find_missing` and `flex_event_forms` | `test-public-api.R` |
+| `all_instruments`, `build_explicit_schedule`, `build_extended_schedule`, `plan_from_data`, `plan_explicit`, `run_plan`, `get_summary`, `get_missing`, `registry`, `flexify`, `flex_event_instruments`, and `flex_html`; their formals and S3 registrations; absence of `find_missing` and `flex_event_forms` | `test-public-api.R` |
 | `redcapmissing_error_*`, `redcapmissing_warning_empty_arm_extension`, and `redcapmissing_warning_undesignated_extension` inheritance | `test-conditions.R` |
 | `registry()`, `redcapmissing_registry`, and registry printing | `test-registry.R` |
 | `all_instruments()` | `test-all-instruments.R` |
 | `build_extended_schedule()` | `test-build-extended-schedule.R` |
+| `build_explicit_schedule()` | `test-build-explicit-schedule.R` |
 | Shared `redcapmissing_plan` representation, validation, project labels, supported `rcon` classes, structure reads, and zero record exports | `test-redcapmissing-plan.R` |
 | Observed and `extended_schedule` target selection | `test-plan-from-data.R` |
 | `explicit_schedule`, absent records, omissions, and zero-target plans | `test-plan-explicit.R` |
@@ -61,7 +64,7 @@ Put a regression test in the file that owns the affected package behavior. Keep 
 
 - `helper-redcap-fixtures.R` owns `redcap_api_connection_fixture()` and `meta_row()`.
 - `helper-plan-fixtures.R` owns shared classic and longitudinal `redcapmissing_plan` inputs.
-- `helper-schedule-fixtures.R` owns instrument-inventory and extended-schedule connection fixtures.
+- `helper-schedule-fixtures.R` owns instrument-inventory and schedule connection fixtures.
 - `helper-run-plan-fixtures.R` owns shared `run_plan()` connections, `data`, explicit schedules, and repeating-event inputs.
 - `helper-verification-fixtures.R` owns `run_plan_verified_row()`.
 - `helper-report-fixtures.R` owns typed empty report components and complete synthetic `redcapmissing` objects.

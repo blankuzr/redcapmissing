@@ -33,12 +33,22 @@ test_that("a genuine offline connection supports helper plan and run workflow", 
     )
   )
   plan <- plan_from_data(data, rcon, instruments, extended_schedule)
+  explicit_schedule <- build_explicit_schedule(
+    data,
+    rcon,
+    data.frame(
+      unique_event_name = NA_character_,
+      form = "baseline"
+    )
+  )
+  explicit_plan <- plan_explicit(data, rcon, explicit_schedule)
   result <- run_plan(plan, data, rcon, progress = FALSE)
   summary <- get_summary(result)
   missing <- get_missing(result)
 
   expect_s3_class(rcon, "redcapOfflineConnection")
   expect_s3_class(plan, "redcapmissing_plan")
+  expect_s3_class(explicit_plan, "redcapmissing_plan")
   expect_s3_class(result, "redcapmissing")
   expect_identical(plan$assessible_targets$record_id, c("1", "2"))
   expect_identical(instruments, "baseline")
@@ -48,6 +58,15 @@ test_that("a genuine offline connection supports helper plan and run workflow", 
       instrument = "baseline",
       redcap_event_name = NA_character_,
       repeat_instance = NA_integer_
+    )
+  )
+  expect_identical(
+    explicit_schedule,
+    tibble::tibble(
+      record_id = c("1", "2"),
+      instrument = c("baseline", "baseline"),
+      redcap_event_name = c(NA_character_, NA_character_),
+      repeat_instance = c(NA_integer_, NA_integer_)
     )
   )
   expect_identical(

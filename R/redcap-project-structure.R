@@ -16,6 +16,11 @@
 #' @return A character vector of unique raw REDCap instrument names, in the
 #'   order supplied by `rcon`.
 #'
+#' @details
+#' Optional display-label whitespace does not affect inventory retrieval. Raw
+#' instrument names remain strict project identifiers and must be present,
+#' unique, nonblank, and free of surrounding whitespace.
+#'
 #' @section Conditions:
 #' A missing or `NULL` connection produces
 #' `redcapmissing_error_argument`. An unsupported connection or malformed
@@ -26,15 +31,17 @@
 #' instruments <- all_instruments(rcon)
 #' }
 #'
-#' @seealso [build_extended_schedule()], [plan_from_data()],
-#'   [plan_explicit()]
+#' @seealso [build_explicit_schedule()], [build_extended_schedule()],
+#'   [plan_from_data()], [plan_explicit()]
 #' @export
 all_instruments <- function(rcon) {
   if (missing(rcon) || is.null(rcon)) {
     .condition_signal_error("`rcon` is required and cannot be `NULL`.", "argument")
   }
   .rcon_validate_class(rcon)
-  .project_structure_read_instruments(rcon)$instrument
+  .project_structure_normalize_instrument_names(
+    .project_structure_read_surface(rcon, "instruments", "project instruments")
+  )
 }
 
 .rcon_validate_class <- function(rcon) {
@@ -111,14 +118,27 @@ all_instruments <- function(rcon) {
   .condition_signal_error("`is_longitudinal` must be 0/1 or FALSE/TRUE.", "project")
 }
 
-.project_structure_normalize_instruments <- function(data) {
+.project_structure_normalize_instrument_names <- function(data) {
   name_col <- .schema_resolve_column(data, c("instrument_name", "form_name", "form"), "rcon$instruments()")
-  label_col <- .schema_resolve_column(data, c("instrument_label", "form_label"), "rcon$instruments()", FALSE)
-  instrument <- .schema_normalize_required_id(data[[name_col]], "rcon$instruments() instrument names")
+  instrument <- tryCatch(
+    .schema_normalize_required_id(
+      data[[name_col]],
+      "rcon$instruments() instrument names"
+    ),
+    redcapmissing_error = function(error) {
+      .condition_signal_error(conditionMessage(error), "project")
+    }
+  )
   if (!length(instrument) || anyDuplicated(instrument)) {
     .condition_signal_error("`rcon$instruments()` must contain unique instruments.", "project")
   }
-  label <- if (is.null(label_col)) instrument else .schema_normalize_nullable_character(data[[label_col]], "instrument labels")
+  instrument
+}
+
+.project_structure_normalize_instruments <- function(data) {
+  instrument <- .project_structure_normalize_instrument_names(data)
+  label_col <- .schema_resolve_column(data, c("instrument_label", "form_label"), "rcon$instruments()", FALSE)
+  label <- if (is.null(label_col)) instrument else .schema_normalize_label(data[[label_col]], "instrument labels")
   tibble::tibble(instrument = instrument, instrument_label = label)
 }
 
@@ -165,7 +185,7 @@ all_instruments <- function(rcon) {
   }
   event_id <- as.character(event_id)
   label <- if (all(c("unique_event_name", "event_name") %in% names(data))) {
-    .schema_normalize_nullable_character(data$event_name, "event labels")
+    .schema_normalize_label(data$event_name, "event labels")
   } else event
   tibble::tibble(redcap_event_name = event, event_label = label, event_id = event_id, arm_num = arm)
 }
@@ -175,7 +195,7 @@ all_instruments <- function(rcon) {
   arm <- .schema_normalize_required_id(data[[arm_col]], "rcon$arms() arm numbers")
   if (!length(arm) || anyDuplicated(arm)) .condition_signal_error("`rcon$arms()` must contain unique arms.", "project")
   name_col <- .schema_resolve_column(data, c("name", "arm_name"), "rcon$arms()", FALSE)
-  name <- if (is.null(name_col)) rep(NA_character_, length(arm)) else .schema_normalize_nullable_character(data[[name_col]], "arm names")
+  name <- if (is.null(name_col)) rep(NA_character_, length(arm)) else .schema_normalize_label(data[[name_col]], "arm names")
   tibble::tibble(arm_num = arm, arm_name = name)
 }
 

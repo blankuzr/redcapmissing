@@ -23,6 +23,11 @@ order. Inventory membership is distinct from schedulability: in a
 longitudinal project, the result includes instruments that are currently
 designated to no event.
 }
+\details{
+Optional display-label whitespace does not affect inventory retrieval. Raw
+instrument names remain strict project identifiers and must be present,
+unique, nonblank, and free of surrounding whitespace.
+}
 \section{Conditions}{
 
 A missing or \code{NULL} connection produces
@@ -37,6 +42,6 @@ instruments <- all_instruments(rcon)
 
 }
 \seealso{
-\code{\link[=build_extended_schedule]{build_extended_schedule()}}, \code{\link[=plan_from_data]{plan_from_data()}},
-\code{\link[=plan_explicit]{plan_explicit()}}
+\code{\link[=build_explicit_schedule]{build_explicit_schedule()}}, \code{\link[=build_extended_schedule]{build_extended_schedule()}},
+\code{\link[=plan_from_data]{plan_from_data()}}, \code{\link[=plan_explicit]{plan_explicit()}}
 }

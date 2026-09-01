@@ -114,7 +114,7 @@
 #' |---|---|
 #' | `schema_version` | Integer scalar `1L` |
 #' | `construction` | Character scalar `"from_data"` or `"explicit"` |
-#' | `instruments` | Character vector of selected raw instrument names in target order |
+#' | `instruments` | Character vector of raw instrument names in target order. `plan_from_data()` stores its selected instruments. `plan_explicit()` derives unique instruments from the normalized schedule in first-appearance order and stores `character()` for a zero-target plan. |
 #' | `assessible_targets` | Tibble described below |
 #' | `project` | Named project identity and label list described below |
 #' | `structure_fingerprint` | One lowercase SHA-256 value containing 64 characters |
@@ -127,14 +127,14 @@
 #' | Column | Storage | Meaning |
 #' |---|---|---|
 #' | `record_id` | Character | Normalized project record ID |
-#' | `instrument` | Character | Selected raw REDCap instrument name |
+#' | `instrument` | Character | Raw REDCap instrument name in plan scope |
 #' | `redcap_event_name` | Character | Raw event name, or `NA_character_` in a classic project |
 #' | `repeat_instrument` | Character | Raw instrument for repeating instrument targets; otherwise `NA_character_` |
 #' | `repeat_instance` | Integer | Exact positive repeat instance; otherwise `NA_integer_` |
 #' | `target_source` | Character | `"observed"`, `"extended"`, `"observed+extended"`, or `"explicit"`, as allowed by the construction type |
 #'
 #' Targets are unique on the first five columns and deterministically ordered by
-#' selected instrument order, REDCap event order, record ID, repeat kind, and
+#' stored instrument order, REDCap event order, record ID, repeat kind, and
 #' instance.
 #'
 #' `project` is a named list with exactly these fields:
@@ -210,10 +210,11 @@ plan_from_data <- function(data, rcon, instruments, extended_schedule = NULL) {
 #'
 #' `plan_explicit()` assesses only the exact record, instrument, event, and
 #' repeat instance crossings declared by `explicit_schedule`, after validating
-#' that each crossing is allowed by `rcon`. A schedule row may identify a record
-#' absent from `data`; that absence is evaluated later by [run_plan()].
-#' Caller-supplied `data` is the only physical-row source, and the constructor
-#' never exports records through `rcon`.
+#' that each crossing is allowed by `rcon`. The schedule is the complete source
+#' of instrument scope; no separate instrument vector is supplied. A schedule
+#' row may identify a record absent from `data`; that absence is evaluated later
+#' by [run_plan()]. Caller-supplied `data` is the only physical-row source, and
+#' the constructor never exports records through `rcon`.
 #'
 #' @inheritParams plan_from_data
 #' @param data A data frame exported from the REDCap project represented by
@@ -226,7 +227,8 @@ plan_from_data <- function(data, rcon, instruments, extended_schedule = NULL) {
 #'   `instrument`, `redcap_event_name`, and `repeat_instance`, in that order.
 #'   An absent row means do not assess that crossing. A correctly typed empty
 #'   schedule creates a valid plan with no `assessible_targets` rows. `NULL` and an
-#'   omitted argument are errors.
+#'   omitted argument are errors. Use [build_explicit_schedule()] to construct
+#'   this table from project-shaped cohort data and an explicit specification.
 #'
 #' @section `assessible_targets` rule:
 #' `plan_explicit()` implements:
@@ -239,10 +241,12 @@ plan_from_data <- function(data, rcon, instruments, extended_schedule = NULL) {
 #' ```
 #'
 #' Every schedule row identifies exactly one target. Scheduled rows are the
-#' complete target set; a selected instrument with no schedule rows has no
-#' targets. A record ID absent from `data` is allowed, and [run_plan()] applies
-#' its checks according to the target context. An observed record may be
-#' scheduled only within its observed arm.
+#' complete target set. `plan$instruments` is derived as the unique normalized
+#' schedule instruments in first-appearance order. A correctly typed zero-row
+#' schedule therefore produces `plan$instruments = character()` and no targets.
+#' A record ID absent from `data` is allowed, and [run_plan()] applies its checks
+#' according to the target context. An observed record may be scheduled only
+#' within its observed arm.
 #'
 #' @section Explicit schedule schema:
 #' The function accepts only these column names, order, and storage:
@@ -250,7 +254,7 @@ plan_from_data <- function(data, rcon, instruments, extended_schedule = NULL) {
 #' | Column | Accepted storage and values | Normalized storage |
 #' |---|---|---|
 #' | `record_id` | Character, factor, integer, or finite double; nonmissing, nonblank, and unpadded | Character; character leading zeros preserved |
-#' | `instrument` | Character or factor; one selected raw instrument name per row; no missing, blank, padded, or unknown values | Character |
+#' | `instrument` | Character or factor; one project raw instrument name per row; no missing, blank, padded, or unknown values | Character |
 #' | `redcap_event_name` | Character or factor raw event names in longitudinal projects; character/factor blanks or typed missing values only in classic projects | Character; `NA_character_` in classic projects |
 #' | `repeat_instance` | Positive integer, whole number double, or digit string without leading zeros when the scheduled event or instrument repeats; typed missing or blank only when neither repeats | Integer; `NA_integer_` when neither the scheduled event nor instrument repeats |
 #'
@@ -267,8 +271,8 @@ plan_from_data <- function(data, rcon, instruments, extended_schedule = NULL) {
 #' specific classes `redcapmissing_error_argument`,
 #' `redcapmissing_error_schema`, `redcapmissing_error_project`,
 #' `redcapmissing_error_schedule`, or `redcapmissing_error_plan` as applicable.
-#' Omitting a selected instrument from `explicit_schedule` is not a warning:
-#' explicit rows are the complete requested target set.
+#' Instruments absent from `explicit_schedule` are outside the explicit plan's
+#' scope. Explicit rows are the complete requested target set.
 #'
 #' @return A validated `redcapmissing_plan` as described in **Returned plan**,
 #'   with `construction = "explicit"` and `target_source = "explicit"` for
@@ -276,33 +280,35 @@ plan_from_data <- function(data, rcon, instruments, extended_schedule = NULL) {
 #'
 #' @examples
 #' \dontrun{
-#' # records, rcon, instruments, and explicit_schedule are caller supplied.
+#' # records, rcon, and explicit_schedule are caller supplied.
 #' explicit_plan <- plan_explicit(
-#'   records, rcon, instruments, explicit_schedule
+#'   records, rcon, explicit_schedule
 #' )
 #' }
 #'
-#' @seealso [all_instruments()], [plan_from_data()], [run_plan()]
+#' @seealso [all_instruments()], [build_explicit_schedule()],
+#'   [plan_from_data()], [run_plan()]
 #' @export
-plan_explicit <- function(data, rcon, instruments, explicit_schedule) {
+plan_explicit <- function(data, rcon, explicit_schedule) {
   if (missing(data) || is.null(data)) {
     .condition_signal_error("`data` is required and cannot be `NULL`.", "argument")
   }
   if (missing(rcon) || is.null(rcon)) {
     .condition_signal_error("`rcon` is required and cannot be `NULL`.", "argument")
   }
-  if (missing(instruments) || is.null(instruments)) {
-    .condition_signal_error("`instruments` is required and cannot be `NULL`.", "argument")
-  }
   if (missing(explicit_schedule) || is.null(explicit_schedule)) {
     .condition_signal_error("`explicit_schedule` is required and cannot be `NULL`.", "argument")
   }
   snapshot <- .project_structure_build_snapshot(rcon)
-  instruments <- .schedule_validate_instruments(instruments, snapshot)
   data <- .record_normalize_export(data, snapshot, require_nonempty = FALSE)
   schedule <- .schedule_normalize_rows(
-    explicit_schedule, "explicit", snapshot, instruments, data
+    explicit_schedule,
+    "explicit",
+    snapshot,
+    snapshot$instrument_order,
+    data
   )
+  instruments <- unique(schedule$instrument)
   targets <- .assessible_target_build_scheduled(schedule, snapshot, data, "explicit")
   targets <- .assessible_target_order_rows(targets, snapshot, instruments)
   .plan_build_object("explicit", instruments, targets, snapshot)
@@ -310,7 +316,7 @@ plan_explicit <- function(data, rcon, instruments, explicit_schedule) {
 
 #' Print a REDCap missingness assessment plan
 #'
-#' The display contains the construction type, number of selected instruments,
+#' The display contains the construction type, number of stored instruments,
 #' and number of `assessible_targets` rows. Record IDs and individual targets
 #' remain in `x$assessible_targets`.
 #'
@@ -363,7 +369,7 @@ print.redcapmissing_plan <- function(x, ...) {
       !plan$construction %in% c("from_data", "explicit")) {
     .condition_signal_error("`plan` has an unsupported schema version or construction type.", "plan")
   }
-  if (!is.character(plan$instruments) || !length(plan$instruments) || anyNA(plan$instruments) ||
+  if (!is.character(plan$instruments) || anyNA(plan$instruments) ||
       any(plan$instruments == "") || any(trimws(plan$instruments) != plan$instruments) ||
       anyDuplicated(plan$instruments)) {
     .condition_signal_error("`plan$instruments` is malformed.", "plan")
@@ -413,6 +419,13 @@ print.redcapmissing_plan <- function(x, ...) {
     is.character(targets$redcap_event_name) && is.character(targets$repeat_instrument) &&
     is.integer(targets$repeat_instance) && is.character(targets$target_source)
   if (!valid_schema) .condition_signal_error("`plan$assessible_targets` has an invalid schema.", "plan")
+  invalid_instrument_scope <-
+    (identical(plan$construction, "from_data") && !length(plan$instruments)) ||
+    (identical(plan$construction, "explicit") &&
+      !identical(plan$instruments, unique(targets$instrument)))
+  if (invalid_instrument_scope) {
+    .condition_signal_error("`plan$instruments` is malformed.", "plan")
+  }
   if (nrow(targets)) {
     valid_sources <- if (identical(plan$construction, "explicit")) "explicit" else c("observed", "extended", "observed+extended")
     event_invalid <- if (isTRUE(plan$project$longitudinal)) {

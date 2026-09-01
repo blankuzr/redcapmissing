@@ -64,7 +64,7 @@ test_that("zero targets produce empty report components", {
     record_id = character(), instrument = character(),
     redcap_event_name = character(), repeat_instance = integer()
   )
-  plan <- plan_explicit(data, rcon, "baseline_form", schedule)
+  plan <- plan_explicit(data, rcon, schedule)
   result <- run_plan(plan, data, rcon, details = TRUE, progress = FALSE)
 
   expect_identical(nrow(result$target_results), 0L)
@@ -80,7 +80,7 @@ test_that("fully gated targets reconcile report evidence", {
     record_id = "absent", instrument = "baseline_form",
     redcap_event_name = "baseline_arm_1", repeat_instance = NA_integer_
   )
-  plan <- plan_explicit(data, rcon, "baseline_form", schedule)
+  plan <- plan_explicit(data, rcon, schedule)
   result <- run_plan(plan, data, rcon, details = TRUE, progress = FALSE)
 
   expect_identical(result$target_results$event_row_started, "failed")
@@ -234,7 +234,6 @@ test_that("a frozen target without a runtime row reconciles summary and missing"
   plan <- plan_explicit(
     planner_data,
     rcon,
-    "baseline_form",
     run_plan_explicit_schedule("absent")
   )
   result <- run_plan(
@@ -282,7 +281,7 @@ test_that("explicit zero-target reports retain typed empty components", {
   rcon <- run_plan_rcon()
   data <- run_plan_data()
   schedule <- run_plan_explicit_schedule()[0, ]
-  plan <- plan_explicit(data, rcon, "baseline_form", schedule)
+  plan <- plan_explicit(data, rcon, schedule)
   result <- run_plan(plan, data, rcon, progress = FALSE)
 
   expect_equal(nrow(result$summary), 0L)
@@ -299,7 +298,6 @@ test_that("zero-target reports omit summary and missing rows", {
   classic_plan <- plan_explicit(
     run_plan_data(),
     classic_rcon,
-    "baseline_form",
     run_plan_explicit_schedule()[0, , drop = FALSE]
   )
   classic <- run_plan(

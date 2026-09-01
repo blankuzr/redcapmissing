@@ -95,7 +95,7 @@ test_that("required constructor arguments and instrument vectors fail with class
     class = "redcapmissing_error_argument"
   )
   expect_error(
-    plan_explicit(data, rcon, "demographics"),
+    plan_explicit(data, rcon),
     class = "redcapmissing_error_argument"
   )
 })
@@ -242,8 +242,13 @@ test_that("plan validation rejects malformed components and target invariants", 
   empty_plan <- plan_explicit(
     empty_data,
     rcon,
-    "demographics",
     empty_schedule
+  )
+  invalid_empty_scope <- empty_plan
+  invalid_empty_scope$instruments <- "demographics"
+  expect_error(
+    redcapmissing:::.plan_validate_object(invalid_empty_scope),
+    class = "redcapmissing_error_plan"
   )
   empty_plan$construction <- factor("explicit")
   expect_error(

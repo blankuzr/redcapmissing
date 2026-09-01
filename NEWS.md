@@ -1,5 +1,22 @@
 # redcapmissing 7.0.0
 
+## 2026-09-01
+
+- Added `build_explicit_schedule()` to discover a project's record-ID field,
+  validate filtered mapping specifications against REDCap structure, and cross
+  them with unique cohort IDs into the four-column schedule consumed by
+  `plan_explicit()`. Independently built cohort schedules compose with
+  `dplyr::bind_rows()`.
+- Removed the separate `instruments` argument from `plan_explicit()` without a
+  compatibility path. The explicit schedule is now the complete assessment
+  declaration: the plan derives unique instruments in normalized schedule
+  first-appearance order, and a zero-row schedule produces `character()`
+  instrument scope.
+- Fixed `all_instruments()` and project snapshot construction so surrounding
+  whitespace in optional instrument, event, and arm display labels is trimmed,
+  blank labels use existing fallbacks, and strict raw structural identifiers
+  remain unchanged.
+
 ## 2026-08-12
 
 - Set the package startup banner's release label to `run_plan() workflow` for

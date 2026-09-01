@@ -80,5 +80,6 @@ plan <- plan_from_data(
 
 }
 \seealso{
-\code{\link[=all_instruments]{all_instruments()}}, \code{\link[=plan_from_data]{plan_from_data()}}
+\code{\link[=all_instruments]{all_instruments()}}, \code{\link[=build_explicit_schedule]{build_explicit_schedule()}},
+\code{\link[=plan_from_data]{plan_from_data()}}
 }

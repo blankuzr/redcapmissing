@@ -15,7 +15,7 @@
 \code{x}, invisibly.
 }
 \description{
-The display contains the construction type, number of selected instruments,
+The display contains the construction type, number of stored instruments,
 and number of \code{assessible_targets} rows. Record IDs and individual targets
 remain in \code{x$assessible_targets}.
 }

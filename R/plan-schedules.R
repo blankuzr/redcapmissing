@@ -67,7 +67,8 @@
 #' )
 #' }
 #'
-#' @seealso [all_instruments()], [plan_from_data()]
+#' @seealso [all_instruments()], [build_explicit_schedule()],
+#'   [plan_from_data()]
 #' @export
 build_extended_schedule <- function(
   rcon,
@@ -98,6 +99,244 @@ build_extended_schedule <- function(
     }
   }
   schedule
+}
+
+#' Build a project-aware explicit assessment schedule
+#'
+#' `build_explicit_schedule()` crosses a set of project record IDs with an
+#' explicit specification of allowable REDCap instrument-event targets. It
+#' discovers the project's record-ID field from `rcon`, so callers can pipe
+#' project-shaped cohort data directly into the builder without renaming that
+#' field to `record_id` first.
+#'
+#' @param data A data frame containing the exact project record-ID field
+#'   discovered from `rcon`. Other columns are ignored. Record IDs are
+#'   normalized to character and treated as a set, retaining first-appearance
+#'   order.
+#' @param rcon A `redcapAPI` connection inheriting from
+#'   `redcapApiConnection`, as created by [redcapAPI::redcapConnection()], or
+#'   `redcapOfflineConnection`, as created by [redcapAPI::offlineConnection()]
+#'   or [redcapAPI::readPreservedProject()]. It must expose project
+#'   information, metadata, instruments, and applicable arms, events,
+#'   mappings, and repeat configuration.
+#' @param explicit_spec A data frame containing exactly one event alias,
+#'   either `unique_event_name` or `redcap_event_name`, and exactly one
+#'   instrument alias, either `form` or `instrument`. An optional
+#'   `repeat_instance` column supplies positive repeat instances. When it is
+#'   absent, missing instances are used. Other columns are ignored, which
+#'   permits filtered rows from `rcon$mapping()` to be supplied directly.
+#'
+#' @details
+#' Each normalized record ID is crossed with every row of `explicit_spec`.
+#' Output uses record-first order and preserves specification row order within
+#' each record. Duplicate normalized specification rows are rejected.
+#'
+#' The specification is checked against the current project structure. Raw
+#' instruments and events must exist and form an allowable crossing. Classic
+#' projects require missing events. Longitudinal projects require raw event
+#' names. Repeating crossings require a supplied positive instance, whereas
+#' nonrepeating crossings require a missing instance.
+#'
+#' The function reads structural surfaces from `rcon` but never exports
+#' records. [plan_explicit()] revalidates the complete schedule and remains
+#' responsible for checking consistency between scheduled record arms and the
+#' physical `data` passed to that planner.
+#'
+#' @return An ordinary tibble with exactly four columns: character
+#'   `record_id`, character `instrument`, character `redcap_event_name`, and
+#'   integer `repeat_instance`, in that order. If `data` has no records or
+#'   `explicit_spec` has no rows, a correctly typed zero-row tibble is
+#'   returned.
+#'
+#' @section Conditions:
+#' Argument, schema, project, and schedule failures inherit from
+#' `redcapmissing_error`. Expansion is rejected before allocation if its
+#' Cartesian row count exceeds R's integer row limit.
+#'
+#' @examples
+#' \dontrun{
+#' explicit_spec <- rcon$mapping() |>
+#'   dplyr::filter(unique_event_name %in% desired_events)
+#'
+#' explicit_schedule <- data.frame(
+#'   participant_id = c("001", "002", "003")
+#' ) |>
+#'   build_explicit_schedule(rcon, explicit_spec)
+#'
+#' explicit_plan <- plan_explicit(
+#'   records,
+#'   rcon,
+#'   explicit_schedule = explicit_schedule
+#' )
+#' }
+#'
+#' @seealso [all_instruments()], [build_extended_schedule()],
+#'   [plan_explicit()]
+#' @export
+build_explicit_schedule <- function(data, rcon, explicit_spec) {
+  if (missing(data) || is.null(data)) {
+    .condition_signal_error("`data` is required and cannot be `NULL`.", "argument")
+  }
+  if (missing(rcon) || is.null(rcon)) {
+    .condition_signal_error("`rcon` is required and cannot be `NULL`.", "argument")
+  }
+  if (missing(explicit_spec) || is.null(explicit_spec)) {
+    .condition_signal_error(
+      "`explicit_spec` is required and cannot be `NULL`.",
+      "argument"
+    )
+  }
+
+  snapshot <- .project_structure_build_snapshot(rcon)
+  .schedule_validate_data_frame(data, "data")
+  record_id_column <- .schedule_resolve_required_column(
+    data,
+    snapshot$project$record_id_field,
+    "data"
+  )
+  .schedule_validate_vector_storage(
+    data[[record_id_column]],
+    paste0("data$", snapshot$project$record_id_field)
+  )
+  record_id <- unique(.schema_normalize_required_id(
+    data[[record_id_column]],
+    paste0("data$", snapshot$project$record_id_field)
+  ))
+
+  .schedule_validate_data_frame(explicit_spec, "explicit_spec")
+  event_column <- .schedule_resolve_spec_alias(
+    explicit_spec,
+    c("unique_event_name", "redcap_event_name"),
+    "event"
+  )
+  instrument_column <- .schedule_resolve_spec_alias(
+    explicit_spec,
+    c("form", "instrument"),
+    "instrument"
+  )
+  .schedule_validate_vector_storage(
+    explicit_spec[[event_column]],
+    paste0("explicit_spec$", names(explicit_spec)[[event_column]])
+  )
+  .schedule_validate_vector_storage(
+    explicit_spec[[instrument_column]],
+    paste0("explicit_spec$", names(explicit_spec)[[instrument_column]])
+  )
+  repeat_columns <- which(names(explicit_spec) == "repeat_instance")
+  if (length(repeat_columns) > 1L) {
+    .condition_signal_error(
+      "`explicit_spec` must contain at most one `repeat_instance` column.",
+      "schedule"
+    )
+  }
+  repeat_instance <- if (length(repeat_columns)) {
+    .schedule_validate_vector_storage(
+      explicit_spec[[repeat_columns[[1L]]]],
+      "explicit_spec$repeat_instance"
+    )
+    explicit_spec[[repeat_columns[[1L]]]]
+  } else {
+    rep(NA_integer_, nrow(explicit_spec))
+  }
+  specification <- tibble::tibble(
+    instrument = explicit_spec[[instrument_column]],
+    redcap_event_name = explicit_spec[[event_column]],
+    repeat_instance = repeat_instance
+  )
+  specification <- .schedule_normalize_rows(
+    specification,
+    "extended",
+    snapshot,
+    snapshot$instrument_order,
+    tibble::tibble(),
+    source = "explicit_spec"
+  )[, c("instrument", "redcap_event_name", "repeat_instance")]
+
+  output <- .schedule_explicit_prototype()
+  if (!length(record_id) || !nrow(specification)) return(output)
+  .schedule_preflight_expansion_size(length(record_id), nrow(specification))
+  record_rows <- rep(seq_along(record_id), each = nrow(specification))
+  specification_rows <- rep(
+    seq_len(nrow(specification)),
+    times = length(record_id)
+  )
+  tibble::tibble(
+    record_id = record_id[record_rows],
+    instrument = specification$instrument[specification_rows],
+    redcap_event_name = specification$redcap_event_name[specification_rows],
+    repeat_instance = specification$repeat_instance[specification_rows]
+  )
+}
+
+.schedule_explicit_prototype <- function() {
+  tibble::tibble(
+    record_id = character(),
+    instrument = character(),
+    redcap_event_name = character(),
+    repeat_instance = integer()
+  )
+}
+
+.schedule_validate_data_frame <- function(data, source) {
+  if (!is.data.frame(data)) {
+    .condition_signal_error(paste0("`", source, "` must be a data frame."), "argument")
+  }
+  invisible(data)
+}
+
+.schedule_validate_vector_storage <- function(x, source) {
+  if (!is.atomic(x) || !is.null(dim(x))) {
+    .condition_signal_error(
+      paste0("`", source, "` must use ordinary atomic vector storage."),
+      "schema"
+    )
+  }
+  invisible(x)
+}
+
+.schedule_resolve_required_column <- function(data, column, source) {
+  found <- which(names(data) == column)
+  if (!length(found)) {
+    .condition_signal_error(
+      paste0("`", source, "` is missing required column: ", column, "."),
+      "schema"
+    )
+  }
+  if (length(found) > 1L) {
+    .condition_signal_error(
+      paste0("`", source, "` must contain exactly one `", column, "` column."),
+      "schema"
+    )
+  }
+  found[[1L]]
+}
+
+.schedule_resolve_spec_alias <- function(data, aliases, dimension) {
+  found <- which(names(data) %in% aliases)
+  if (length(found) != 1L) {
+    .condition_signal_error(
+      paste0(
+        "`explicit_spec` must contain exactly one ", dimension,
+        " column: ", paste0("`", aliases, "`", collapse = " or "), "."
+      ),
+      "schedule"
+    )
+  }
+  found[[1L]]
+}
+
+.schedule_preflight_expansion_size <- function(record_count, specification_count) {
+  row_count <- as.double(record_count) * as.double(specification_count)
+  if (!is.finite(row_count) || row_count > .Machine$integer.max) {
+    .condition_signal_error(
+      paste0(
+        "The explicit schedule Cartesian expansion cannot be represented ",
+        "safely within R's integer row limit."
+      ),
+      "schedule"
+    )
+  }
+  invisible(as.integer(row_count))
 }
 
 .schedule_warn_empty_arm <- function(events) {
@@ -241,8 +480,14 @@ build_extended_schedule <- function(
   }
 }
 
-.schedule_normalize_rows <- function(schedule, type, snapshot, instruments, data) {
-  source <- paste0(type, "_schedule")
+.schedule_normalize_rows <- function(
+  schedule,
+  type,
+  snapshot,
+  instruments,
+  data,
+  source = paste0(type, "_schedule")
+) {
   expected <- .schedule_list_columns(type)
   if (!is.data.frame(schedule)) .condition_signal_error(paste0("`", source, "` must be a data frame."), "argument")
   if (!identical(names(schedule), expected)) {
@@ -262,6 +507,18 @@ build_extended_schedule <- function(
   }
   if (!isTRUE(snapshot$project$longitudinal) && any(!is.na(event))) {
     .condition_signal_error(paste0("`", source, "$redcap_event_name` must be missing in a classic project."), "schedule")
+  }
+  if (isTRUE(snapshot$project$longitudinal)) {
+    unknown_event <- setdiff(unique(event), snapshot$event_order)
+    if (length(unknown_event)) {
+      .condition_signal_error(
+        paste0(
+          "`", source, "$redcap_event_name` contains unknown raw event names: ",
+          paste(unknown_event, collapse = ", "), "."
+        ),
+        "schedule"
+      )
+    }
   }
   instance <- .schema_normalize_repeat_instance(schedule$repeat_instance, paste0(source, "$repeat_instance"))
   record_id <- if (identical(type, "explicit")) {

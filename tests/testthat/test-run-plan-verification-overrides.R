@@ -51,7 +51,7 @@ test_that("verification preserves a failed repeat instance gate", {
     record_id = "1", instrument = "baseline_form",
     redcap_event_name = NA_character_, repeat_instance = 2L
   )
-  plan <- plan_explicit(data, rcon, "baseline_form", schedule)
+  plan <- plan_explicit(data, rcon, schedule)
   issue <- run_plan_verified_row()
   issue$repeat_instrument <- "baseline_form"
   issue$instance <- 2L
@@ -219,7 +219,7 @@ test_that("verification cannot bypass a failed event gate", {
     redcap_event_name = "visit_arm_1",
     repeat_instance = 2L
   )
-  plan <- plan_explicit(data, rcon, "diary", schedule)
+  plan <- plan_explicit(data, rcon, schedule)
   evidence <- run_plan_verified_row(
     record = "1",
     field_name = "diary_value"
