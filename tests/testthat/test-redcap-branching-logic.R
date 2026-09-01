@@ -105,6 +105,21 @@ test_that("malformed branching logic raises a package project condition", {
   )
 })
 
+test_that("year extracts REDCap date and datetime year components", {
+  expect_identical(
+    .branching_logic_compute_year(c(
+      "2015-06-30",
+      "07-01-2016",
+      "31/12/2017",
+      "2018-01-02 03:04:05",
+      "",
+      NA_character_,
+      "2019-02-29"
+    )),
+    c(2015L, 2016L, 2017L, 2018L, NA_integer_, NA_integer_, NA_integer_)
+  )
+})
+
 run_plan_cross_event_fixture <- function() {
   metadata <- dplyr::bind_rows(
     meta_row("record_id", "baseline", required = "y"),
@@ -238,6 +253,51 @@ test_that("cross-event branching uses the matching record and event context", {
   )
   expect_identical(closed$target_results$event_row_started, "passed")
   expect_identical(closed$target_results$instrument_started, "passed")
+  expect_identical(closed$target_results$field_complete, "not applicable")
+  expect_identical(
+    closed$target_results$field_applicability_reason,
+    "no fields apply after branching logic"
+  )
+})
+
+test_that("year evaluates cross-event REDCap date branching logic", {
+  fixture <- run_plan_cross_event_fixture()
+  metadata <- fixture$metadata
+  metadata$field_name[metadata$field_name == "trigger"] <- "consent_date"
+  metadata$text_validation_type_or_show_slider_number[
+    metadata$field_name == "consent_date"
+  ] <- "date_ymd"
+  metadata$branching_logic[metadata$field_name == "conditional"] <-
+    "year([baseline_arm_1][consent_date]) > 2014"
+  fixture$rcon$metadata <- function() metadata
+
+  data <- fixture$data
+  data$consent_date <- data$trigger
+  data$trigger <- NULL
+  data$consent_date[[1L]] <- "2015-06-30"
+  plan <- plan_from_data(data, fixture$rcon, "followup")
+
+  open <- run_plan(
+    plan,
+    data,
+    fixture$rcon,
+    details = TRUE,
+    progress = FALSE
+  )
+  conditional <- open$details[
+    open$details$validation_check == "field-complete",
+  ]
+  expect_identical(conditional$field_name, "conditional")
+  expect_true(conditional$branch_satisfied)
+
+  data$consent_date[[1L]] <- "2014-12-31"
+  closed <- run_plan(
+    plan,
+    data,
+    fixture$rcon,
+    details = TRUE,
+    progress = FALSE
+  )
   expect_identical(closed$target_results$field_complete, "not applicable")
   expect_identical(
     closed$target_results$field_applicability_reason,

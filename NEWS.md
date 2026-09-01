@@ -2,6 +2,9 @@
 
 ## 2026-09-01
 
+- Added REDCap `year(date)` support to branching-logic evaluation, including
+  cross-event field references and valid YMD, MDY, and DMY date/datetime
+  values. Blank or invalid dates leave the branch unsatisfied.
 - Added `build_explicit_schedule()` to discover a project's record-ID field,
   validate filtered mapping specifications against REDCap structure, and cross
   them with unique cohort IDs into the four-column schedule consumed by

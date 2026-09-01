@@ -161,6 +161,9 @@ source event also contains repeated rows. When no such row exists, one
 source row with a positive repeat instance is unambiguous and may be used;
 multiple source rows with positive repeat instances are ambiguous and raise
 a project error because no single instance can be selected.
+REDCap \code{year(date)} expressions are supported for date and datetime values
+in YMD, MDY, or DMY order with hyphen or slash separators. Blank or invalid
+date values return a missing year and do not satisfy the branch.
 Fields closed by branching logic are not assessed.
 Checkbox roots are complete when at least one exported child choice is
 selected. Every targeted response, checkbox child, and branching dependency

@@ -124,6 +124,7 @@
   env$datediff <- function(date1, date2, units = "d", dateformat = "ymd", ...) {
     .branching_logic_compute_date_difference(date1 = date1, date2 = date2, units = units)
   }
+  env$year <- .branching_logic_compute_year
   env$.redcap_if <- function(condition, yes, no) {
     ifelse(condition, yes, no)
   }
@@ -718,4 +719,34 @@
     years = diff_days / 365.25,
     diff_days
   )
+}
+
+.branching_logic_compute_year <- function(date) {
+  date <- trimws(.schema_normalize_character_vector(date))
+  blank <- .schema_detect_blank_values(date)
+  date <- sub("[ T].*$", "", date)
+  date <- chartr("/", "-", date)
+
+  parsed <- rep.int(as.Date(NA), length(date))
+  formats <- c("%Y-%m-%d", "%m-%d-%Y", "%d-%m-%Y")
+  patterns <- c(
+    "^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}$",
+    "^[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}$",
+    "^[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}$"
+  )
+  for (index in seq_along(formats)) {
+    candidate <- rep.int(as.Date(NA), length(date))
+    matches <- grepl(patterns[[index]], date)
+    candidate[matches] <- suppressWarnings(as.Date(
+      date[matches],
+      format = formats[[index]]
+    ))
+    replace <- is.na(parsed) & !is.na(candidate)
+    parsed[replace] <- candidate[replace]
+  }
+
+  year <- rep.int(NA_integer_, length(parsed))
+  present <- !is.na(parsed) & !blank
+  year[present] <- as.integer(format(parsed[present], "%Y"))
+  year
 }
