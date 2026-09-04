@@ -57,10 +57,10 @@ nonmissing, nonblank, unpadded REDCap metadata field types. \code{NULL} and
 \code{character(0)} exclude no types. Explicitly supplied unknown or unused types
 are errors. The default removes \code{"descriptive"} fields when present.}
 
-\item{verified}{\code{NULL}, or a data frame containing verification evidence with
-the nine required columns documented in \strong{Verification}. Extra columns are
-ignored. It must be supplied together with \code{verified_user}; a complete
-empty table is valid.}
+\item{verified}{\code{NULL}, or a data frame such as the result of
+\code{\link[=export_data_quality]{export_data_quality()}}, containing the nine required columns documented
+in \strong{Verification}. Extra columns are ignored. It must be supplied
+together with \code{verified_user}; a complete empty table is valid.}
 
 \item{verified_user}{\code{NULL}, or one exact, nonmissing, nonblank, unpadded
 character username. Matching is case sensitive. It must be supplied
@@ -188,53 +188,73 @@ independent of response missingness.
 
 \section{Verification}{
 
-When \code{verified} is supplied, each of these column names must occur exactly
-once. A table with zero rows is accepted after that name check. The storage
-rules below are checked when rows exist, and every row is validated before
-username or status filtering:\tabular{lll}{
+This optional integration uses Data Resolution Workflow history from
+\code{\link[=export_data_quality]{export_data_quality()}}. Pass its returned table directly as \code{verified},
+together with the exact \code{verified_user}. Projects without this workflow can
+leave both arguments \code{NULL}.
+
+Each of these column names must occur exactly once. Extra columns are
+ignored, and a complete zero-row table is valid regardless of column storage.\tabular{lll}{
    Column \tab Accepted storage and values \tab Internal normalization \cr
-   \code{project_id} \tab Character, integer, or whole number finite double; exact project match \tab Character \cr
-   \code{record} \tab Character, factor, integer, or finite double; nonmissing, nonblank, unpadded \tab Character \cr
-   \code{event_id} \tab Longitudinal project: positive character digits without leading zeros, integer, or whole number double. Classic project: typed missing or character blank only \tab Character event ID and mapped raw event name for a longitudinal project; \code{NA_character_} for a classic project \cr
-   \code{field_name} \tab Character; exact nonblank, unpadded raw metadata field name \tab Character \cr
-   \code{repeat_instrument} \tab Character raw instrument, or character blank/typed missing only where inapplicable \tab Character; inapplicable values become \code{NA_character_} \cr
-   \code{instance} \tab Positive character digits without leading zeros, integer, or whole number double; typed missing/blank only where inapplicable \tab Integer; inapplicable values become \code{NA_integer_} \cr
-   \code{ts} \tab Nonmissing \code{POSIXct}, or a REDCap/ISO-8601 character timestamp with date, seconds, optional fractional seconds, and optional \code{Z} or numeric offset \tab \code{POSIXct} in UTC; text without a timezone is interpreted as UTC \cr
-   \code{current_query_status} \tab Character; nonmissing, nonblank, unpadded, case sensitive \tab Character \cr
-   \code{username} \tab Character; nonmissing, nonblank, unpadded, case sensitive \tab Character \cr
+   \code{project_id} \tab Character, integer, or finite whole number double; exact project match \tab Character \cr
+   \code{record} \tab Character, factor, integer, or finite double; nonmissing, nonblank, unpadded \tab Character; leading zeros in character IDs are preserved \cr
+   \code{event_id} \tab Positive character digits without leading zeros, integer, or whole number double; missing/blank also accepted in classic projects \tab Raw event name in longitudinal projects; a consistent classic internal event ID becomes \code{NA_character_} \cr
+   \code{field_name} \tab Character; nonblank, unpadded raw field name \tab Character \cr
+   \code{repeat_instrument} \tab Character raw instrument, or blank/typed missing where inapplicable \tab Character or \code{NA_character_} \cr
+   \code{instance} \tab Positive character digits without leading zeros, integer, or whole number double; missing/blank where inapplicable \tab Integer; native placeholder \code{1} becomes \code{NA_integer_} for a nonrepeating target \cr
+   \code{ts} \tab Nonmissing \code{POSIXct}, or character date and time through seconds, optional fractional seconds, and optional \code{Z} or numeric offset \tab \code{POSIXct} in UTC; text without a timezone is interpreted as UTC \cr
+   \code{current_query_status} \tab Character, blank, or typed missing; nonblank values must be unpadded \tab Character, case preserved; blank becomes \code{NA_character_} \cr
+   \code{username} \tab Character, blank, or typed missing; nonblank values must be unpadded \tab Character, case preserved; blank becomes \code{NA_character_} \cr
 }
 
 
-In a classic project, every \code{event_id} must be missing or blank. Any
-nonmissing value is an error and is never discarded during matching. In a
-longitudinal project, every \code{event_id} must identify a known project event.
-Inapplicable repeat dimensions must normalize to typed missing values;
-applicable dimensions must exactly match an \code{assessible_targets} row.
-\code{NaN}, infinity, padded identifiers, invalid timestamps, unknown
-project/event/field contexts, illegal repeat shapes, and verification
-contexts outside the plan are errors.
+Integer dimensions must be within R's integer range. Factors are rejected
+except for \code{record}. Nullable text and integer dimensions accept an
+all-missing logical, integer, or double column; \code{NaN} is invalid.
+Timestamp text uses a space or \code{T} between date and time; numeric offsets
+use \code{+HHMM}, \code{-HHMM}, \code{+HH:MM}, or \code{-HH:MM}.
 
-Rows are filtered to exact \code{verified_user}, grouped by normalized field
-context, and reduced to the latest timestamp. Identical rows tied at the
-latest timestamp collapse; conflicting latest ties error. A verification
-override is eligible only when the latest row for the exact selected user
-and normalized field context has status \code{"VERIFIED"}, the target has passed
-its upstream gates and instrument start check, the field remains selected
-and applicable, and its raw \code{field-complete} disposition is \code{"failed"}.
-Eligible rows change the effective disposition to \code{"passed"}. The stored
-verification component contains audit counts. Supplied rows are excluded.
+The table structure and project identity are checked first. Evidence may
+include contexts outside \code{plan}: well-formed nonmatching records, events,
+instruments, repeat contexts, and fields are silently discarded before
+resolution contents are validated. They do not add assessment targets.
+Malformed identifiers still raise errors. In a classic project, candidate
+rows may use missing event IDs or one consistent positive internal event ID.
+Actual repeating instances and their instrument/event relationships are
+preserved.
 
-With \code{verified = NULL} and \code{verified_user = NULL}, verification is disabled
-and the audit values are exactly \code{enabled = FALSE},
-\code{verified_user = NA_character_}, and \code{input_rows = 0L}, \code{user_rows = 0L},
-\code{latest_user_rows = 0L}, \code{verified_rows = 0L}, and
-\code{overrides_applied = 0L}.
+For matching contexts, issue-only rows and entries without a username are
+quietly ignored. Entries with an identifiable reviewer require a valid
+timestamp, including entries from other reviewers.
 
-A complete zero-row \code{verified} table supplied with \code{verified_user} enables
-verification. Its audit values are exactly \code{enabled = TRUE},
-\code{verified_user} equal to the supplied character value, and
-\code{input_rows = 0L}, \code{user_rows = 0L}, \code{latest_user_rows = 0L},
-\code{verified_rows = 0L}, and \code{overrides_applied = 0L}.
+Rows are then filtered to exact \code{verified_user}, grouped by normalized
+record, event, repeat instrument, repeat instance, and field, and reduced to
+the latest timestamp. Identical rows tied at the latest timestamp collapse;
+conflicting latest ties error. A missing or blank latest status quietly
+prevents an override, as does any status other than exact \code{"VERIFIED"}.
+An older verification is never used instead. Issue-level \code{query_status}
+and \code{assigned_username} do not affect this selection.
+
+An override is eligible only when the target has passed its upstream gates
+and instrument start check, the field remains selected and applicable, and
+its raw \code{field-complete} disposition is \code{"failed"}. Eligible evidence
+changes the effective disposition to \code{"passed"}.
+
+The \code{verification} component contains seven audit fields:
+\code{enabled}, \code{verified_user}, \code{input_rows}, \code{user_rows},
+\code{latest_user_rows}, \code{verified_rows}, and \code{overrides_applied}.
+\code{input_rows} counts all supplied rows; \code{user_rows} counts all supplied
+rows whose username exactly matches the selected reviewer, including
+contexts outside the plan. \code{latest_user_rows} counts in-plan contexts
+retained after latest-entry selection and duplicate collapse, including
+missing latest statuses. \code{verified_rows} counts those retained entries
+with exact \code{"VERIFIED"}; \code{overrides_applied} counts failed field results
+actually changed to passes. Raw supplied history is excluded from the report.
+
+With both arguments \code{NULL}, verification is disabled: \code{enabled = FALSE},
+\code{verified_user = NA_character_}, and every count is \code{0L}.
+A complete empty table with \code{verified_user} enables verification and
+retains that username, with every count \code{0L}.
 }
 
 \section{Return value}{

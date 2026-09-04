@@ -198,14 +198,8 @@
   longitudinal <- isTRUE(snapshot$project$longitudinal)
   normalized_id <- .verification_normalize_positive_integer(event_id, "event_id", nullable = !longitudinal)
   if (!longitudinal) {
-    nonmissing_rows <- which(!is.na(normalized_id))
-    if (length(nonmissing_rows)) {
-      .verification_signal_error(paste0(
-        "For a classic project, `verified$event_id` must contain only missing ",
-        "or blank values; nonmissing value(s) were found in row(s): ",
-        paste(nonmissing_rows, collapse = ", "),
-        "."
-      ))
+    if (length(unique(normalized_id[!is.na(normalized_id)])) > 1L) {
+      .verification_signal_error("A classic project's internal event ID must be consistent.")
     }
     return(list(
       event_id = rep(NA_character_, length(normalized_id)),
@@ -219,7 +213,6 @@
   source_id <- as.character(events$event_id)
   if (anyDuplicated(source_id)) .verification_signal_error("`rcon` maps at least one event ID more than once.")
   index <- match(as.character(normalized_id), source_id)
-  if (anyNA(index)) .verification_signal_error("`verified$event_id` contains an unknown event ID.")
   list(event_id = as.character(normalized_id),
        redcap_event_name = as.character(events$redcap_event_name[index]))
 }
@@ -296,15 +289,6 @@
   rows$project_id <- .verification_normalize_identifier(rows$project_id, "project_id", whole_numeric = TRUE)
   rows$record <- .verification_normalize_identifier(rows$record, "record", allow_factor = TRUE)
   rows$field_name <- .verification_normalize_nonblank_character(rows$field_name, "field_name")
-  rows$current_query_status <- .verification_normalize_nonblank_character(rows$current_query_status, "current_query_status")
-  rows$username <- .verification_normalize_nonblank_character(rows$username, "username")
-  rows$repeat_instrument <- .verification_normalize_nullable_character(rows$repeat_instrument, "repeat_instrument")
-  rows$instance <- .verification_normalize_positive_integer(rows$instance, "instance", nullable = TRUE)
-  rows$ts <- .verification_normalize_timestamp(rows$ts)
-  event <- .verification_map_events(rows$event_id, snapshot)
-  rows$event_id <- event$event_id
-  rows$redcap_event_name <- event$redcap_event_name
-
   project_id <- as.character(snapshot$project$project_id)
   if (length(project_id) != 1L || is.na(project_id) || !nzchar(project_id)) {
     .verification_signal_error("`rcon` does not provide one usable project ID.")
@@ -312,11 +296,32 @@
   if (any(rows$project_id != project_id)) {
     .verification_signal_error("`verified$project_id` does not match the project represented by the plan.")
   }
+  # These audit counts describe the supplied table, including out-of-plan rows.
+  user_count <- if (is.character(rows$username)) {
+    sum(rows$username == verified_user, na.rm = TRUE)
+  } else 0L
+  empty <- list(
+    contexts = .verification_build_context_prototype(),
+    audit = .verification_build_audit(
+      enabled = TRUE, verified_user = verified_user,
+      input_rows = input_rows, user_rows = user_count
+    )
+  )
   meta <- snapshot$metadata
   meta_index <- match(rows$field_name, as.character(meta$field_name))
-  if (anyNA(meta_index)) .verification_signal_error("`verified$field_name` contains an unknown raw field name.")
   field_instrument <- as.character(meta$form_name[meta_index])
   targets <- plan$assessible_targets
+  candidate <- rows$record %in% targets$record_id &
+    !is.na(meta_index) & field_instrument %in% targets$instrument
+  rows <- rows[candidate, , drop = FALSE]
+  field_instrument <- field_instrument[candidate]
+  if (!nrow(rows)) return(empty)
+
+  rows$repeat_instrument <- .verification_normalize_nullable_character(rows$repeat_instrument, "repeat_instrument")
+  rows$instance <- .verification_normalize_positive_integer(rows$instance, "instance", nullable = TRUE)
+  event <- .verification_map_events(rows$event_id, snapshot)
+  rows$event_id <- event$event_id
+  rows$redcap_event_name <- event$redcap_event_name
   target_context <- tibble::tibble(
     record_id = targets$record_id,
     redcap_event_name = targets$redcap_event_name,
@@ -332,17 +337,31 @@
     instrument = field_instrument
   )
   target_count <- nrow(target_context)
+  # A native instance of 1 is a placeholder only for a nonrepeating target.
+  context_columns <- setdiff(names(target_context), "repeat_instance")
+  context_groups <- .verification_build_group_id(dplyr::bind_rows(
+    target_context[, context_columns], row_target_context[, context_columns]
+  ))
+  nonrepeat_groups <- context_groups[seq_len(target_count)][is.na(targets$repeat_instance)]
+  row_groups <- context_groups[target_count + seq_len(nrow(rows))]
+  placeholder <- row_groups %in% nonrepeat_groups & rows$instance %in% 1L
+  rows$instance[placeholder] <- NA_integer_
+  row_target_context$repeat_instance <- rows$instance
   target_groups <- .verification_build_group_id(dplyr::bind_rows(
     target_context,
     row_target_context
   ))
   plan_groups <- target_groups[seq_len(target_count)]
   verified_groups <- target_groups[target_count + seq_len(nrow(row_target_context))]
-  if (any(!verified_groups %in% plan_groups)) {
-    .verification_signal_error(
-      "`verified` contains a field context that is not in `assessible_targets`."
-    )
-  }
+  rows <- rows[verified_groups %in% plan_groups, , drop = FALSE]
+  if (!nrow(rows)) return(empty)
+
+  # Issue-only and anonymous entries cannot identify reviewer evidence.
+  rows$username <- .verification_normalize_nullable_character(rows$username, "username")
+  rows <- rows[!is.na(rows$username), , drop = FALSE]
+  if (!nrow(rows)) return(empty)
+  rows$ts <- .verification_normalize_timestamp(rows$ts)
+  rows$current_query_status <- .verification_normalize_nullable_character(rows$current_query_status, "current_query_status")
   rows$.field_group <- .verification_build_group_id(tibble::tibble(
     record_id = rows$record,
     redcap_event_name = rows$redcap_event_name,
@@ -351,17 +370,7 @@
     field_name = rows$field_name
   ))
   user_rows <- rows[rows$username == verified_user, , drop = FALSE]
-  user_count <- nrow(user_rows)
-  if (!user_count) {
-    return(list(
-      contexts = .verification_build_context_prototype(),
-      audit = .verification_build_audit(
-        enabled = TRUE,
-        verified_user = verified_user,
-        input_rows = input_rows
-      )
-    ))
-  }
+  if (!nrow(user_rows)) return(empty)
 
   user_seconds <- as.numeric(user_rows$ts)
   ordering <- order(user_rows$.field_group, -user_seconds, method = "radix")
@@ -380,7 +389,7 @@
   if (anyDuplicated(latest$.field_group)) {
     .verification_signal_error("Conflicting verification rows share the latest timestamp for one field context.")
   }
-  verified_latest <- latest$current_query_status == "VERIFIED"
+  verified_latest <- latest$current_query_status %in% "VERIFIED"
   verified_contexts <- tibble::tibble(
     record_id = latest$record[verified_latest],
     redcap_event_name = latest$redcap_event_name[verified_latest],

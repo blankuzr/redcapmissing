@@ -23,6 +23,7 @@ test_that("all public condition subclasses inherit from package base classes", {
   verification <- run_plan_verified_row()
 
   conditions <- list(
+    export = tryCatch(export_data_quality(NULL), error = identity),
     argument = tryCatch(
       plan_from_data(data, rcon, NULL),
       error = identity

@@ -37,10 +37,10 @@
 #'   nonmissing, nonblank, unpadded REDCap metadata field types. `NULL` and
 #'   `character(0)` exclude no types. Explicitly supplied unknown or unused types
 #'   are errors. The default removes `"descriptive"` fields when present.
-#' @param verified `NULL`, or a data frame containing verification evidence with
-#'   the nine required columns documented in **Verification**. Extra columns are
-#'   ignored. It must be supplied together with `verified_user`; a complete
-#'   empty table is valid.
+#' @param verified `NULL`, or a data frame such as the result of
+#'   [export_data_quality()], containing the nine required columns documented
+#'   in **Verification**. Extra columns are ignored. It must be supplied
+#'   together with `verified_user`; a complete empty table is valid.
 #' @param verified_user `NULL`, or one exact, nonmissing, nonblank, unpadded
 #'   character username. Matching is case sensitive. It must be supplied
 #'   together with `verified`.
@@ -148,53 +148,74 @@
 #' independent of response missingness.
 #'
 #' @section Verification:
-#' When `verified` is supplied, each of these column names must occur exactly
-#' once. A table with zero rows is accepted after that name check. The storage
-#' rules below are checked when rows exist, and every row is validated before
-#' username or status filtering:
+#' This optional integration uses Data Resolution Workflow history from
+#' [export_data_quality()]. Pass its returned table directly as `verified`,
+#' together with the exact `verified_user`. Projects without this workflow can
+#' leave both arguments `NULL`.
+#'
+#' Each of these column names must occur exactly once. Extra columns are
+#' ignored, and a complete zero-row table is valid regardless of column storage.
 #'
 #' | Column | Accepted storage and values | Internal normalization |
 #' |---|---|---|
-#' | `project_id` | Character, integer, or whole number finite double; exact project match | Character |
-#' | `record` | Character, factor, integer, or finite double; nonmissing, nonblank, unpadded | Character |
-#' | `event_id` | Longitudinal project: positive character digits without leading zeros, integer, or whole number double. Classic project: typed missing or character blank only | Character event ID and mapped raw event name for a longitudinal project; `NA_character_` for a classic project |
-#' | `field_name` | Character; exact nonblank, unpadded raw metadata field name | Character |
-#' | `repeat_instrument` | Character raw instrument, or character blank/typed missing only where inapplicable | Character; inapplicable values become `NA_character_` |
-#' | `instance` | Positive character digits without leading zeros, integer, or whole number double; typed missing/blank only where inapplicable | Integer; inapplicable values become `NA_integer_` |
-#' | `ts` | Nonmissing `POSIXct`, or a REDCap/ISO-8601 character timestamp with date, seconds, optional fractional seconds, and optional `Z` or numeric offset | `POSIXct` in UTC; text without a timezone is interpreted as UTC |
-#' | `current_query_status` | Character; nonmissing, nonblank, unpadded, case sensitive | Character |
-#' | `username` | Character; nonmissing, nonblank, unpadded, case sensitive | Character |
+#' | `project_id` | Character, integer, or finite whole number double; exact project match | Character |
+#' | `record` | Character, factor, integer, or finite double; nonmissing, nonblank, unpadded | Character; leading zeros in character IDs are preserved |
+#' | `event_id` | Positive character digits without leading zeros, integer, or whole number double; missing/blank also accepted in classic projects | Raw event name in longitudinal projects; a consistent classic internal event ID becomes `NA_character_` |
+#' | `field_name` | Character; nonblank, unpadded raw field name | Character |
+#' | `repeat_instrument` | Character raw instrument, or blank/typed missing where inapplicable | Character or `NA_character_` |
+#' | `instance` | Positive character digits without leading zeros, integer, or whole number double; missing/blank where inapplicable | Integer; native placeholder `1` becomes `NA_integer_` for a nonrepeating target |
+#' | `ts` | Nonmissing `POSIXct`, or character date and time through seconds, optional fractional seconds, and optional `Z` or numeric offset | `POSIXct` in UTC; text without a timezone is interpreted as UTC |
+#' | `current_query_status` | Character, blank, or typed missing; nonblank values must be unpadded | Character, case preserved; blank becomes `NA_character_` |
+#' | `username` | Character, blank, or typed missing; nonblank values must be unpadded | Character, case preserved; blank becomes `NA_character_` |
 #'
-#' In a classic project, every `event_id` must be missing or blank. Any
-#' nonmissing value is an error and is never discarded during matching. In a
-#' longitudinal project, every `event_id` must identify a known project event.
-#' Inapplicable repeat dimensions must normalize to typed missing values;
-#' applicable dimensions must exactly match an `assessible_targets` row.
-#' `NaN`, infinity, padded identifiers, invalid timestamps, unknown
-#' project/event/field contexts, illegal repeat shapes, and verification
-#' contexts outside the plan are errors.
+#' Integer dimensions must be within R's integer range. Factors are rejected
+#' except for `record`. Nullable text and integer dimensions accept an
+#' all-missing logical, integer, or double column; `NaN` is invalid.
+#' Timestamp text uses a space or `T` between date and time; numeric offsets
+#' use `+HHMM`, `-HHMM`, `+HH:MM`, or `-HH:MM`.
 #'
-#' Rows are filtered to exact `verified_user`, grouped by normalized field
-#' context, and reduced to the latest timestamp. Identical rows tied at the
-#' latest timestamp collapse; conflicting latest ties error. A verification
-#' override is eligible only when the latest row for the exact selected user
-#' and normalized field context has status `"VERIFIED"`, the target has passed
-#' its upstream gates and instrument start check, the field remains selected
-#' and applicable, and its raw `field-complete` disposition is `"failed"`.
-#' Eligible rows change the effective disposition to `"passed"`. The stored
-#' verification component contains audit counts. Supplied rows are excluded.
+#' The table structure and project identity are checked first. Evidence may
+#' include contexts outside `plan`: well-formed nonmatching records, events,
+#' instruments, repeat contexts, and fields are silently discarded before
+#' resolution contents are validated. They do not add assessment targets.
+#' Malformed identifiers still raise errors. In a classic project, candidate
+#' rows may use missing event IDs or one consistent positive internal event ID.
+#' Actual repeating instances and their instrument/event relationships are
+#' preserved.
 #'
-#' With `verified = NULL` and `verified_user = NULL`, verification is disabled
-#' and the audit values are exactly `enabled = FALSE`,
-#' `verified_user = NA_character_`, and `input_rows = 0L`, `user_rows = 0L`,
-#' `latest_user_rows = 0L`, `verified_rows = 0L`, and
-#' `overrides_applied = 0L`.
+#' For matching contexts, issue-only rows and entries without a username are
+#' quietly ignored. Entries with an identifiable reviewer require a valid
+#' timestamp, including entries from other reviewers.
 #'
-#' A complete zero-row `verified` table supplied with `verified_user` enables
-#' verification. Its audit values are exactly `enabled = TRUE`,
-#' `verified_user` equal to the supplied character value, and
-#' `input_rows = 0L`, `user_rows = 0L`, `latest_user_rows = 0L`,
-#' `verified_rows = 0L`, and `overrides_applied = 0L`.
+#' Rows are then filtered to exact `verified_user`, grouped by normalized
+#' record, event, repeat instrument, repeat instance, and field, and reduced to
+#' the latest timestamp. Identical rows tied at the latest timestamp collapse;
+#' conflicting latest ties error. A missing or blank latest status quietly
+#' prevents an override, as does any status other than exact `"VERIFIED"`.
+#' An older verification is never used instead. Issue-level `query_status`
+#' and `assigned_username` do not affect this selection.
+#'
+#' An override is eligible only when the target has passed its upstream gates
+#' and instrument start check, the field remains selected and applicable, and
+#' its raw `field-complete` disposition is `"failed"`. Eligible evidence
+#' changes the effective disposition to `"passed"`.
+#'
+#' The `verification` component contains seven audit fields:
+#' `enabled`, `verified_user`, `input_rows`, `user_rows`,
+#' `latest_user_rows`, `verified_rows`, and `overrides_applied`.
+#' `input_rows` counts all supplied rows; `user_rows` counts all supplied
+#' rows whose username exactly matches the selected reviewer, including
+#' contexts outside the plan. `latest_user_rows` counts in-plan contexts
+#' retained after latest-entry selection and duplicate collapse, including
+#' missing latest statuses. `verified_rows` counts those retained entries
+#' with exact `"VERIFIED"`; `overrides_applied` counts failed field results
+#' actually changed to passes. Raw supplied history is excluded from the report.
+#'
+#' With both arguments `NULL`, verification is disabled: `enabled = FALSE`,
+#' `verified_user = NA_character_`, and every count is `0L`.
+#' A complete empty table with `verified_user` enables verification and
+#' retains that username, with every count `0L`.
+#'
 #'
 #' @section Return value:
 #' A `redcapmissing` object with exactly `plan`, `target_results`, `summary`,
