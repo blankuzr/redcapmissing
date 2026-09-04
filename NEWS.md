@@ -1,5 +1,18 @@
 # redcapmissing 7.0.0
 
+## 2026-09-04
+
+- Added `export_data_quality()` to retrieve complete Data Resolution Workflow
+  history through Vanderbilt's Data Quality API module, optionally restricted
+  by record IDs, and return a table ready for `run_plan(verified = ...)`.
+- `run_plan()` now accepts native classic event IDs and nonrepeating instance
+  placeholders, silently ignores evidence outside the plan and entries without
+  reviewers, and prevents a missing latest status from reviving an older
+  verification. Input/reviewer audit counts cover supplied history; latest and
+  applied evidence counts cover the plan.
+- Documented the export-to-assessment workflow in help and the README, with a
+  runnable synthetic before/after example in the main vignette.
+
 ## 2026-09-01
 
 - Added REDCap `year(date)` support to branching-logic evaluation, including

@@ -272,11 +272,15 @@ requirement.
 
 ### Verified field failures
 
-Supply caller provided `verified` and `verified_user` together to apply
-the latest exact `"VERIFIED"` status for an assessed `field-complete`
-failure:
+For projects using REDCap's Data Resolution Workflow, export history
+through the [Data Quality API
+module](https://github.com/vanderbilt-redcap/data_quality_api) and pass
+it directly to `run_plan()`. The module must be enabled for the project.
+Supply the exact reviewer username to apply their latest `"VERIFIED"`
+status to eligible `field-complete` failures:
 
 ``` r
+verified <- export_data_quality(rcon)
 report <- run_plan(
   plan,
   records,
@@ -286,10 +290,19 @@ report <- run_plan(
 )
 ```
 
-See `?run_plan` for the required verification columns, accepted
-timestamps, and the exact field context used for matching. The
-`verification` component contains counts for the supplied rows and
-applied results.
+Use `records = c("1", "2")` in `export_data_quality()` to restrict
+retrieval. The default retrieves the complete project history and can be
+expensive; export once and reuse the table. `run_plan()` ignores
+contexts outside its plan and never retrieves history itself. A newer
+nonverified or missing status prevents fallback to an older
+verification.
+
+Projects without this workflow can omit both verification arguments. See
+`?export_data_quality` for prerequisites and returned columns,
+`?run_plan` for matching rules, and `vignette("redcapmissing")` for a
+runnable synthetic example with before/after results. The report's
+`verification` component records supplied evidence and applied
+overrides.
 
 ## 3. Inspect results
 

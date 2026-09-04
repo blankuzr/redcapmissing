@@ -533,64 +533,188 @@ required.
 
 ## Verification
 
-`verified` and `verified_user` are supplied together. A nonempty verification
-table requires these nine columns. Extra columns are ignored.
+Verification is optional and intended for projects that use REDCap's Data
+Resolution Workflow. Other projects can leave `verified` and
+`verified_user` at their defaults.
 
-| Column | Accepted storage and values | Accepted missing values | Value used during matching |
-|---|---|---|---|
-| `project_id` | Character, integer, or finite whole number double matching `plan$project$project_id`. | None. | Character. |
-| `record` | Character, factor, integer, or finite double; values are nonblank and unpadded. | None. | Character; factor labels and character leading zeros are preserved. |
-| `event_id` | A longitudinal project requires a positive integer, finite whole number double, or character digits matching `[1-9][0-9]*` within R integer range. A classic project does not accept a nonmissing value. | A classic project accepts numeric or character missing or blank values, or a logical column whose every value is `NA`. A longitudinal project requires a value. | Character REDCap event ID and the corresponding raw event name in a longitudinal project; `NA_character_` in a classic project. |
-| `field_name` | Character raw metadata field name; values are nonblank and unpadded. | None. | Character. |
-| `repeat_instrument` | Character raw instrument name. | Character blank or missing values are accepted for an inapplicable repeat instrument dimension. A logical, integer, or double column is accepted when every value is typed `NA`; factor storage is rejected. | Character or `NA_character_`. |
-| `instance` | Positive integer, finite whole number double, or character digits matching `[1-9][0-9]*` within R integer range. | Numeric or character missing or blank values are accepted when neither the event nor instrument repeats. A logical column is accepted when every value is `NA`; factor storage is rejected. | Integer or `NA_integer_`. |
-| `ts` | A nonmissing `POSIXct`, or character date and time through seconds, optional fractional seconds, and optional `Z` or numeric UTC offset. The date and time separator is a space or `T`; numeric offsets use `+HHMM`, `-HHMM`, `+HH:MM`, or `-HH:MM`. | None. | `POSIXct` in UTC. Text with no offset is read as UTC. |
-| `current_query_status` | Character; values are nonmissing, nonblank, and unpadded. | None. | Character with case preserved. Exact `"VERIFIED"` may apply. |
-| `username` | Character; values are nonmissing, nonblank, and unpadded. | None. | Character with case preserved and matched to `verified_user`. |
+### Enable the module and export history
 
-A complete table with zero rows is valid when each required column name occurs
-once; column storage and row values are checked when the table contains rows.
-Every row is validated before filtering by `username` or
-`current_query_status`. Each event, repeat, field, and record context must match
-a target stored in `plan`.
+The [Vanderbilt Data Quality API module](https://github.com/vanderbilt-redcap/data_quality_api)
+must be enabled in the REDCap Control Center and in your project. Use an
+authorized live `redcapApiConnection`. The default module prefix is
+`"data_quality_api"`; check the module's configuration/link or ask your
+REDCap administrator if your installation uses another prefix.
 
-For a classic project, every `event_id` must be missing or blank. A nonmissing
-value is an error and is never discarded to make verification evidence match a
-classic target. For a longitudinal project, every `event_id` must identify a
-known project event.
+```{r verified-export, eval = FALSE}
+verified <- export_data_quality(rcon)
+# To restrict the request to selected records:
+# verified <- export_data_quality(rcon, records = c("1", "2"))
 
-```{r verified, eval = FALSE}
 verified_report <- run_plan(
   plan = explicit_plan,
   data = records,
   rcon = rcon,
   verified = verified,
-  verified_user = verified_user,
+  verified_user = "reviewer",
   details = TRUE
 )
 ```
 
-Rows matching `verified_user` are grouped by record, event, repeat instrument,
-repeat instance, and field. The latest `ts` in each group is retained.
-Identical rows tied at that time collapse to one row. Different rows tied at
-that time produce `redcapmissing_error_verification`.
+`records = NULL` retrieves the complete project history and can take time on
+large projects. Export once and reuse the result across assessments.
+`run_plan()` never retrieves history. There are no status or user retrieval
+filters: later entries must remain available to determine whether an earlier
+verification still applies.
 
-Exact `"VERIFIED"` changes an assessed raw failure for `field-complete` to an
-effective pass. The eligible field must already belong to a stored target,
-pass its gates, apply under branching logic, and remain after field selection.
-`report$verification` stores these values:
+The export is a plain data frame with one row per resolution, carrying its
+parent issue's fields. Issues without resolutions contribute a row with
+missing resolution values. All exported columns are character; timestamps
+retain their source text, and JSON nulls become `NA_character_`. Additional
+scalar module fields are retained. See `?export_data_quality` for the full
+return schema, including empty results.
 
-| Name | Meaning |
+### Match history to the plan
+
+Pass the returned table directly. No manual flattening, context normalization,
+or filtering to the plan is needed. `run_plan()` uses these nine columns and
+ignores extras:
+
+| Column | Meaning |
 |---|---|
-| `enabled` | `TRUE` when `verified` and `verified_user` were supplied together; `FALSE` when both were `NULL`. |
-| `verified_user` | The exact supplied username when enabled; `NA_character_` otherwise. |
-| `input_rows` | Number of supplied verification rows. |
-| `user_rows` | Number of rows whose `username` exactly equals `verified_user`. |
-| `latest_user_rows` | Number of rows retained after selecting the latest `ts` per exact field context and collapsing identical tied rows. |
-| `verified_rows` | Number of retained rows whose `current_query_status` is exactly `"VERIFIED"`. |
-| `overrides_applied` | Number of assessed failed `field-complete` results changed to passing results. |
+| `project_id` | Project identity; every supplied row must match the plan's project. |
+| `record` | Raw record ID; character leading zeros are preserved. |
+| `event_id` | Internal event ID; mapped to a raw event name for longitudinal projects. A consistent positive classic event ID, or a missing value, maps to the eventless context. |
+| `field_name` | Raw metadata field name. |
+| `repeat_instrument` | Repeating instrument name, or missing when inapplicable. |
+| `instance` | Actual repeating instance; native placeholder `1` becomes missing for a nonrepeating target. |
+| `ts` | Resolution timestamp. Required for in-plan entries with a reviewer; text without an offset is interpreted as UTC. |
+| `current_query_status` | Resolution status. Only the selected reviewer's latest exact `"VERIFIED"` can apply. |
+| `username` | Resolution reviewer, matched exactly and case sensitively to `verified_user`. |
 
-The supplied verification rows are excluded from the report object.
+A complete zero-row table is valid. Existing normalized tables remain
+accepted; `?run_plan` documents their storage and timestamp formats.
+
+The table structure and project identity are checked first. Well-formed
+contexts outside the plan are silently ignored before resolution values are
+validated, including unknown records, events, instruments, and fields.
+Malformed identifiers still raise errors. Evidence never expands the plan.
+Issue-only rows and entries without an identifiable reviewer are quietly
+ignored. Other in-plan entries require valid timestamps.
+
+For the selected reviewer, rows are grouped by normalized record, event,
+repeat instrument, repeat instance, and field. The latest timestamp wins.
+Identical latest duplicates collapse; conflicting latest ties raise
+`redcapmissing_error_verification`. If the latest status is missing, blank,
+`"OPEN"`, `"CLOSED"`, or `"DEVERIFIED"`, no override applies. An older
+`"VERIFIED"` is never substituted. Issue-level `query_status` and
+`assigned_username` do not control assessment.
+
+### Runnable offline example
+
+This synthetic example uses three started records with a missing required
+field. The history table represents selected columns of a flattened export:
+record `1` has a verification, record `2` has a later reopening by the same
+reviewer, and record `3` has an issue without any resolutions. A live workflow
+obtains this table with `export_data_quality()`.
+
+```{r verified-offline}
+metadata <- data.frame(
+  field_name = c("record_id", "started", "value"),
+  form_name = "baseline",
+  field_type = "text",
+  field_label = c("Record ID", "Started", "Value"),
+  required_field = c("y", "", "y")
+)
+project_info <- data.frame(
+  project_id = "1",
+  is_longitudinal = "0",
+  has_repeating_instruments_or_events = "0"
+)
+rcon <- suppressWarnings(redcapAPI::offlineConnection(
+  meta_data = metadata,
+  project_info = project_info,
+  repeat_instrument = redcapAPI::REDCAP_REPEAT_INSTRUMENT_STRUCTURE
+))
+records <- data.frame(
+  record_id = c("1", "2", "3"),
+  started = "yes",
+  value = ""
+)
+verified <- data.frame(
+  project_id = "1",
+  record = c("1", "2", "2", "3"),
+  event_id = "101",
+  field_name = "value",
+  repeat_instrument = NA_character_,
+  instance = "1",
+  status_id = c("10", "11", "11", "12"),
+  res_id = c("20", "21", "22", NA_character_),
+  ts = c(
+    "2026-01-02 10:00:00", "2026-01-02 10:00:00",
+    "2026-01-03 10:00:00", NA_character_
+  ),
+  current_query_status = c("VERIFIED", "VERIFIED", "OPEN", NA_character_),
+  username = c("reviewer", "reviewer", "reviewer", NA_character_)
+)
+
+plan <- plan_from_data(records, rcon, "baseline")
+before <- run_plan(plan, records, rcon, progress = FALSE)
+after <- run_plan(
+  plan, records, rcon,
+  verified = verified, verified_user = "reviewer",
+  details = TRUE, progress = FALSE
+)
+knitr::kable(data.frame(
+  record_id = before$target_results$record_id,
+  before = before$target_results$field_complete,
+  after = after$target_results$field_complete
+))
+```
+
+Record `1` changes from a failure to a pass. Records `2` and `3` remain
+unresolved. Verification affects only a failed, selected, applicable field
+whose target passes the upstream row and instrument-start checks.
+
+```{r verified-details}
+field_rows <- after$details[
+  after$details$validation_check == "field-complete" &
+    after$details$field_name %in% "value",
+]
+knitr::kable(field_rows[, c(
+  "record_id", "raw_disposition", "verification_applied", "effective_disposition"
+)])
+knitr::kable(data.frame(
+  audit_field = names(after$verification),
+  value = unlist(after$verification, use.names = FALSE)
+))
+```
+
+### Interpret the audit and resolve common problems
+
+| Audit field | Meaning |
+|---|---|
+| `enabled` | `TRUE` when both verification arguments were supplied, including an empty table. |
+| `verified_user` | The exact supplied username; `NA_character_` when disabled. |
+| `input_rows` | All supplied rows, including issue-only and out-of-plan rows. |
+| `user_rows` | All supplied rows whose username exactly matches the selected reviewer, including out-of-plan rows. |
+| `latest_user_rows` | In-plan field contexts retained after latest-entry selection and duplicate collapse, including missing latest statuses. |
+| `verified_rows` | Retained entries with exact `"VERIFIED"`. |
+| `overrides_applied` | Failed field results actually changed to passes. |
+
+The example has four input rows, three reviewer rows, two latest entries,
+one latest verification, and one override. The report excludes raw workflow
+history.
+
+- **Export fails or returns malformed JSON:** Check the connection's export
+  permissions, module enablement, and prefix. Structurally inconsistent
+  history raises `redcapmissing_error_export` without including response
+  contents in the error.
+- **No reviewer rows:** Check the exact spelling and case of
+  `verified_user`; it identifies the resolution's author, not its assignee.
+- **Latest entry has no status:** No override applies. Review the complete
+  history; do not remove that entry to reveal an older verification.
+- **Verified rows but no override:** Check that the field is assessed, still
+  fails, and passes the row, instrument-start, branching, and selection rules.
 
 ## Response missingness
 

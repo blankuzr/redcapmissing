@@ -40,12 +40,12 @@ test_that("verification requires each of its nine columns exactly once", {
   )
 })
 
-test_that("all verification rows are validated before user filtering", {
+test_that("in-plan resolution rows are validated before user filtering", {
   rcon <- run_plan_rcon(); data <- run_plan_data(required_note = "")
   plan <- plan_from_data(data, rcon, "baseline_form")
   evidence <- dplyr::bind_rows(
     run_plan_verified_row(),
-    run_plan_verified_row(field_name = "unknown_field", username = "bob")
+    run_plan_verified_row(ts = "bad timestamp", username = "bob")
   )
   expect_error(
     run_plan(plan, data, rcon, verified = evidence, verified_user = "alice",
@@ -88,7 +88,7 @@ test_that("verification nullable columns normalize typed missing values", {
   }
 })
 
-test_that("classic verification rejects nonmissing event IDs before overrides", {
+test_that("classic verification accepts native event IDs and instance placeholders", {
   rcon <- run_plan_rcon()
   data <- run_plan_data(required_note = "")
   plan <- plan_from_data(data, rcon, "baseline_form")
@@ -101,19 +101,16 @@ test_that("classic verification rejects nonmissing event IDs before overrides", 
   for (case_name in names(nonmissing_event_ids)) {
     issue <- run_plan_verified_row()
     issue$event_id <- nonmissing_event_ids[[case_name]]
-    expect_error(
-      run_plan(
+    issue$instance <- 1L
+    result <- run_plan(
         plan,
         data,
         rcon,
         verified = issue,
         verified_user = "alice",
         progress = FALSE
-      ),
-      regexp = "classic project.*row\\(s\\): 1",
-      class = "redcapmissing_error_verification",
-      info = case_name
-    )
+      )
+    expect_identical(result$verification$overrides_applied, 1L, info = case_name)
   }
 })
 
@@ -122,6 +119,7 @@ test_that("classic event IDs are validated before user and status filtering", {
   data <- run_plan_data(required_note = "")
   plan <- plan_from_data(data, rcon, "baseline_form")
   selected <- run_plan_verified_row()
+  selected$event_id <- "101"
   unselected <- run_plan_verified_row(status = "OPEN", username = "bob")
   unselected$event_id <- "999"
   evidence <- dplyr::bind_rows(selected, unselected)
@@ -135,7 +133,7 @@ test_that("classic event IDs are validated before user and status filtering", {
       verified_user = "alice",
       progress = FALSE
     ),
-    regexp = "classic project.*row\\(s\\): 2",
+    regexp = "consistent",
     class = "redcapmissing_error_verification"
   )
 })
@@ -179,18 +177,18 @@ test_that("longitudinal verification omits repeat keys when no repeat applies", 
     ),
     repeat_event_context = within(evidence, instance <- 1L)
   )
-  for (issue in invalid) {
-    expect_error(
-      run_plan(
-        plan,
-        data,
-        rcon,
-        verified = issue,
-        verified_user = "alice",
-        progress = FALSE
-      ),
-      class = "redcapmissing_error_verification"
-    )
+  expect_error(
+    run_plan(plan, data, rcon, verified = invalid$missing_event,
+             verified_user = "alice", progress = FALSE),
+    class = "redcapmissing_error_verification"
+  )
+  for (case_name in setdiff(names(invalid), "missing_event")) {
+    expect_silent(result <- run_plan(
+      plan, data, rcon, verified = invalid[[case_name]],
+      verified_user = "alice", progress = FALSE
+    ))
+    expected <- if (case_name == "repeat_event_context") 1L else 0L
+    expect_identical(result$verification$overrides_applied, expected)
   }
 })
 
@@ -234,18 +232,18 @@ test_that("repeating event verification requires an instance and no repeat instr
       repeat_instrument <- "diary"
     )
   )
-  for (issue in invalid) {
-    expect_error(
-      run_plan(
-        plan,
-        data,
-        rcon,
-        verified = issue,
-        verified_user = "alice",
-        progress = FALSE
-      ),
-      class = "redcapmissing_error_verification"
-    )
+  expect_error(
+    run_plan(plan, data, rcon, verified = invalid$missing_event,
+             verified_user = "alice", progress = FALSE),
+    class = "redcapmissing_error_verification"
+  )
+  for (case_name in setdiff(names(invalid), "missing_event")) {
+    expect_silent(result <- run_plan(
+      plan, data, rcon, verified = invalid[[case_name]],
+      verified_user = "alice", progress = FALSE
+    ))
+    expected <- if (case_name == "repeat_event_context") 1L else 0L
+    expect_identical(result$verification$overrides_applied, expected)
   }
 })
 
@@ -292,18 +290,18 @@ test_that("repeating instrument verification requires its instrument and instanc
     ),
     missing_instance = within(evidence, instance <- "")
   )
-  for (issue in invalid) {
-    expect_error(
-      run_plan(
-        plan,
-        data,
-        rcon,
-        verified = issue,
-        verified_user = "alice",
-        progress = FALSE
-      ),
-      class = "redcapmissing_error_verification"
-    )
+  expect_error(
+    run_plan(plan, data, rcon, verified = invalid$missing_event,
+             verified_user = "alice", progress = FALSE),
+    class = "redcapmissing_error_verification"
+  )
+  for (case_name in setdiff(names(invalid), "missing_event")) {
+    expect_silent(result <- run_plan(
+      plan, data, rcon, verified = invalid[[case_name]],
+      verified_user = "alice", progress = FALSE
+    ))
+    expected <- if (case_name == "repeat_event_context") 1L else 0L
+    expect_identical(result$verification$overrides_applied, expected)
   }
 })
 
@@ -311,7 +309,7 @@ test_that("invalid verification rows are rejected before username and status fil
   rcon <- run_plan_rcon(); data <- run_plan_data(required_note = "")
   plan <- plan_from_data(data, rcon, "baseline_form")
   invalid <- run_plan_verified_row(
-    field_name = "unknown_field", status = "OPEN", username = "different-user"
+    ts = "bad timestamp", status = "OPEN", username = "different-user"
   )
   expect_error(
     run_plan(plan, data, rcon, verified = invalid,
@@ -485,27 +483,19 @@ test_that("verification rejects invalid identity and text columns before filteri
     record_infinite = list("record", -Inf),
     record_logical = list("record", TRUE),
     record_list = list("record", list("1")),
-    record_outside_plan = list("record", "2"),
     field_missing = list("field_name", NA_character_),
     field_blank = list("field_name", ""),
     field_whitespace = list("field_name", " "),
     field_padded = list("field_name", " required_note"),
-    field_unknown = list("field_name", "unknown_field"),
     field_factor = list("field_name", factor("required_note")),
     field_integer = list("field_name", 1L),
     field_logical = list("field_name", TRUE),
     field_list = list("field_name", list("required_note")),
-    status_missing = list("current_query_status", NA_character_),
-    status_blank = list("current_query_status", ""),
-    status_whitespace = list("current_query_status", " "),
     status_padded = list("current_query_status", " OPEN"),
     status_factor = list("current_query_status", factor("OPEN")),
     status_integer = list("current_query_status", 1L),
     status_logical = list("current_query_status", TRUE),
     status_list = list("current_query_status", list("OPEN")),
-    username_missing = list("username", NA_character_),
-    username_blank = list("username", ""),
-    username_whitespace = list("username", " "),
     username_padded = list("username", " bob"),
     username_factor = list("username", factor("bob")),
     username_integer = list("username", 1L),
@@ -594,7 +584,6 @@ test_that("longitudinal verification rejects malformed event IDs before filterin
     negative_character = "-1",
     decimal_character = "101.5",
     invalid_text = "event-101",
-    unknown = 999L,
     zero = 0L,
     negative = -1L,
     decimal = 101.5,
@@ -642,23 +631,14 @@ test_that("repeating verification rejects malformed instrument and instance keys
   base$repeat_instrument <- "baseline_form"
   base$instance <- 1L
   invalid_repeat_instrument <- list(
-    character_missing = NA_character_,
-    numeric_missing = NA_real_,
-    blank = "",
-    whitespace = " ",
     leading_whitespace = " baseline_form",
     trailing_whitespace = "baseline_form ",
-    unknown = "unknown_form",
     factor = factor("baseline_form"),
     integer = 1L,
     logical = TRUE,
     list = list("baseline_form")
   )
   invalid_instance <- list(
-    character_missing = NA_character_,
-    integer_missing = NA_integer_,
-    blank = "",
-    whitespace = " ",
     leading_whitespace = " 1",
     trailing_whitespace = "1 ",
     leading_zero = "01",
@@ -790,21 +770,15 @@ test_that("run_plan accepts zero rows in verified after checking nine required n
   expect_s3_class(result, "redcapmissing")
 })
 
-test_that("verification records must belong to frozen targets", {
+test_that("verification outside the plan is ignored and counted as supplied evidence", {
   rcon <- run_plan_rcon()
-  data <- run_plan_data(record_id = "1", required_note = "")
+  data <- run_plan_data(required_note = "")
   plan <- plan_from_data(data, rcon, "baseline_form")
-  outside <- run_plan_verified_row(record = "2")
-
-  expect_error(
-    run_plan(
-      plan,
-      data,
-      rcon,
-      verified = outside,
-      verified_user = "alice",
-      progress = FALSE
-    ),
-    class = "redcapmissing_error_verification"
-  )
+  expect_silent(result <- run_plan(
+    plan, data, rcon, verified = run_plan_verified_row(record = "2"),
+    verified_user = "alice", progress = FALSE
+  ))
+  expect_identical(result$verification$user_rows, 1L)
+  expect_identical(result$verification$latest_user_rows, 0L)
+  expect_identical(result$verification$overrides_applied, 0L)
 })

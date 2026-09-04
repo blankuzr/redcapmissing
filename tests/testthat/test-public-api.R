@@ -1,13 +1,17 @@
-test_that("the public API is exactly the documented twelve-function surface", {
+test_that("the public API is exactly the documented thirteen-function surface", {
   expect_identical(
     sort(getNamespaceExports("redcapmissing")),
     sort(c(
       "all_instruments", "build_explicit_schedule", "build_extended_schedule",
-      "flex_event_instruments", "flex_html", "flexify", "get_missing",
+      "export_data_quality", "flex_event_instruments", "flex_html", "flexify", "get_missing",
       "get_summary", "plan_explicit", "plan_from_data", "registry", "run_plan"
     ))
   )
 
+  expect_identical(
+    as.list(formals(export_data_quality)),
+    alist(rcon =, records = NULL, prefix = "data_quality_api")
+  )
   expect_identical(
     as.list(formals(all_instruments)),
     alist(rcon =)
