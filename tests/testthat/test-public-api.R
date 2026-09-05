@@ -1,9 +1,9 @@
-test_that("the public API is exactly the documented thirteen-function surface", {
+test_that("the public API is exactly the documented fifteen-function surface", {
   expect_identical(
     sort(getNamespaceExports("redcapmissing")),
     sort(c(
       "all_instruments", "build_explicit_schedule", "build_extended_schedule",
-      "export_data_quality", "flex_event_instruments", "flex_html", "flexify", "get_missing",
+      "compare_reports", "export_data_quality", "flex_event_instruments", "flex_html", "flexify", "get_changes", "get_missing",
       "get_summary", "plan_explicit", "plan_from_data", "registry", "run_plan"
     ))
   )
@@ -53,7 +53,8 @@ test_that("the public API is exactly the documented thirteen-function surface", 
       report =,
       validation_check = NULL,
       events = NULL,
-      instruments = NULL
+      instruments = NULL,
+      ... =
     )
   )
   expect_identical(
@@ -66,6 +67,8 @@ test_that("the public API is exactly the documented thirteen-function surface", 
     )
   )
   expect_identical(as.list(formals(registry)), alist())
+  expect_identical(as.list(formals(compare_reports)), alist(previous =, current =))
+  expect_identical(as.list(formals(get_changes)), alist(comparison =, validation_check = NULL, events = NULL, instruments = NULL, change = NULL))
   expect_identical(as.list(formals(flexify)), alist(x =))
   expect_identical(
     as.list(formals(flex_event_instruments)),
@@ -91,6 +94,10 @@ test_that("retired entry points are absent from exports and the namespace", {
 })
 
 test_that("documented S3 methods are registered and public generics dispatch", {
+  for (generic in c("get_summary", "flex_event_instruments", "print")) {
+    expect_identical(utils::getS3method(generic, "redcapmissing_comparison"),
+                     getFromNamespace(paste0(generic, ".redcapmissing_comparison"), "redcapmissing"))
+  }
   expect_identical(
     utils::getS3method("flex_event_instruments", "redcapmissing"),
     getFromNamespace(

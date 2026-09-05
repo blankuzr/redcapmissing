@@ -27,6 +27,83 @@ document.addEventListener('DOMContentLoaded', function(e) {
   }
 });
 </script>
+<style type="text/css">.tabwid {
+font-size: initial;
+padding-bottom: 1em;
+}
+.tabwid table{
+border-spacing:0px !important;
+border-collapse:collapse;
+line-height:1;
+margin-left:auto;
+margin-right:auto;
+border-width: 0;
+border-color: transparent;
+caption-side: top;
+}
+.tabwid-caption-bottom table{
+caption-side: bottom;
+}
+.tabwid_left table{
+margin-left:0;
+}
+.tabwid_right table{
+margin-right:0;
+}
+.tabwid td, .tabwid th {
+padding: 0;
+}
+.tabwid a {
+text-decoration: none;
+}
+.tabwid thead {
+background-color: transparent;
+}
+.tabwid tfoot {
+background-color: transparent;
+}
+.tabwid table tr {
+background-color: transparent;
+}
+.katex-display {
+margin: 0 0 !important;
+}
+</style>
+<script>document.addEventListener("DOMContentLoaded", function(event) {
+  var els = document.querySelectorAll(".tabwid");
+  var tabwid_link = document.querySelector('link[href*="tabwid.css"]')
+  if (tabwid_link === null) {
+    const tabwid_styles = document.evaluate("//style[contains(., 'tabwid')]", document, null, XPathResult.ANY_TYPE, null );
+    tabwid_link = tabwid_styles.iterateNext();
+  }
+
+  Array.prototype.forEach.call(els, function(template) {
+      if (template.querySelector("table.no-shadow-dom")) {
+        return;
+      }
+      const dest = document.createElement("div");
+      template.parentNode.insertBefore(dest, template.nextSibling)
+      dest.setAttribute("class", "flextable-shadow-host");
+      const fantome = dest.attachShadow({mode: 'open'});
+      fantome.appendChild(template);
+      if (tabwid_link !== null) {
+        fantome.appendChild(tabwid_link.cloneNode(true));
+      }
+  });
+
+  const shadowHosts = document.querySelectorAll('.flextable-shadow-host');
+  shadowHosts.forEach(host => {
+    if (host.shadowRoot) {
+      const spanElements = host.shadowRoot.querySelector('div > table > caption > span[id]');
+      if (spanElements) {
+        const id = spanElements.getAttribute("id");
+        host.setAttribute("id", id);
+      }
+    }
+  });
+
+});
+</script>
 
 <style type="text/css">
 code{white-space: pre-wrap;}
@@ -371,6 +448,13 @@ statuses</a></li>
 and field selection</a></li>
 <li><a href="#branching-logic-and-checkboxes" id="toc-branching-logic-and-checkboxes">Branching logic and
 checkboxes</a></li>
+<li><a href="#compare-assessments" id="toc-compare-assessments">Compare
+assessments</a>
+<ul>
+<li><a href="#validation-summaries" id="toc-validation-summaries">Validation summaries</a></li>
+<li><a href="#event-and-instrument-view" id="toc-event-and-instrument-view">Event and instrument view</a></li>
+<li><a href="#record-and-field-changes" id="toc-record-and-field-changes">Record and field changes</a></li>
+</ul></li>
 <li><a href="#verification" id="toc-verification">Verification</a>
 <ul>
 <li><a href="#enable-the-module-and-export-history" id="toc-enable-the-module-and-export-history">Enable the module and
@@ -1479,6 +1563,296 @@ frozen targets. A branching dependency may belong to an instrument with
 no target of its own. Other fields exclusive to nontarget instruments
 are not required.</p>
 </div>
+<div id="compare-assessments" class="section level2">
+<h2>Compare assessments</h2>
+<p>Use <code>compare_reports(previous, current)</code> when the same
+project has been assessed at two times or under different target plans.
+Both reports must retain <code>details = TRUE</code> and versioned
+field-selection settings. Project identity, structure fingerprints, and
+normalized field selection must match; target membership and
+verification setup may change.</p>
+<p>Two populations are shown by default:</p>
+<ul>
+<li><strong>Full scope</strong> describes each report’s complete
+assessment, including targets that entered or left the plan.</li>
+<li><strong>Shared targets</strong> restricts each side to the exact
+record, event, instrument, repeat instrument, and repeat instance keys
+present in both plans. Stored outcomes are subset; branching logic is
+never reevaluated on a reduced export.</li>
+</ul>
+<p>The following synthetic offline project has a Visit instrument at
+Baseline and a repeating Diary at Follow up. Record <code>004</code>
+enters the Visit plan, while record <code>001</code> leaves the Diary
+instance-2 plan. Previously unstarted targets begin assessment, and
+reviewer <code>reviewer_a</code> verifies one remaining Diary field.</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a>comparison_metadata <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a>  <span class="at">field_name =</span> <span class="fu">c</span>(<span class="st">&quot;record_id&quot;</span>, <span class="st">&quot;visit_start&quot;</span>, <span class="st">&quot;visit_a&quot;</span>, <span class="st">&quot;visit_b&quot;</span>,</span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a>                 <span class="st">&quot;diary_start&quot;</span>, <span class="st">&quot;diary_a&quot;</span>, <span class="st">&quot;diary_b&quot;</span>),</span>
+<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a>  <span class="at">form_name =</span> <span class="fu">c</span>(<span class="fu">rep</span>(<span class="st">&quot;visit&quot;</span>, <span class="dv">4</span>), <span class="fu">rep</span>(<span class="st">&quot;diary&quot;</span>, <span class="dv">3</span>)),</span>
+<span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a>  <span class="at">field_type =</span> <span class="st">&quot;text&quot;</span>,</span>
+<span id="cb12-6"><a href="#cb12-6" tabindex="-1"></a>  <span class="at">field_label =</span> <span class="fu">c</span>(<span class="st">&quot;Record ID&quot;</span>, <span class="st">&quot;Visit started&quot;</span>, <span class="st">&quot;Visit A&quot;</span>, <span class="st">&quot;Visit B&quot;</span>,</span>
+<span id="cb12-7"><a href="#cb12-7" tabindex="-1"></a>                  <span class="st">&quot;Diary started&quot;</span>, <span class="st">&quot;Diary A&quot;</span>, <span class="st">&quot;Diary B&quot;</span>),</span>
+<span id="cb12-8"><a href="#cb12-8" tabindex="-1"></a>  <span class="at">required_field =</span> <span class="fu">c</span>(<span class="st">&quot;&quot;</span>, <span class="st">&quot;&quot;</span>, <span class="st">&quot;y&quot;</span>, <span class="st">&quot;y&quot;</span>, <span class="st">&quot;&quot;</span>, <span class="st">&quot;y&quot;</span>, <span class="st">&quot;y&quot;</span>)</span>
+<span id="cb12-9"><a href="#cb12-9" tabindex="-1"></a>)</span>
+<span id="cb12-10"><a href="#cb12-10" tabindex="-1"></a>comparison_rcon <span class="ot">&lt;-</span> <span class="fu">suppressWarnings</span>(redcapAPI<span class="sc">::</span><span class="fu">offlineConnection</span>(</span>
+<span id="cb12-11"><a href="#cb12-11" tabindex="-1"></a>  <span class="at">meta_data =</span> comparison_metadata,</span>
+<span id="cb12-12"><a href="#cb12-12" tabindex="-1"></a>  <span class="at">project_info =</span> <span class="fu">data.frame</span>(<span class="at">project_id =</span> <span class="st">&quot;77&quot;</span>, <span class="at">is_longitudinal =</span> <span class="st">&quot;1&quot;</span>,</span>
+<span id="cb12-13"><a href="#cb12-13" tabindex="-1"></a>                           <span class="at">has_repeating_instruments_or_events =</span> <span class="st">&quot;1&quot;</span>),</span>
+<span id="cb12-14"><a href="#cb12-14" tabindex="-1"></a>  <span class="at">arms =</span> <span class="fu">data.frame</span>(<span class="at">arm_num =</span> <span class="dv">1</span><span class="dt">L</span>, <span class="at">name =</span> <span class="st">&quot;Arm 1&quot;</span>),</span>
+<span id="cb12-15"><a href="#cb12-15" tabindex="-1"></a>  <span class="at">events =</span> <span class="fu">data.frame</span>(<span class="at">event_id =</span> <span class="fu">c</span>(<span class="dv">101</span><span class="dt">L</span>, <span class="dv">102</span><span class="dt">L</span>), <span class="at">arm_num =</span> <span class="dv">1</span><span class="dt">L</span>,</span>
+<span id="cb12-16"><a href="#cb12-16" tabindex="-1"></a>    <span class="at">unique_event_name =</span> <span class="fu">c</span>(<span class="st">&quot;baseline_arm_1&quot;</span>, <span class="st">&quot;followup_arm_1&quot;</span>),</span>
+<span id="cb12-17"><a href="#cb12-17" tabindex="-1"></a>    <span class="at">event_name =</span> <span class="fu">c</span>(<span class="st">&quot;Baseline&quot;</span>, <span class="st">&quot;Follow up&quot;</span>)),</span>
+<span id="cb12-18"><a href="#cb12-18" tabindex="-1"></a>  <span class="at">instruments =</span> <span class="fu">data.frame</span>(<span class="at">instrument_name =</span> <span class="fu">c</span>(<span class="st">&quot;visit&quot;</span>, <span class="st">&quot;diary&quot;</span>),</span>
+<span id="cb12-19"><a href="#cb12-19" tabindex="-1"></a>                           <span class="at">instrument_label =</span> <span class="fu">c</span>(<span class="st">&quot;Visit&quot;</span>, <span class="st">&quot;Diary&quot;</span>)),</span>
+<span id="cb12-20"><a href="#cb12-20" tabindex="-1"></a>  <span class="at">mapping =</span> <span class="fu">data.frame</span>(<span class="at">arm_num =</span> <span class="dv">1</span><span class="dt">L</span>,</span>
+<span id="cb12-21"><a href="#cb12-21" tabindex="-1"></a>    <span class="at">unique_event_name =</span> <span class="fu">c</span>(<span class="st">&quot;baseline_arm_1&quot;</span>, <span class="st">&quot;followup_arm_1&quot;</span>),</span>
+<span id="cb12-22"><a href="#cb12-22" tabindex="-1"></a>    <span class="at">form =</span> <span class="fu">c</span>(<span class="st">&quot;visit&quot;</span>, <span class="st">&quot;diary&quot;</span>)),</span>
+<span id="cb12-23"><a href="#cb12-23" tabindex="-1"></a>  <span class="at">repeat_instrument =</span> <span class="fu">data.frame</span>(<span class="at">event_name =</span> <span class="st">&quot;followup_arm_1&quot;</span>, <span class="at">form_name =</span> <span class="st">&quot;diary&quot;</span>)</span>
+<span id="cb12-24"><a href="#cb12-24" tabindex="-1"></a>))</span>
+<span id="cb12-25"><a href="#cb12-25" tabindex="-1"></a>example_row <span class="ot">&lt;-</span> <span class="cf">function</span>(id, event, <span class="at">instance =</span> <span class="cn">NA_integer_</span>,</span>
+<span id="cb12-26"><a href="#cb12-26" tabindex="-1"></a>                        <span class="at">start =</span> <span class="st">&quot;yes&quot;</span>, <span class="at">a =</span> <span class="st">&quot;entered&quot;</span>, <span class="at">b =</span> <span class="st">&quot;entered&quot;</span>) {</span>
+<span id="cb12-27"><a href="#cb12-27" tabindex="-1"></a>  diary <span class="ot">&lt;-</span> event <span class="sc">==</span> <span class="st">&quot;followup_arm_1&quot;</span></span>
+<span id="cb12-28"><a href="#cb12-28" tabindex="-1"></a>  <span class="fu">data.frame</span>(<span class="at">record_id =</span> id, <span class="at">redcap_event_name =</span> event,</span>
+<span id="cb12-29"><a href="#cb12-29" tabindex="-1"></a>    <span class="at">redcap_repeat_instrument =</span> <span class="cf">if</span> (diary) <span class="st">&quot;diary&quot;</span> <span class="cf">else</span> <span class="cn">NA_character_</span>,</span>
+<span id="cb12-30"><a href="#cb12-30" tabindex="-1"></a>    <span class="at">redcap_repeat_instance =</span> instance,</span>
+<span id="cb12-31"><a href="#cb12-31" tabindex="-1"></a>    <span class="at">visit_start =</span> <span class="cf">if</span> (<span class="sc">!</span>diary) start <span class="cf">else</span> <span class="st">&quot;&quot;</span>,</span>
+<span id="cb12-32"><a href="#cb12-32" tabindex="-1"></a>    <span class="at">visit_a =</span> <span class="cf">if</span> (<span class="sc">!</span>diary) a <span class="cf">else</span> <span class="st">&quot;&quot;</span>, <span class="at">visit_b =</span> <span class="cf">if</span> (<span class="sc">!</span>diary) b <span class="cf">else</span> <span class="st">&quot;&quot;</span>,</span>
+<span id="cb12-33"><a href="#cb12-33" tabindex="-1"></a>    <span class="at">diary_start =</span> <span class="cf">if</span> (diary) start <span class="cf">else</span> <span class="st">&quot;&quot;</span>,</span>
+<span id="cb12-34"><a href="#cb12-34" tabindex="-1"></a>    <span class="at">diary_a =</span> <span class="cf">if</span> (diary) a <span class="cf">else</span> <span class="st">&quot;&quot;</span>, <span class="at">diary_b =</span> <span class="cf">if</span> (diary) b <span class="cf">else</span> <span class="st">&quot;&quot;</span>)</span>
+<span id="cb12-35"><a href="#cb12-35" tabindex="-1"></a>}</span>
+<span id="cb12-36"><a href="#cb12-36" tabindex="-1"></a>previous_data <span class="ot">&lt;-</span> dplyr<span class="sc">::</span><span class="fu">bind_rows</span>(</span>
+<span id="cb12-37"><a href="#cb12-37" tabindex="-1"></a>  <span class="fu">example_row</span>(<span class="st">&quot;001&quot;</span>, <span class="st">&quot;baseline_arm_1&quot;</span>, <span class="at">a =</span> <span class="st">&quot;&quot;</span>),</span>
+<span id="cb12-38"><a href="#cb12-38" tabindex="-1"></a>  <span class="fu">example_row</span>(<span class="st">&quot;002&quot;</span>, <span class="st">&quot;baseline_arm_1&quot;</span>),</span>
+<span id="cb12-39"><a href="#cb12-39" tabindex="-1"></a>  <span class="fu">example_row</span>(<span class="st">&quot;003&quot;</span>, <span class="st">&quot;baseline_arm_1&quot;</span>, <span class="at">start =</span> <span class="st">&quot;&quot;</span>, <span class="at">a =</span> <span class="st">&quot;&quot;</span>, <span class="at">b =</span> <span class="st">&quot;&quot;</span>),</span>
+<span id="cb12-40"><a href="#cb12-40" tabindex="-1"></a>  <span class="fu">example_row</span>(<span class="st">&quot;001&quot;</span>, <span class="st">&quot;followup_arm_1&quot;</span>, <span class="dv">2</span><span class="dt">L</span>, <span class="at">a =</span> <span class="st">&quot;&quot;</span>),</span>
+<span id="cb12-41"><a href="#cb12-41" tabindex="-1"></a>  <span class="fu">example_row</span>(<span class="st">&quot;002&quot;</span>, <span class="st">&quot;followup_arm_1&quot;</span>, <span class="dv">2</span><span class="dt">L</span>, <span class="at">a =</span> <span class="st">&quot;&quot;</span>),</span>
+<span id="cb12-42"><a href="#cb12-42" tabindex="-1"></a>  <span class="fu">example_row</span>(<span class="st">&quot;003&quot;</span>, <span class="st">&quot;followup_arm_1&quot;</span>, <span class="dv">1</span><span class="dt">L</span>)</span>
+<span id="cb12-43"><a href="#cb12-43" tabindex="-1"></a>)</span>
+<span id="cb12-44"><a href="#cb12-44" tabindex="-1"></a>current_data <span class="ot">&lt;-</span> dplyr<span class="sc">::</span><span class="fu">bind_rows</span>(</span>
+<span id="cb12-45"><a href="#cb12-45" tabindex="-1"></a>  <span class="fu">example_row</span>(<span class="st">&quot;001&quot;</span>, <span class="st">&quot;baseline_arm_1&quot;</span>),</span>
+<span id="cb12-46"><a href="#cb12-46" tabindex="-1"></a>  <span class="fu">example_row</span>(<span class="st">&quot;002&quot;</span>, <span class="st">&quot;baseline_arm_1&quot;</span>),</span>
+<span id="cb12-47"><a href="#cb12-47" tabindex="-1"></a>  <span class="fu">example_row</span>(<span class="st">&quot;003&quot;</span>, <span class="st">&quot;baseline_arm_1&quot;</span>, <span class="at">a =</span> <span class="st">&quot;&quot;</span>),</span>
+<span id="cb12-48"><a href="#cb12-48" tabindex="-1"></a>  <span class="fu">example_row</span>(<span class="st">&quot;004&quot;</span>, <span class="st">&quot;baseline_arm_1&quot;</span>, <span class="at">start =</span> <span class="st">&quot;&quot;</span>, <span class="at">a =</span> <span class="st">&quot;&quot;</span>, <span class="at">b =</span> <span class="st">&quot;&quot;</span>),</span>
+<span id="cb12-49"><a href="#cb12-49" tabindex="-1"></a>  <span class="fu">example_row</span>(<span class="st">&quot;002&quot;</span>, <span class="st">&quot;followup_arm_1&quot;</span>, <span class="dv">2</span><span class="dt">L</span>, <span class="at">a =</span> <span class="st">&quot;&quot;</span>),</span>
+<span id="cb12-50"><a href="#cb12-50" tabindex="-1"></a>  <span class="fu">example_row</span>(<span class="st">&quot;003&quot;</span>, <span class="st">&quot;followup_arm_1&quot;</span>, <span class="dv">2</span><span class="dt">L</span>, <span class="at">a =</span> <span class="st">&quot;&quot;</span>)</span>
+<span id="cb12-51"><a href="#cb12-51" tabindex="-1"></a>)</span>
+<span id="cb12-52"><a href="#cb12-52" tabindex="-1"></a>example_schedule <span class="ot">&lt;-</span> <span class="cf">function</span>(visit_ids, diary_ids) {</span>
+<span id="cb12-53"><a href="#cb12-53" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">bind_rows</span>(</span>
+<span id="cb12-54"><a href="#cb12-54" tabindex="-1"></a>    <span class="fu">data.frame</span>(<span class="at">record_id =</span> visit_ids, <span class="at">instrument =</span> <span class="st">&quot;visit&quot;</span>,</span>
+<span id="cb12-55"><a href="#cb12-55" tabindex="-1"></a>               <span class="at">redcap_event_name =</span> <span class="st">&quot;baseline_arm_1&quot;</span>, <span class="at">repeat_instance =</span> <span class="cn">NA_integer_</span>),</span>
+<span id="cb12-56"><a href="#cb12-56" tabindex="-1"></a>    <span class="fu">data.frame</span>(<span class="at">record_id =</span> diary_ids, <span class="at">instrument =</span> <span class="st">&quot;diary&quot;</span>,</span>
+<span id="cb12-57"><a href="#cb12-57" tabindex="-1"></a>               <span class="at">redcap_event_name =</span> <span class="st">&quot;followup_arm_1&quot;</span>, <span class="at">repeat_instance =</span> <span class="dv">2</span><span class="dt">L</span>)</span>
+<span id="cb12-58"><a href="#cb12-58" tabindex="-1"></a>  )</span>
+<span id="cb12-59"><a href="#cb12-59" tabindex="-1"></a>}</span>
+<span id="cb12-60"><a href="#cb12-60" tabindex="-1"></a>previous_plan <span class="ot">&lt;-</span> <span class="fu">plan_explicit</span>(previous_data, comparison_rcon,</span>
+<span id="cb12-61"><a href="#cb12-61" tabindex="-1"></a>  <span class="fu">example_schedule</span>(<span class="fu">c</span>(<span class="st">&quot;001&quot;</span>, <span class="st">&quot;002&quot;</span>, <span class="st">&quot;003&quot;</span>), <span class="fu">c</span>(<span class="st">&quot;001&quot;</span>, <span class="st">&quot;002&quot;</span>, <span class="st">&quot;003&quot;</span>)))</span>
+<span id="cb12-62"><a href="#cb12-62" tabindex="-1"></a>current_plan <span class="ot">&lt;-</span> <span class="fu">plan_explicit</span>(current_data, comparison_rcon,</span>
+<span id="cb12-63"><a href="#cb12-63" tabindex="-1"></a>  <span class="fu">example_schedule</span>(<span class="fu">c</span>(<span class="st">&quot;001&quot;</span>, <span class="st">&quot;002&quot;</span>, <span class="st">&quot;003&quot;</span>, <span class="st">&quot;004&quot;</span>), <span class="fu">c</span>(<span class="st">&quot;002&quot;</span>, <span class="st">&quot;003&quot;</span>)))</span>
+<span id="cb12-64"><a href="#cb12-64" tabindex="-1"></a>comparison_verified <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
+<span id="cb12-65"><a href="#cb12-65" tabindex="-1"></a>  <span class="at">project_id =</span> <span class="st">&quot;77&quot;</span>, <span class="at">record =</span> <span class="st">&quot;002&quot;</span>, <span class="at">event_id =</span> <span class="st">&quot;102&quot;</span>, <span class="at">field_name =</span> <span class="st">&quot;diary_a&quot;</span>,</span>
+<span id="cb12-66"><a href="#cb12-66" tabindex="-1"></a>  <span class="at">repeat_instrument =</span> <span class="st">&quot;diary&quot;</span>, <span class="at">instance =</span> <span class="dv">2</span><span class="dt">L</span>, <span class="at">ts =</span> <span class="st">&quot;2026-01-02 10:00:00&quot;</span>,</span>
+<span id="cb12-67"><a href="#cb12-67" tabindex="-1"></a>  <span class="at">current_query_status =</span> <span class="st">&quot;VERIFIED&quot;</span>, <span class="at">username =</span> <span class="st">&quot;reviewer_a&quot;</span></span>
+<span id="cb12-68"><a href="#cb12-68" tabindex="-1"></a>)</span>
+<span id="cb12-69"><a href="#cb12-69" tabindex="-1"></a>previous <span class="ot">&lt;-</span> <span class="fu">run_plan</span>(previous_plan, previous_data, comparison_rcon,</span>
+<span id="cb12-70"><a href="#cb12-70" tabindex="-1"></a>                     <span class="at">details =</span> <span class="cn">TRUE</span>, <span class="at">progress =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb12-71"><a href="#cb12-71" tabindex="-1"></a>current <span class="ot">&lt;-</span> <span class="fu">run_plan</span>(current_plan, current_data, comparison_rcon,</span>
+<span id="cb12-72"><a href="#cb12-72" tabindex="-1"></a>  <span class="at">verified =</span> comparison_verified, <span class="at">verified_user =</span> <span class="st">&quot;reviewer_a&quot;</span>,</span>
+<span id="cb12-73"><a href="#cb12-73" tabindex="-1"></a>  <span class="at">details =</span> <span class="cn">TRUE</span>, <span class="at">progress =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb12-74"><a href="#cb12-74" tabindex="-1"></a>comparison <span class="ot">&lt;-</span> <span class="fu">compare_reports</span>(previous, current)</span></code></pre></div>
+<div id="validation-summaries" class="section level3">
+<h3>Validation summaries</h3>
+<p>Each row identifies population, raw event, instrument, repeat
+instrument, exact repeat instance, registry level, and check. All four
+checks remain in registry order, including not-applicable checks. Each
+side retains status, reason, assessed/passed/failed counts, and
+pass/fail rates. Absent contexts have false presence flags, zero counts,
+and missing status and rates.</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a>summary_rows <span class="ot">&lt;-</span> <span class="fu">get_summary</span>(comparison, <span class="at">validation_check =</span> <span class="st">&quot;field-complete&quot;</span>)</span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>knitr<span class="sc">::</span><span class="fu">kable</span>(summary_rows[, <span class="fu">c</span>(</span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>  <span class="st">&quot;population&quot;</span>, <span class="st">&quot;redcap_event_name&quot;</span>, <span class="st">&quot;instrument&quot;</span>, <span class="st">&quot;repeat_instance&quot;</span>,</span>
+<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a>  <span class="st">&quot;previous_failed&quot;</span>, <span class="st">&quot;previous_assessed&quot;</span>, <span class="st">&quot;current_failed&quot;</span>, <span class="st">&quot;current_assessed&quot;</span></span>
+<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a>)])</span></code></pre></div>
+<table>
+<colgroup>
+<col width="9%" />
+<col width="14%" />
+<col width="9%" />
+<col width="13%" />
+<col width="13%" />
+<col width="14%" />
+<col width="12%" />
+<col width="13%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">population</th>
+<th align="left">redcap_event_name</th>
+<th align="left">instrument</th>
+<th align="right">repeat_instance</th>
+<th align="right">previous_failed</th>
+<th align="right">previous_assessed</th>
+<th align="right">current_failed</th>
+<th align="right">current_assessed</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">full</td>
+<td align="left">baseline_arm_1</td>
+<td align="left">visit</td>
+<td align="right">NA</td>
+<td align="right">1</td>
+<td align="right">4</td>
+<td align="right">1</td>
+<td align="right">6</td>
+</tr>
+<tr class="even">
+<td align="left">full</td>
+<td align="left">followup_arm_1</td>
+<td align="left">diary</td>
+<td align="right">2</td>
+<td align="right">2</td>
+<td align="right">4</td>
+<td align="right">1</td>
+<td align="right">4</td>
+</tr>
+<tr class="odd">
+<td align="left">shared</td>
+<td align="left">baseline_arm_1</td>
+<td align="left">visit</td>
+<td align="right">NA</td>
+<td align="right">1</td>
+<td align="right">4</td>
+<td align="right">1</td>
+<td align="right">6</td>
+</tr>
+<tr class="even">
+<td align="left">shared</td>
+<td align="left">followup_arm_1</td>
+<td align="left">diary</td>
+<td align="right">2</td>
+<td align="right">1</td>
+<td align="right">2</td>
+<td align="right">1</td>
+<td align="right">4</td>
+</tr>
+</tbody>
+</table>
+<p>For shared Baseline/Visit targets, field failures are <strong>1/4 →
+1/6</strong>: the denominator increases because record <code>003</code>
+now starts. The same target population does not guarantee the same
+assessed field population. Field counts represent field occurrences; a
+checkbox root counts once. The other three checks count target outcomes
+within their stratum. Failures across these different checks must not be
+added into one headline count.</p>
+</div>
+<div id="event-and-instrument-view" class="section level3">
+<h3>Event and instrument view</h3>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">requireNamespace</span>(<span class="st">&quot;flextable&quot;</span>, <span class="at">quietly =</span> <span class="cn">TRUE</span>) <span class="sc">&amp;&amp;</span></span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a>    <span class="fu">requireNamespace</span>(<span class="st">&quot;glue&quot;</span>, <span class="at">quietly =</span> <span class="cn">TRUE</span>)) {</span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>  <span class="fu">flex_event_instruments</span>(comparison)</span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a>}</span></code></pre></div>
+<div class="tabwid" style="overflow-x:auto;width:100%;"><style>.cl-e460d26e{}.cl-e44dbfc6{font-family:'Arial';font-size:10pt;font-weight:bold;font-style:normal;text-decoration:none;color:rgba(0, 0, 0, 1.00);background-color:transparent;}.cl-e44dbfd0{font-family:'Arial';font-size:10pt;font-weight:normal;font-style:normal;text-decoration:none;color:rgba(0, 0, 0, 1.00);background-color:transparent;}.cl-e4548c52{margin:0;text-align:left;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);padding-bottom:4pt;padding-top:4pt;padding-left:4pt;padding-right:4pt;line-height: 1;background-color:transparent;}.cl-e4548c5c{margin:0;text-align:left;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);padding-bottom:4pt;padding-top:4pt;padding-left:16pt;padding-right:4pt;line-height: 1;background-color:transparent;}.cl-e454d004{width:0.896in;background-color:transparent;vertical-align: middle;border-bottom: 1.5pt solid rgba(102, 102, 102, 1.00);border-top: 1.5pt solid rgba(102, 102, 102, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d018{width:0.966in;background-color:transparent;vertical-align: middle;border-bottom: 1.5pt solid rgba(102, 102, 102, 1.00);border-top: 1.5pt solid rgba(102, 102, 102, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d019{width:1.467in;background-color:transparent;vertical-align: middle;border-bottom: 1.5pt solid rgba(102, 102, 102, 1.00);border-top: 1.5pt solid rgba(102, 102, 102, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d022{width:1.313in;background-color:transparent;vertical-align: middle;border-bottom: 1.5pt solid rgba(102, 102, 102, 1.00);border-top: 1.5pt solid rgba(102, 102, 102, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d023{width:0.966in;background-color:transparent;vertical-align: middle;border-bottom: 1.5pt solid rgba(102, 102, 102, 1.00);border-top: 1.5pt solid rgba(102, 102, 102, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d024{width:0.928in;background-color:transparent;vertical-align: middle;border-bottom: 1.5pt solid rgba(102, 102, 102, 1.00);border-top: 1.5pt solid rgba(102, 102, 102, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d036{width:1.058in;background-color:transparent;vertical-align: middle;border-bottom: 1.5pt solid rgba(102, 102, 102, 1.00);border-top: 1.5pt solid rgba(102, 102, 102, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d037{width:0.896in;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d040{width:0.966in;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d041{width:1.467in;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d04a{width:1.313in;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d04b{width:0.966in;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d054{width:0.928in;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d05e{width:1.058in;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d068{width:0.896in;background-color:transparent;vertical-align: middle;border-bottom: 1.5pt solid rgba(102, 102, 102, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d069{width:0.966in;background-color:transparent;vertical-align: middle;border-bottom: 1.5pt solid rgba(102, 102, 102, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d072{width:1.467in;background-color:transparent;vertical-align: middle;border-bottom: 1.5pt solid rgba(102, 102, 102, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d07c{width:1.313in;background-color:transparent;vertical-align: middle;border-bottom: 1.5pt solid rgba(102, 102, 102, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d07d{width:0.966in;background-color:transparent;vertical-align: middle;border-bottom: 1.5pt solid rgba(102, 102, 102, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d07e{width:0.928in;background-color:transparent;vertical-align: middle;border-bottom: 1.5pt solid rgba(102, 102, 102, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-e454d086{width:1.058in;background-color:transparent;vertical-align: middle;border-bottom: 1.5pt solid rgba(102, 102, 102, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}</style><table data-quarto-disable-processing="true" class="cl-e460d26e"><thead><tr style="overflow-wrap:break-word;"><th colspan="4" class="cl-e454d004"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Context</span></p></th><th colspan="3" class="cl-e454d023"><p class="cl-e4548c52"><span class="cl-e44dbfc6">N (started/due)</span></p></th><th colspan="3" class="cl-e454d023"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Instrument Incomplete</span></p></th><th colspan="3" class="cl-e454d023"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Instrument Not Started</span></p></th><th colspan="3" class="cl-e454d023"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Instrument &gt;10% Missing</span></p></th></tr><tr style="overflow-wrap:break-word;"><th class="cl-e454d004"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Event</span></p></th><th class="cl-e454d018"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Instrument</span></p></th><th class="cl-e454d019"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Repeat Instrument</span></p></th><th class="cl-e454d022"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Repeat Instance</span></p></th><th class="cl-e454d023"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Previous</span></p></th><th class="cl-e454d024"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Current</span></p></th><th class="cl-e454d036"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Change (pp)</span></p></th><th class="cl-e454d023"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Previous</span></p></th><th class="cl-e454d023"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Current</span></p></th><th class="cl-e454d036"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Change (pp)</span></p></th><th class="cl-e454d023"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Previous</span></p></th><th class="cl-e454d023"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Current</span></p></th><th class="cl-e454d036"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Change (pp)</span></p></th><th class="cl-e454d023"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Previous</span></p></th><th class="cl-e454d023"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Current</span></p></th><th class="cl-e454d036"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Change (pp)</span></p></th></tr></thead><tbody><tr style="overflow-wrap:break-word;"><td colspan="16" class="cl-e454d037"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Full scope</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-e454d037"><p class="cl-e4548c52"><span class="cl-e44dbfc6">All</span></p></td><td class="cl-e454d040"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d041"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04a"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d054"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6">5/6 (83.3%)</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6">3/6 (50%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6">-33.3 pp</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6">2/6 (33.3%)</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6">1/6 (16.7%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6">-16.7 pp</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6">5/6 (83.3%)</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6">3/6 (50%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6">-33.3 pp</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-e454d037"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Baseline</span></p></td><td class="cl-e454d040"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d041"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04a"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6">3/3 (100%)</span></p></td><td class="cl-e454d054"><p class="cl-e4548c52"><span class="cl-e44dbfc6">4/4 (100%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6">0.0 pp</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-e454d037"><p class="cl-e4548c52"><span class="cl-e44dbfd0"></span></p></td><td class="cl-e454d040"><p class="cl-e4548c5c"><span class="cl-e44dbfd0">Visit</span></p></td><td class="cl-e454d041"><p class="cl-e4548c52"><span class="cl-e44dbfd0"></span></p></td><td class="cl-e454d04a"><p class="cl-e4548c52"><span class="cl-e44dbfd0"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0"></span></p></td><td class="cl-e454d054"><p class="cl-e4548c52"><span class="cl-e44dbfd0"></span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfd0"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0">2/3 (66.7%)</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0">2/4 (50%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfd0">-16.7 pp</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0">1/3 (33.3%)</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0">1/4 (25%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfd0">-8.3 pp</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0">2/3 (66.7%)</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0">2/4 (50%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfd0">-16.7 pp</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-e454d037"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Follow up</span></p></td><td class="cl-e454d040"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d041"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04a"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6">3/3 (100%)</span></p></td><td class="cl-e454d054"><p class="cl-e4548c52"><span class="cl-e44dbfc6">2/2 (100%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6">0.0 pp</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-e454d037"><p class="cl-e4548c52"><span class="cl-e44dbfd0"></span></p></td><td class="cl-e454d040"><p class="cl-e4548c5c"><span class="cl-e44dbfd0">Diary</span></p></td><td class="cl-e454d041"><p class="cl-e4548c52"><span class="cl-e44dbfd0">Diary</span></p></td><td class="cl-e454d04a"><p class="cl-e4548c52"><span class="cl-e44dbfd0">2</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0">2/3 (66.7%)</span></p></td><td class="cl-e454d054"><p class="cl-e4548c52"><span class="cl-e44dbfd0">2/2 (100%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfd0">33.3 pp</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0">3/3 (100%)</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0">1/2 (50%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfd0">-50.0 pp</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0">1/3 (33.3%)</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0">0/2 (0%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfd0">-33.3 pp</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0">3/3 (100%)</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0">1/2 (50%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfd0">-50.0 pp</span></p></td></tr><tr style="overflow-wrap:break-word;"><td colspan="16" class="cl-e454d037"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Shared targets</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-e454d037"><p class="cl-e4548c52"><span class="cl-e44dbfc6">All</span></p></td><td class="cl-e454d040"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d041"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04a"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d054"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6">4/5 (80%)</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6">2/5 (40%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6">-40.0 pp</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6">2/5 (40%)</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6">0/5 (0%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6">-40.0 pp</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6">4/5 (80%)</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6">2/5 (40%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6">-40.0 pp</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-e454d037"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Baseline</span></p></td><td class="cl-e454d040"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d041"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04a"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6">3/3 (100%)</span></p></td><td class="cl-e454d054"><p class="cl-e4548c52"><span class="cl-e44dbfc6">3/3 (100%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6">0.0 pp</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-e454d037"><p class="cl-e4548c52"><span class="cl-e44dbfd0"></span></p></td><td class="cl-e454d040"><p class="cl-e4548c5c"><span class="cl-e44dbfd0">Visit</span></p></td><td class="cl-e454d041"><p class="cl-e4548c52"><span class="cl-e44dbfd0"></span></p></td><td class="cl-e454d04a"><p class="cl-e4548c52"><span class="cl-e44dbfd0"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0"></span></p></td><td class="cl-e454d054"><p class="cl-e4548c52"><span class="cl-e44dbfd0"></span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfd0"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0">2/3 (66.7%)</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0">1/3 (33.3%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfd0">-33.3 pp</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0">1/3 (33.3%)</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0">0/3 (0%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfd0">-33.3 pp</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0">2/3 (66.7%)</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfd0">1/3 (33.3%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfd0">-33.3 pp</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-e454d037"><p class="cl-e4548c52"><span class="cl-e44dbfc6">Follow up</span></p></td><td class="cl-e454d040"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d041"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04a"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6">2/2 (100%)</span></p></td><td class="cl-e454d054"><p class="cl-e4548c52"><span class="cl-e44dbfc6">2/2 (100%)</span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6">0.0 pp</span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d04b"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td><td class="cl-e454d05e"><p class="cl-e4548c52"><span class="cl-e44dbfc6"></span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-e454d068"><p class="cl-e4548c52"><span class="cl-e44dbfd0"></span></p></td><td class="cl-e454d069"><p class="cl-e4548c5c"><span class="cl-e44dbfd0">Diary</span></p></td><td class="cl-e454d072"><p class="cl-e4548c52"><span class="cl-e44dbfd0">Diary</span></p></td><td class="cl-e454d07c"><p class="cl-e4548c52"><span class="cl-e44dbfd0">2</span></p></td><td class="cl-e454d07d"><p class="cl-e4548c52"><span class="cl-e44dbfd0">1/2 (50%)</span></p></td><td class="cl-e454d07e"><p class="cl-e4548c52"><span class="cl-e44dbfd0">2/2 (100%)</span></p></td><td class="cl-e454d086"><p class="cl-e4548c52"><span class="cl-e44dbfd0">50.0 pp</span></p></td><td class="cl-e454d07d"><p class="cl-e4548c52"><span class="cl-e44dbfd0">2/2 (100%)</span></p></td><td class="cl-e454d07d"><p class="cl-e4548c52"><span class="cl-e44dbfd0">1/2 (50%)</span></p></td><td class="cl-e454d086"><p class="cl-e4548c52"><span class="cl-e44dbfd0">-50.0 pp</span></p></td><td class="cl-e454d07d"><p class="cl-e4548c52"><span class="cl-e44dbfd0">1/2 (50%)</span></p></td><td class="cl-e454d07d"><p class="cl-e4548c52"><span class="cl-e44dbfd0">0/2 (0%)</span></p></td><td class="cl-e454d086"><p class="cl-e4548c52"><span class="cl-e44dbfd0">-50.0 pp</span></p></td><td class="cl-e454d07d"><p class="cl-e4548c52"><span class="cl-e44dbfd0">2/2 (100%)</span></p></td><td class="cl-e454d07d"><p class="cl-e4548c52"><span class="cl-e44dbfd0">1/2 (50%)</span></p></td><td class="cl-e454d086"><p class="cl-e4548c52"><span class="cl-e44dbfd0">-50.0 pp</span></p></td></tr></tbody></table></div>
+<p>Baseline/Visit incomplete instruments change <strong>2/3 →
+2/4</strong> in Full scope, versus <strong>2/3 → 1/3</strong> on Shared
+targets. Follow-up/Diary instance 2 has <strong>3/3 → 1/2</strong>
+incomplete instruments in Full scope and <strong>2/2 → 1/2</strong> on
+Shared targets. Incomplete instruments count target outcomes, not field
+failures. Both sides use the same threshold. Rate differences are
+percentage points.</p>
+<p>Event headers deduplicate record/event contexts across instruments,
+repeating rows show repeat-gate counts, and the All row sums instrument
+opportunities. An absent context displays “Out of scope”; disjoint plans
+display “No shared targets” in the shared section.</p>
+</div>
+<div id="record-and-field-changes" class="section level3">
+<h3>Record and field changes</h3>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a>knitr<span class="sc">::</span><span class="fu">kable</span>(<span class="fu">get_changes</span>(comparison, <span class="at">instruments =</span> <span class="st">&quot;diary&quot;</span>)[, <span class="fu">c</span>(</span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a>  <span class="st">&quot;record_id&quot;</span>, <span class="st">&quot;repeat_instance&quot;</span>, <span class="st">&quot;validation_check&quot;</span>, <span class="st">&quot;field_name&quot;</span>, <span class="st">&quot;change&quot;</span>, <span class="st">&quot;reason&quot;</span></span>
+<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>)])</span></code></pre></div>
+<table>
+<colgroup>
+<col width="8%" />
+<col width="14%" />
+<col width="24%" />
+<col width="9%" />
+<col width="16%" />
+<col width="25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">record_id</th>
+<th align="right">repeat_instance</th>
+<th align="left">validation_check</th>
+<th align="left">field_name</th>
+<th align="left">change</th>
+<th align="left">reason</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">003</td>
+<td align="right">2</td>
+<td align="left">repeat-instance-row-started</td>
+<td align="left">NA</td>
+<td align="left">completed</td>
+<td align="left">check now passes directly</td>
+</tr>
+<tr class="even">
+<td align="left">001</td>
+<td align="right">2</td>
+<td align="left">field-complete</td>
+<td align="left">diary_a</td>
+<td align="left">removed_from_scope</td>
+<td align="left">target removed from the plan</td>
+</tr>
+<tr class="odd">
+<td align="left">002</td>
+<td align="right">2</td>
+<td align="left">field-complete</td>
+<td align="left">diary_a</td>
+<td align="left">verified</td>
+<td align="left">verification applied</td>
+</tr>
+<tr class="even">
+<td align="left">003</td>
+<td align="right">2</td>
+<td align="left">field-complete</td>
+<td align="left">diary_a</td>
+<td align="left">newly_detected</td>
+<td align="left">newly assessed</td>
+</tr>
+</tbody>
+</table>
+<p><code>get_changes()</code> retains failures present in either report.
+Exact target keys plus check and field name identify each failure;
+leading-zero IDs are retained. Added/removed targets take scope
+precedence. Within shared targets, <code>newly_detected</code>,
+<code>still_missing</code>, <code>completed</code>,
+<code>verified</code>, and <code>no_longer_assessed</code> distinguish
+new failure, persistent failure, direct pass, verification, and
+branching/gate exclusion. Newly reached checks and loss of verification
+have explicit reasons. Verification setup changes are flagged in
+<code>comparison$verification</code> without claiming they caused an
+outcome change.</p>
+<p>Each stratum reconciles previous failures to still-missing,
+completed, verified, no-longer-assessed, and removed-scope failures;
+current failures reconcile to still-missing, newly detected, and
+added-scope failures. Full-scope summary sides agree with the source
+reports. Shared summaries contain only retained-target transitions.</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a><span class="fu">get_summary</span>(comparison, <span class="at">population =</span> <span class="st">&quot;shared&quot;</span>, <span class="at">instruments =</span> <span class="st">&quot;visit&quot;</span>)</span>
+<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a><span class="fu">get_changes</span>(comparison, <span class="at">change =</span> <span class="fu">c</span>(<span class="st">&quot;newly_detected&quot;</span>, <span class="st">&quot;still_missing&quot;</span>))</span>
+<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a>comparison<span class="sc">$</span>scope_changes  <span class="co"># Includes added/removed targets with no failures.</span></span>
+<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a><span class="fu">flexify</span>(<span class="fu">get_changes</span>(comparison))</span></code></pre></div>
+<p>The comparison preserves plans, paired target results, normalized
+settings, summary strata, transitions, scope changes, and verification
+mode/reviewer. It excludes response values and raw verification history.
+Available current links are preferred, with previous links as fallback.
+Existing saved reports remain usable with report accessors and
+formatters; regenerate legacy or nondetailed reports before comparing
+them.</p>
+</div>
+</div>
 <div id="verification" class="section level2">
 <h2>Verification</h2>
 <p>Verification is optional and intended for projects that use REDCap’s
@@ -1493,18 +1867,18 @@ and in your project. Use an authorized live
 <code>&quot;data_quality_api&quot;</code>; check the module’s configuration/link
 or ask your REDCap administrator if your installation uses another
 prefix.</p>
-<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a>verified <span class="ot">&lt;-</span> <span class="fu">export_data_quality</span>(rcon)</span>
-<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a><span class="co"># To restrict the request to selected records:</span></span>
-<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a><span class="co"># verified &lt;- export_data_quality(rcon, records = c(&quot;1&quot;, &quot;2&quot;))</span></span>
-<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a></span>
-<span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a>verified_report <span class="ot">&lt;-</span> <span class="fu">run_plan</span>(</span>
-<span id="cb12-6"><a href="#cb12-6" tabindex="-1"></a>  <span class="at">plan =</span> explicit_plan,</span>
-<span id="cb12-7"><a href="#cb12-7" tabindex="-1"></a>  <span class="at">data =</span> records,</span>
-<span id="cb12-8"><a href="#cb12-8" tabindex="-1"></a>  <span class="at">rcon =</span> rcon,</span>
-<span id="cb12-9"><a href="#cb12-9" tabindex="-1"></a>  <span class="at">verified =</span> verified,</span>
-<span id="cb12-10"><a href="#cb12-10" tabindex="-1"></a>  <span class="at">verified_user =</span> <span class="st">&quot;reviewer&quot;</span>,</span>
-<span id="cb12-11"><a href="#cb12-11" tabindex="-1"></a>  <span class="at">details =</span> <span class="cn">TRUE</span></span>
-<span id="cb12-12"><a href="#cb12-12" tabindex="-1"></a>)</span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a>verified <span class="ot">&lt;-</span> <span class="fu">export_data_quality</span>(rcon)</span>
+<span id="cb17-2"><a href="#cb17-2" tabindex="-1"></a><span class="co"># To restrict the request to selected records:</span></span>
+<span id="cb17-3"><a href="#cb17-3" tabindex="-1"></a><span class="co"># verified &lt;- export_data_quality(rcon, records = c(&quot;1&quot;, &quot;2&quot;))</span></span>
+<span id="cb17-4"><a href="#cb17-4" tabindex="-1"></a></span>
+<span id="cb17-5"><a href="#cb17-5" tabindex="-1"></a>verified_report <span class="ot">&lt;-</span> <span class="fu">run_plan</span>(</span>
+<span id="cb17-6"><a href="#cb17-6" tabindex="-1"></a>  <span class="at">plan =</span> explicit_plan,</span>
+<span id="cb17-7"><a href="#cb17-7" tabindex="-1"></a>  <span class="at">data =</span> records,</span>
+<span id="cb17-8"><a href="#cb17-8" tabindex="-1"></a>  <span class="at">rcon =</span> rcon,</span>
+<span id="cb17-9"><a href="#cb17-9" tabindex="-1"></a>  <span class="at">verified =</span> verified,</span>
+<span id="cb17-10"><a href="#cb17-10" tabindex="-1"></a>  <span class="at">verified_user =</span> <span class="st">&quot;reviewer&quot;</span>,</span>
+<span id="cb17-11"><a href="#cb17-11" tabindex="-1"></a>  <span class="at">details =</span> <span class="cn">TRUE</span></span>
+<span id="cb17-12"><a href="#cb17-12" tabindex="-1"></a>)</span></code></pre></div>
 <p><code>records = NULL</code> retrieves the complete project history
 and can take time on large projects. Export once and reuse the result
 across assessments. <code>run_plan()</code> never retrieves history.
@@ -1609,57 +1983,57 @@ flattened export: record <code>1</code> has a verification, record
 <code>2</code> has a later reopening by the same reviewer, and record
 <code>3</code> has an issue without any resolutions. A live workflow
 obtains this table with <code>export_data_quality()</code>.</p>
-<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a>metadata <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
-<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>  <span class="at">field_name =</span> <span class="fu">c</span>(<span class="st">&quot;record_id&quot;</span>, <span class="st">&quot;started&quot;</span>, <span class="st">&quot;value&quot;</span>),</span>
-<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>  <span class="at">form_name =</span> <span class="st">&quot;baseline&quot;</span>,</span>
-<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a>  <span class="at">field_type =</span> <span class="st">&quot;text&quot;</span>,</span>
-<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a>  <span class="at">field_label =</span> <span class="fu">c</span>(<span class="st">&quot;Record ID&quot;</span>, <span class="st">&quot;Started&quot;</span>, <span class="st">&quot;Value&quot;</span>),</span>
-<span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a>  <span class="at">required_field =</span> <span class="fu">c</span>(<span class="st">&quot;y&quot;</span>, <span class="st">&quot;&quot;</span>, <span class="st">&quot;y&quot;</span>)</span>
-<span id="cb13-7"><a href="#cb13-7" tabindex="-1"></a>)</span>
-<span id="cb13-8"><a href="#cb13-8" tabindex="-1"></a>project_info <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
-<span id="cb13-9"><a href="#cb13-9" tabindex="-1"></a>  <span class="at">project_id =</span> <span class="st">&quot;1&quot;</span>,</span>
-<span id="cb13-10"><a href="#cb13-10" tabindex="-1"></a>  <span class="at">is_longitudinal =</span> <span class="st">&quot;0&quot;</span>,</span>
-<span id="cb13-11"><a href="#cb13-11" tabindex="-1"></a>  <span class="at">has_repeating_instruments_or_events =</span> <span class="st">&quot;0&quot;</span></span>
-<span id="cb13-12"><a href="#cb13-12" tabindex="-1"></a>)</span>
-<span id="cb13-13"><a href="#cb13-13" tabindex="-1"></a>rcon <span class="ot">&lt;-</span> <span class="fu">suppressWarnings</span>(redcapAPI<span class="sc">::</span><span class="fu">offlineConnection</span>(</span>
-<span id="cb13-14"><a href="#cb13-14" tabindex="-1"></a>  <span class="at">meta_data =</span> metadata,</span>
-<span id="cb13-15"><a href="#cb13-15" tabindex="-1"></a>  <span class="at">project_info =</span> project_info,</span>
-<span id="cb13-16"><a href="#cb13-16" tabindex="-1"></a>  <span class="at">repeat_instrument =</span> redcapAPI<span class="sc">::</span>REDCAP_REPEAT_INSTRUMENT_STRUCTURE</span>
-<span id="cb13-17"><a href="#cb13-17" tabindex="-1"></a>))</span>
-<span id="cb13-18"><a href="#cb13-18" tabindex="-1"></a>records <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
-<span id="cb13-19"><a href="#cb13-19" tabindex="-1"></a>  <span class="at">record_id =</span> <span class="fu">c</span>(<span class="st">&quot;1&quot;</span>, <span class="st">&quot;2&quot;</span>, <span class="st">&quot;3&quot;</span>),</span>
-<span id="cb13-20"><a href="#cb13-20" tabindex="-1"></a>  <span class="at">started =</span> <span class="st">&quot;yes&quot;</span>,</span>
-<span id="cb13-21"><a href="#cb13-21" tabindex="-1"></a>  <span class="at">value =</span> <span class="st">&quot;&quot;</span></span>
-<span id="cb13-22"><a href="#cb13-22" tabindex="-1"></a>)</span>
-<span id="cb13-23"><a href="#cb13-23" tabindex="-1"></a>verified <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
-<span id="cb13-24"><a href="#cb13-24" tabindex="-1"></a>  <span class="at">project_id =</span> <span class="st">&quot;1&quot;</span>,</span>
-<span id="cb13-25"><a href="#cb13-25" tabindex="-1"></a>  <span class="at">record =</span> <span class="fu">c</span>(<span class="st">&quot;1&quot;</span>, <span class="st">&quot;2&quot;</span>, <span class="st">&quot;2&quot;</span>, <span class="st">&quot;3&quot;</span>),</span>
-<span id="cb13-26"><a href="#cb13-26" tabindex="-1"></a>  <span class="at">event_id =</span> <span class="st">&quot;101&quot;</span>,</span>
-<span id="cb13-27"><a href="#cb13-27" tabindex="-1"></a>  <span class="at">field_name =</span> <span class="st">&quot;value&quot;</span>,</span>
-<span id="cb13-28"><a href="#cb13-28" tabindex="-1"></a>  <span class="at">repeat_instrument =</span> <span class="cn">NA_character_</span>,</span>
-<span id="cb13-29"><a href="#cb13-29" tabindex="-1"></a>  <span class="at">instance =</span> <span class="st">&quot;1&quot;</span>,</span>
-<span id="cb13-30"><a href="#cb13-30" tabindex="-1"></a>  <span class="at">status_id =</span> <span class="fu">c</span>(<span class="st">&quot;10&quot;</span>, <span class="st">&quot;11&quot;</span>, <span class="st">&quot;11&quot;</span>, <span class="st">&quot;12&quot;</span>),</span>
-<span id="cb13-31"><a href="#cb13-31" tabindex="-1"></a>  <span class="at">res_id =</span> <span class="fu">c</span>(<span class="st">&quot;20&quot;</span>, <span class="st">&quot;21&quot;</span>, <span class="st">&quot;22&quot;</span>, <span class="cn">NA_character_</span>),</span>
-<span id="cb13-32"><a href="#cb13-32" tabindex="-1"></a>  <span class="at">ts =</span> <span class="fu">c</span>(</span>
-<span id="cb13-33"><a href="#cb13-33" tabindex="-1"></a>    <span class="st">&quot;2026-01-02 10:00:00&quot;</span>, <span class="st">&quot;2026-01-02 10:00:00&quot;</span>,</span>
-<span id="cb13-34"><a href="#cb13-34" tabindex="-1"></a>    <span class="st">&quot;2026-01-03 10:00:00&quot;</span>, <span class="cn">NA_character_</span></span>
-<span id="cb13-35"><a href="#cb13-35" tabindex="-1"></a>  ),</span>
-<span id="cb13-36"><a href="#cb13-36" tabindex="-1"></a>  <span class="at">current_query_status =</span> <span class="fu">c</span>(<span class="st">&quot;VERIFIED&quot;</span>, <span class="st">&quot;VERIFIED&quot;</span>, <span class="st">&quot;OPEN&quot;</span>, <span class="cn">NA_character_</span>),</span>
-<span id="cb13-37"><a href="#cb13-37" tabindex="-1"></a>  <span class="at">username =</span> <span class="fu">c</span>(<span class="st">&quot;reviewer&quot;</span>, <span class="st">&quot;reviewer&quot;</span>, <span class="st">&quot;reviewer&quot;</span>, <span class="cn">NA_character_</span>)</span>
-<span id="cb13-38"><a href="#cb13-38" tabindex="-1"></a>)</span>
-<span id="cb13-39"><a href="#cb13-39" tabindex="-1"></a></span>
-<span id="cb13-40"><a href="#cb13-40" tabindex="-1"></a>plan <span class="ot">&lt;-</span> <span class="fu">plan_from_data</span>(records, rcon, <span class="st">&quot;baseline&quot;</span>)</span>
-<span id="cb13-41"><a href="#cb13-41" tabindex="-1"></a>before <span class="ot">&lt;-</span> <span class="fu">run_plan</span>(plan, records, rcon, <span class="at">progress =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb13-42"><a href="#cb13-42" tabindex="-1"></a>after <span class="ot">&lt;-</span> <span class="fu">run_plan</span>(</span>
-<span id="cb13-43"><a href="#cb13-43" tabindex="-1"></a>  plan, records, rcon,</span>
-<span id="cb13-44"><a href="#cb13-44" tabindex="-1"></a>  <span class="at">verified =</span> verified, <span class="at">verified_user =</span> <span class="st">&quot;reviewer&quot;</span>,</span>
-<span id="cb13-45"><a href="#cb13-45" tabindex="-1"></a>  <span class="at">details =</span> <span class="cn">TRUE</span>, <span class="at">progress =</span> <span class="cn">FALSE</span></span>
-<span id="cb13-46"><a href="#cb13-46" tabindex="-1"></a>)</span>
-<span id="cb13-47"><a href="#cb13-47" tabindex="-1"></a>knitr<span class="sc">::</span><span class="fu">kable</span>(<span class="fu">data.frame</span>(</span>
-<span id="cb13-48"><a href="#cb13-48" tabindex="-1"></a>  <span class="at">record_id =</span> before<span class="sc">$</span>target_results<span class="sc">$</span>record_id,</span>
-<span id="cb13-49"><a href="#cb13-49" tabindex="-1"></a>  <span class="at">before =</span> before<span class="sc">$</span>target_results<span class="sc">$</span>field_complete,</span>
-<span id="cb13-50"><a href="#cb13-50" tabindex="-1"></a>  <span class="at">after =</span> after<span class="sc">$</span>target_results<span class="sc">$</span>field_complete</span>
-<span id="cb13-51"><a href="#cb13-51" tabindex="-1"></a>))</span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a>metadata <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
+<span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a>  <span class="at">field_name =</span> <span class="fu">c</span>(<span class="st">&quot;record_id&quot;</span>, <span class="st">&quot;started&quot;</span>, <span class="st">&quot;value&quot;</span>),</span>
+<span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a>  <span class="at">form_name =</span> <span class="st">&quot;baseline&quot;</span>,</span>
+<span id="cb18-4"><a href="#cb18-4" tabindex="-1"></a>  <span class="at">field_type =</span> <span class="st">&quot;text&quot;</span>,</span>
+<span id="cb18-5"><a href="#cb18-5" tabindex="-1"></a>  <span class="at">field_label =</span> <span class="fu">c</span>(<span class="st">&quot;Record ID&quot;</span>, <span class="st">&quot;Started&quot;</span>, <span class="st">&quot;Value&quot;</span>),</span>
+<span id="cb18-6"><a href="#cb18-6" tabindex="-1"></a>  <span class="at">required_field =</span> <span class="fu">c</span>(<span class="st">&quot;y&quot;</span>, <span class="st">&quot;&quot;</span>, <span class="st">&quot;y&quot;</span>)</span>
+<span id="cb18-7"><a href="#cb18-7" tabindex="-1"></a>)</span>
+<span id="cb18-8"><a href="#cb18-8" tabindex="-1"></a>project_info <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
+<span id="cb18-9"><a href="#cb18-9" tabindex="-1"></a>  <span class="at">project_id =</span> <span class="st">&quot;1&quot;</span>,</span>
+<span id="cb18-10"><a href="#cb18-10" tabindex="-1"></a>  <span class="at">is_longitudinal =</span> <span class="st">&quot;0&quot;</span>,</span>
+<span id="cb18-11"><a href="#cb18-11" tabindex="-1"></a>  <span class="at">has_repeating_instruments_or_events =</span> <span class="st">&quot;0&quot;</span></span>
+<span id="cb18-12"><a href="#cb18-12" tabindex="-1"></a>)</span>
+<span id="cb18-13"><a href="#cb18-13" tabindex="-1"></a>rcon <span class="ot">&lt;-</span> <span class="fu">suppressWarnings</span>(redcapAPI<span class="sc">::</span><span class="fu">offlineConnection</span>(</span>
+<span id="cb18-14"><a href="#cb18-14" tabindex="-1"></a>  <span class="at">meta_data =</span> metadata,</span>
+<span id="cb18-15"><a href="#cb18-15" tabindex="-1"></a>  <span class="at">project_info =</span> project_info,</span>
+<span id="cb18-16"><a href="#cb18-16" tabindex="-1"></a>  <span class="at">repeat_instrument =</span> redcapAPI<span class="sc">::</span>REDCAP_REPEAT_INSTRUMENT_STRUCTURE</span>
+<span id="cb18-17"><a href="#cb18-17" tabindex="-1"></a>))</span>
+<span id="cb18-18"><a href="#cb18-18" tabindex="-1"></a>records <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
+<span id="cb18-19"><a href="#cb18-19" tabindex="-1"></a>  <span class="at">record_id =</span> <span class="fu">c</span>(<span class="st">&quot;1&quot;</span>, <span class="st">&quot;2&quot;</span>, <span class="st">&quot;3&quot;</span>),</span>
+<span id="cb18-20"><a href="#cb18-20" tabindex="-1"></a>  <span class="at">started =</span> <span class="st">&quot;yes&quot;</span>,</span>
+<span id="cb18-21"><a href="#cb18-21" tabindex="-1"></a>  <span class="at">value =</span> <span class="st">&quot;&quot;</span></span>
+<span id="cb18-22"><a href="#cb18-22" tabindex="-1"></a>)</span>
+<span id="cb18-23"><a href="#cb18-23" tabindex="-1"></a>verified <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
+<span id="cb18-24"><a href="#cb18-24" tabindex="-1"></a>  <span class="at">project_id =</span> <span class="st">&quot;1&quot;</span>,</span>
+<span id="cb18-25"><a href="#cb18-25" tabindex="-1"></a>  <span class="at">record =</span> <span class="fu">c</span>(<span class="st">&quot;1&quot;</span>, <span class="st">&quot;2&quot;</span>, <span class="st">&quot;2&quot;</span>, <span class="st">&quot;3&quot;</span>),</span>
+<span id="cb18-26"><a href="#cb18-26" tabindex="-1"></a>  <span class="at">event_id =</span> <span class="st">&quot;101&quot;</span>,</span>
+<span id="cb18-27"><a href="#cb18-27" tabindex="-1"></a>  <span class="at">field_name =</span> <span class="st">&quot;value&quot;</span>,</span>
+<span id="cb18-28"><a href="#cb18-28" tabindex="-1"></a>  <span class="at">repeat_instrument =</span> <span class="cn">NA_character_</span>,</span>
+<span id="cb18-29"><a href="#cb18-29" tabindex="-1"></a>  <span class="at">instance =</span> <span class="st">&quot;1&quot;</span>,</span>
+<span id="cb18-30"><a href="#cb18-30" tabindex="-1"></a>  <span class="at">status_id =</span> <span class="fu">c</span>(<span class="st">&quot;10&quot;</span>, <span class="st">&quot;11&quot;</span>, <span class="st">&quot;11&quot;</span>, <span class="st">&quot;12&quot;</span>),</span>
+<span id="cb18-31"><a href="#cb18-31" tabindex="-1"></a>  <span class="at">res_id =</span> <span class="fu">c</span>(<span class="st">&quot;20&quot;</span>, <span class="st">&quot;21&quot;</span>, <span class="st">&quot;22&quot;</span>, <span class="cn">NA_character_</span>),</span>
+<span id="cb18-32"><a href="#cb18-32" tabindex="-1"></a>  <span class="at">ts =</span> <span class="fu">c</span>(</span>
+<span id="cb18-33"><a href="#cb18-33" tabindex="-1"></a>    <span class="st">&quot;2026-01-02 10:00:00&quot;</span>, <span class="st">&quot;2026-01-02 10:00:00&quot;</span>,</span>
+<span id="cb18-34"><a href="#cb18-34" tabindex="-1"></a>    <span class="st">&quot;2026-01-03 10:00:00&quot;</span>, <span class="cn">NA_character_</span></span>
+<span id="cb18-35"><a href="#cb18-35" tabindex="-1"></a>  ),</span>
+<span id="cb18-36"><a href="#cb18-36" tabindex="-1"></a>  <span class="at">current_query_status =</span> <span class="fu">c</span>(<span class="st">&quot;VERIFIED&quot;</span>, <span class="st">&quot;VERIFIED&quot;</span>, <span class="st">&quot;OPEN&quot;</span>, <span class="cn">NA_character_</span>),</span>
+<span id="cb18-37"><a href="#cb18-37" tabindex="-1"></a>  <span class="at">username =</span> <span class="fu">c</span>(<span class="st">&quot;reviewer&quot;</span>, <span class="st">&quot;reviewer&quot;</span>, <span class="st">&quot;reviewer&quot;</span>, <span class="cn">NA_character_</span>)</span>
+<span id="cb18-38"><a href="#cb18-38" tabindex="-1"></a>)</span>
+<span id="cb18-39"><a href="#cb18-39" tabindex="-1"></a></span>
+<span id="cb18-40"><a href="#cb18-40" tabindex="-1"></a>plan <span class="ot">&lt;-</span> <span class="fu">plan_from_data</span>(records, rcon, <span class="st">&quot;baseline&quot;</span>)</span>
+<span id="cb18-41"><a href="#cb18-41" tabindex="-1"></a>before <span class="ot">&lt;-</span> <span class="fu">run_plan</span>(plan, records, rcon, <span class="at">progress =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb18-42"><a href="#cb18-42" tabindex="-1"></a>after <span class="ot">&lt;-</span> <span class="fu">run_plan</span>(</span>
+<span id="cb18-43"><a href="#cb18-43" tabindex="-1"></a>  plan, records, rcon,</span>
+<span id="cb18-44"><a href="#cb18-44" tabindex="-1"></a>  <span class="at">verified =</span> verified, <span class="at">verified_user =</span> <span class="st">&quot;reviewer&quot;</span>,</span>
+<span id="cb18-45"><a href="#cb18-45" tabindex="-1"></a>  <span class="at">details =</span> <span class="cn">TRUE</span>, <span class="at">progress =</span> <span class="cn">FALSE</span></span>
+<span id="cb18-46"><a href="#cb18-46" tabindex="-1"></a>)</span>
+<span id="cb18-47"><a href="#cb18-47" tabindex="-1"></a>knitr<span class="sc">::</span><span class="fu">kable</span>(<span class="fu">data.frame</span>(</span>
+<span id="cb18-48"><a href="#cb18-48" tabindex="-1"></a>  <span class="at">record_id =</span> before<span class="sc">$</span>target_results<span class="sc">$</span>record_id,</span>
+<span id="cb18-49"><a href="#cb18-49" tabindex="-1"></a>  <span class="at">before =</span> before<span class="sc">$</span>target_results<span class="sc">$</span>field_complete,</span>
+<span id="cb18-50"><a href="#cb18-50" tabindex="-1"></a>  <span class="at">after =</span> after<span class="sc">$</span>target_results<span class="sc">$</span>field_complete</span>
+<span id="cb18-51"><a href="#cb18-51" tabindex="-1"></a>))</span></code></pre></div>
 <table>
 <thead>
 <tr class="header">
@@ -1690,13 +2064,13 @@ obtains this table with <code>export_data_quality()</code>.</p>
 <code>2</code> and <code>3</code> remain unresolved. Verification
 affects only a failed, selected, applicable field whose target passes
 the upstream row and instrument-start checks.</p>
-<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a>field_rows <span class="ot">&lt;-</span> after<span class="sc">$</span>details[</span>
-<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a>  after<span class="sc">$</span>details<span class="sc">$</span>validation_check <span class="sc">==</span> <span class="st">&quot;field-complete&quot;</span> <span class="sc">&amp;</span></span>
-<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>    after<span class="sc">$</span>details<span class="sc">$</span>field_name <span class="sc">%in%</span> <span class="st">&quot;value&quot;</span>,</span>
-<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a>]</span>
-<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a>knitr<span class="sc">::</span><span class="fu">kable</span>(field_rows[, <span class="fu">c</span>(</span>
-<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a>  <span class="st">&quot;record_id&quot;</span>, <span class="st">&quot;raw_disposition&quot;</span>, <span class="st">&quot;verification_applied&quot;</span>, <span class="st">&quot;effective_disposition&quot;</span></span>
-<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a>)])</span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" tabindex="-1"></a>field_rows <span class="ot">&lt;-</span> after<span class="sc">$</span>details[</span>
+<span id="cb19-2"><a href="#cb19-2" tabindex="-1"></a>  after<span class="sc">$</span>details<span class="sc">$</span>validation_check <span class="sc">==</span> <span class="st">&quot;field-complete&quot;</span> <span class="sc">&amp;</span></span>
+<span id="cb19-3"><a href="#cb19-3" tabindex="-1"></a>    after<span class="sc">$</span>details<span class="sc">$</span>field_name <span class="sc">%in%</span> <span class="st">&quot;value&quot;</span>,</span>
+<span id="cb19-4"><a href="#cb19-4" tabindex="-1"></a>]</span>
+<span id="cb19-5"><a href="#cb19-5" tabindex="-1"></a>knitr<span class="sc">::</span><span class="fu">kable</span>(field_rows[, <span class="fu">c</span>(</span>
+<span id="cb19-6"><a href="#cb19-6" tabindex="-1"></a>  <span class="st">&quot;record_id&quot;</span>, <span class="st">&quot;raw_disposition&quot;</span>, <span class="st">&quot;verification_applied&quot;</span>, <span class="st">&quot;effective_disposition&quot;</span></span>
+<span id="cb19-7"><a href="#cb19-7" tabindex="-1"></a>)])</span></code></pre></div>
 <table>
 <colgroup>
 <col width="14%" />
@@ -1733,10 +2107,10 @@ the upstream row and instrument-start checks.</p>
 </tr>
 </tbody>
 </table>
-<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a>knitr<span class="sc">::</span><span class="fu">kable</span>(<span class="fu">data.frame</span>(</span>
-<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a>  <span class="at">audit_field =</span> <span class="fu">names</span>(after<span class="sc">$</span>verification),</span>
-<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>  <span class="at">value =</span> <span class="fu">unlist</span>(after<span class="sc">$</span>verification, <span class="at">use.names =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a>))</span></code></pre></div>
+<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" tabindex="-1"></a>knitr<span class="sc">::</span><span class="fu">kable</span>(<span class="fu">data.frame</span>(</span>
+<span id="cb20-2"><a href="#cb20-2" tabindex="-1"></a>  <span class="at">audit_field =</span> <span class="fu">names</span>(after<span class="sc">$</span>verification),</span>
+<span id="cb20-3"><a href="#cb20-3" tabindex="-1"></a>  <span class="at">value =</span> <span class="fu">unlist</span>(after<span class="sc">$</span>verification, <span class="at">use.names =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb20-4"><a href="#cb20-4" tabindex="-1"></a>))</span></code></pre></div>
 <table>
 <thead>
 <tr class="header">
@@ -2078,6 +2452,12 @@ validation level, and validation check.</td>
 <td>Detailed check and field rows when <code>details = TRUE</code>;
 <code>NULL</code> when <code>details = FALSE</code>.</td>
 </tr>
+<tr class="even">
+<td><code>settings</code></td>
+<td>Versioned <code>required_fields</code>, <code>ignore_fields</code>,
+and <code>exclude_types</code>; empty selections are character vectors
+and selection order is normalized.</td>
+</tr>
 </tbody>
 </table>
 <p><code>summary$status</code> is <code>&quot;assessed&quot;</code> or
@@ -2189,12 +2569,12 @@ assessment result in both settings.</p>
 </div>
 <div id="inspect-and-present-results" class="section level2">
 <h2>Inspect and present results</h2>
-<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a><span class="fu">get_summary</span>(report)</span>
-<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a><span class="fu">get_missing</span>(report)</span>
-<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a></span>
-<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a><span class="fu">flexify</span>(<span class="fu">get_summary</span>(report))</span>
-<span id="cb16-5"><a href="#cb16-5" tabindex="-1"></a><span class="fu">flex_event_instruments</span>(report)</span>
-<span id="cb16-6"><a href="#cb16-6" tabindex="-1"></a><span class="fu">flex_html</span>(<span class="fu">flexify</span>(<span class="fu">get_missing</span>(report)))</span></code></pre></div>
+<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" tabindex="-1"></a><span class="fu">get_summary</span>(report)</span>
+<span id="cb21-2"><a href="#cb21-2" tabindex="-1"></a><span class="fu">get_missing</span>(report)</span>
+<span id="cb21-3"><a href="#cb21-3" tabindex="-1"></a></span>
+<span id="cb21-4"><a href="#cb21-4" tabindex="-1"></a><span class="fu">flexify</span>(<span class="fu">get_summary</span>(report))</span>
+<span id="cb21-5"><a href="#cb21-5" tabindex="-1"></a><span class="fu">flex_event_instruments</span>(report)</span>
+<span id="cb21-6"><a href="#cb21-6" tabindex="-1"></a><span class="fu">flex_html</span>(<span class="fu">flexify</span>(<span class="fu">get_missing</span>(report)))</span></code></pre></div>
 <p>Values within one accessor filter vector are alternatives. Multiple
 non-<code>NULL</code> filters are combined by intersection. Matching
 uses exact raw values and is case sensitive; duplicate requested values

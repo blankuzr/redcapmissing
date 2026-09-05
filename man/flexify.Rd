@@ -7,7 +7,8 @@
 flexify(x)
 }
 \arguments{
-\item{x}{A tibble returned by \code{\link[=get_summary]{get_summary()}} or \code{\link[=get_missing]{get_missing()}}, optionally
+\item{x}{A tibble returned by \code{\link[=get_summary]{get_summary()}}, \code{\link[=get_missing]{get_missing()}}, or
+\code{\link[=get_changes]{get_changes()}}, optionally
 filtered, grouped, reordered, or reduced to a nonempty subset of its
 documented columns.}
 }
@@ -16,12 +17,12 @@ A \code{flextable} object with one display column per retained input
 column.
 }
 \description{
-\code{flexify()} turns a tibble returned by \code{\link[=get_summary]{get_summary()}} or \code{\link[=get_missing]{get_missing()}}
+\code{flexify()} turns a tibble returned by \code{\link[=get_summary]{get_summary()}}, \code{\link[=get_missing]{get_missing()}}, or \code{\link[=get_changes]{get_changes()}}
 into a presentation ready \code{flextable}.
 }
 \details{
-Column names and storage types must match either the \code{get_summary()} or
-\code{get_missing()} return schema. Columns may appear in any
+Column names and storage types must match one \code{get_summary()},
+\code{get_missing()}, or \code{get_changes()} return schema. Columns may appear in any
 order, but added or renamed columns and combinations of summary columns and
 missing row columns are rejected.
 
@@ -32,6 +33,10 @@ metadata is unavailable. Validation checks use the \code{flex_label} values from
 missing values are displayed as blank cells, and available \code{url} values are
 formatted as
 hyperlinks.
+Comparison summaries preserve their population and validation context.
+Previous/current rates are percentages; \code{delta_fail_rate} is displayed in
+percentage points. Select columns before formatting when a comparison table
+is too wide for the intended document.
 
 Input row and column order are preserved. If both repeat context columns are
 present and entirely blank, they are omitted together when at least one other

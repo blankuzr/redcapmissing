@@ -7,7 +7,7 @@
 get_missing(report, validation_check = NULL, events = NULL, instruments = NULL)
 }
 \arguments{
-\item{report}{A validated \code{redcapmissing} object created by \code{\link[=run_plan]{run_plan()}}.}
+\item{report}{A \code{redcapmissing} report created by \code{\link[=run_plan]{run_plan()}}.}
 
 \item{validation_check}{\code{NULL}, or a nonempty character vector containing one
 or more exact codes from \code{\link[=registry]{registry()}}: \code{"event-row-started"},

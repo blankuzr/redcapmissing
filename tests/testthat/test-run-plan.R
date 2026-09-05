@@ -26,7 +26,7 @@ test_that("run_plan returns a redcapmissing object whose components follow the d
   expect_s3_class(result, "redcapmissing")
   expect_identical(names(result), c(
     "plan", "target_results", "summary", "missing", "verification",
-    "diagnostics", "details"
+    "diagnostics", "details", "settings"
   ))
 })
 

@@ -86,6 +86,67 @@ knitr::kable(
 Both records start the instrument; record `2` then fails
 `field-complete` because its required `value` field is blank.
 
+## Compare assessments
+
+Retain detailed outcomes in both reports. Comparison shows **Full
+scope** (each plan as assessed) and **Shared targets** (exact targets in
+both plans). Shared results subset stored outcomes, preserving the
+original branching context.
+
+``` r
+previous <- run_plan(plan, records, rcon, details = TRUE, progress = FALSE)
+current_records <- records
+current_records$value[2] <- "entered"
+current <- run_plan(plan, current_records, rcon, details = TRUE, progress = FALSE)
+comparison <- compare_reports(previous, current)
+knitr::kable(get_summary(comparison, validation_check = "field-complete")[, c(
+  "population", "instrument", "previous_failed", "previous_assessed",
+  "current_failed", "current_assessed", "completed"
+)])
+```
+
+| population | instrument | previous_failed | previous_assessed | current_failed | current_assessed | completed |
+|:---|:---|---:|---:|---:|---:|---:|
+| full | baseline | 1 | 4 | 0 | 4 | 1 |
+| shared | baseline | 1 | 4 | 0 | 4 | 1 |
+
+``` r
+knitr::kable(get_changes(comparison)[, c(
+  "record_id", "validation_check", "field_name", "change"
+)])
+```
+
+| record_id | validation_check | field_name | change    |
+|:----------|:-----------------|:-----------|:----------|
+| 2         | field-complete   | value      | completed |
+
+Every summary row retains its event, instrument, repeat context, and
+validation check. Counts use that check's unit: target outcomes for
+gates and instrument start, field occurrences for completeness. Checkbox
+roots count once. Avoid adding failures across checks into a single
+issue count.
+
+``` r
+get_summary(comparison, population = "shared")
+get_changes(comparison, change = c("newly_detected", "still_missing"))
+flex_event_instruments(comparison, missing_threshold = 0.10)
+flexify(get_changes(comparison))
+```
+
+Instrument tables pair Previous and Current numerators, denominators,
+and rates under the existing All/event/instrument hierarchy; differences
+are percentage points. `scope_changes` also includes added or removed
+targets that have no failures. A previously failed field excluded by
+branching or a gate is `no_longer_assessed`; a verification override is
+`verified`.
+
+Reports must have matching project structure and field-selection
+settings. Plans and verification setups may differ. Reports saved
+without settings or details must be regenerated for comparison. See the
+[runnable longitudinal and repeating-instrument
+example](vignettes/redcapmissing.html#compare-assessments) for both
+population views and changing field denominators.
+
 ## Prepare a live connection and records
 
 Supported `rcon` objects inherit from `redcapApiConnection`, returned by
@@ -318,8 +379,8 @@ order, presentation labels, and pass conditions used throughout the
 package.
 
 The result contains `plan`, `target_results`, `summary`, `missing`,
-`verification`, `diagnostics`, and `details`. Structural absence uses
-typed `NA` values.
+`verification`, `diagnostics`, `details`, and normalized field-selection
+`settings`. Structural absence uses typed `NA` values.
 
 ### Stored field values
 

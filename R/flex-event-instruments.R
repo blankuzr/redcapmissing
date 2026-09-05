@@ -36,13 +36,17 @@
 #' The optional packages `flextable` and `glue` are required when this function
 #' is called. The error lists each missing package.
 #'
-#' @param x A `redcapmissing` object created by [run_plan()].
+#' @param x A `redcapmissing` object created by [run_plan()] or a
+#'   `redcapmissing_comparison` created by [compare_reports()].
 #' @param missing_threshold A finite numeric scalar from zero through one, with
 #'   comparison behavior described in **Details**.
-#' @param ... Additional arguments passed to methods; currently unused.
+#' @param ... Additional arguments passed to methods. The comparison method
+#'   accepts `population`.
 #'
 #' @return A `flextable` containing an `All` row, event headers, and instrument
 #'   rows. Repeat columns appear only when the plan contains repeat targets.
+#'   Comparisons contain a separate section for each selected population,
+#'   with paired metrics calculated using the same `missing_threshold`.
 #'
 #' @examples
 #' \dontrun{
@@ -109,6 +113,17 @@ flex_event_instruments.redcapmissing <- function(
   .flex_event_instruments_validate_threshold(missing_threshold)
   targets <- .flex_event_instruments_build_targets(x)
   project <- x$plan$project %||% list()
+  .flex_event_instruments_aggregate_targets(targets, project, missing_threshold)
+}
+
+#' Aggregate target outcomes for report and comparison presentations.
+#' @param targets Validated target results, optionally restricted to shared keys.
+#' @param project Project presentation metadata.
+#' @param missing_threshold The common threshold used on both comparison sides.
+#' @return Display rows plus raw identity and numeric numerator/denominator
+#'   columns. Raw keys, never display labels, determine comparison alignment.
+#' @noRd
+.flex_event_instruments_aggregate_targets <- function(targets, project, missing_threshold) {
   event_values <- unique(targets$redcap_event_name)
   instrument_values <- unique(c(
     targets$instrument,
@@ -234,6 +249,12 @@ flex_event_instruments.redcapmissing <- function(
       not_started_count = context_not_started,
       threshold_count = context_threshold
     )
+    instrument_rows$.event <- contexts$redcap_event_name
+    instrument_rows$.instrument <- contexts$instrument
+    instrument_rows$.repeat_instrument <- contexts$repeat_instrument
+    instrument_rows$.repeat_instance <- contexts$repeat_instance
+    instrument_rows$.started_count <- ifelse(repeat_context, repeat_passed, NA_integer_)
+    instrument_rows$.started_denominator <- ifelse(repeat_context, repeat_assessed, NA_integer_)
 
     record_event_columns <- c("record_id", "redcap_event_name")
     record_events <- unique(targets[record_event_columns])
@@ -307,6 +328,9 @@ flex_event_instruments.redcapmissing <- function(
       threshold = rep("", event_count),
       has_repeat = has_repeat
     )
+    event_rows$.event <- event_values
+    event_rows$.started_count <- event_passed
+    event_rows$.started_denominator <- event_assessed
 
     event_rows$.event_order <- seq_len(event_count)
     event_rows$.row_order <- 0L
@@ -524,5 +548,11 @@ flex_event_instruments.redcapmissing <- function(
   out[[".denominator"]] <- as.integer(denominator)
   out[[".not_started_count"]] <- as.integer(not_started_count)
   out[[".threshold_count"]] <- as.integer(threshold_count)
+  out[[".event"]] <- rep(NA_character_, nrow(out))
+  out[[".instrument"]] <- rep(NA_character_, nrow(out))
+  out[[".repeat_instrument"]] <- rep(NA_character_, nrow(out))
+  out[[".repeat_instance"]] <- rep(NA_integer_, nrow(out))
+  out[[".started_count"]] <- rep(NA_integer_, nrow(out))
+  out[[".started_denominator"]] <- rep(NA_integer_, nrow(out))
   out
 }

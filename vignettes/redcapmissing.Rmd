@@ -531,6 +531,184 @@ the frozen targets. A branching dependency may belong to an instrument with no
 target of its own. Other fields exclusive to nontarget instruments are not
 required.
 
+## Compare assessments
+
+Use `compare_reports(previous, current)` when the same project has been assessed
+at two times or under different target plans. Both reports must retain
+`details = TRUE` and versioned field-selection settings. Project identity,
+structure fingerprints, and normalized field selection must match; target
+membership and verification setup may change.
+
+Two populations are shown by default:
+
+- **Full scope** describes each report's complete assessment, including targets
+  that entered or left the plan.
+- **Shared targets** restricts each side to the exact record, event, instrument,
+  repeat instrument, and repeat instance keys present in both plans. Stored
+  outcomes are subset; branching logic is never reevaluated on a reduced export.
+
+The following synthetic offline project has a Visit instrument at Baseline and
+a repeating Diary at Follow up. Record `004` enters the Visit plan, while
+record `001` leaves the Diary instance-2 plan. Previously unstarted targets
+begin assessment, and reviewer `reviewer_a` verifies one remaining Diary field.
+
+```{r comparison-project}
+comparison_metadata <- data.frame(
+  field_name = c("record_id", "visit_start", "visit_a", "visit_b",
+                 "diary_start", "diary_a", "diary_b"),
+  form_name = c(rep("visit", 4), rep("diary", 3)),
+  field_type = "text",
+  field_label = c("Record ID", "Visit started", "Visit A", "Visit B",
+                  "Diary started", "Diary A", "Diary B"),
+  required_field = c("", "", "y", "y", "", "y", "y")
+)
+comparison_rcon <- suppressWarnings(redcapAPI::offlineConnection(
+  meta_data = comparison_metadata,
+  project_info = data.frame(project_id = "77", is_longitudinal = "1",
+                           has_repeating_instruments_or_events = "1"),
+  arms = data.frame(arm_num = 1L, name = "Arm 1"),
+  events = data.frame(event_id = c(101L, 102L), arm_num = 1L,
+    unique_event_name = c("baseline_arm_1", "followup_arm_1"),
+    event_name = c("Baseline", "Follow up")),
+  instruments = data.frame(instrument_name = c("visit", "diary"),
+                           instrument_label = c("Visit", "Diary")),
+  mapping = data.frame(arm_num = 1L,
+    unique_event_name = c("baseline_arm_1", "followup_arm_1"),
+    form = c("visit", "diary")),
+  repeat_instrument = data.frame(event_name = "followup_arm_1", form_name = "diary")
+))
+example_row <- function(id, event, instance = NA_integer_,
+                        start = "yes", a = "entered", b = "entered") {
+  diary <- event == "followup_arm_1"
+  data.frame(record_id = id, redcap_event_name = event,
+    redcap_repeat_instrument = if (diary) "diary" else NA_character_,
+    redcap_repeat_instance = instance,
+    visit_start = if (!diary) start else "",
+    visit_a = if (!diary) a else "", visit_b = if (!diary) b else "",
+    diary_start = if (diary) start else "",
+    diary_a = if (diary) a else "", diary_b = if (diary) b else "")
+}
+previous_data <- dplyr::bind_rows(
+  example_row("001", "baseline_arm_1", a = ""),
+  example_row("002", "baseline_arm_1"),
+  example_row("003", "baseline_arm_1", start = "", a = "", b = ""),
+  example_row("001", "followup_arm_1", 2L, a = ""),
+  example_row("002", "followup_arm_1", 2L, a = ""),
+  example_row("003", "followup_arm_1", 1L)
+)
+current_data <- dplyr::bind_rows(
+  example_row("001", "baseline_arm_1"),
+  example_row("002", "baseline_arm_1"),
+  example_row("003", "baseline_arm_1", a = ""),
+  example_row("004", "baseline_arm_1", start = "", a = "", b = ""),
+  example_row("002", "followup_arm_1", 2L, a = ""),
+  example_row("003", "followup_arm_1", 2L, a = "")
+)
+example_schedule <- function(visit_ids, diary_ids) {
+  dplyr::bind_rows(
+    data.frame(record_id = visit_ids, instrument = "visit",
+               redcap_event_name = "baseline_arm_1", repeat_instance = NA_integer_),
+    data.frame(record_id = diary_ids, instrument = "diary",
+               redcap_event_name = "followup_arm_1", repeat_instance = 2L)
+  )
+}
+previous_plan <- plan_explicit(previous_data, comparison_rcon,
+  example_schedule(c("001", "002", "003"), c("001", "002", "003")))
+current_plan <- plan_explicit(current_data, comparison_rcon,
+  example_schedule(c("001", "002", "003", "004"), c("002", "003")))
+comparison_verified <- data.frame(
+  project_id = "77", record = "002", event_id = "102", field_name = "diary_a",
+  repeat_instrument = "diary", instance = 2L, ts = "2026-01-02 10:00:00",
+  current_query_status = "VERIFIED", username = "reviewer_a"
+)
+previous <- run_plan(previous_plan, previous_data, comparison_rcon,
+                     details = TRUE, progress = FALSE)
+current <- run_plan(current_plan, current_data, comparison_rcon,
+  verified = comparison_verified, verified_user = "reviewer_a",
+  details = TRUE, progress = FALSE)
+comparison <- compare_reports(previous, current)
+```
+
+### Validation summaries
+
+Each row identifies population, raw event, instrument, repeat instrument,
+exact repeat instance, registry level, and check. All four checks remain in
+registry order, including not-applicable checks. Each side retains status,
+reason, assessed/passed/failed counts, and pass/fail rates. Absent contexts have
+false presence flags, zero counts, and missing status and rates.
+
+```{r comparison-summary}
+summary_rows <- get_summary(comparison, validation_check = "field-complete")
+knitr::kable(summary_rows[, c(
+  "population", "redcap_event_name", "instrument", "repeat_instance",
+  "previous_failed", "previous_assessed", "current_failed", "current_assessed"
+)])
+```
+
+For shared Baseline/Visit targets, field failures are **1/4 → 1/6**: the
+denominator increases because record `003` now starts. The same target
+population does not guarantee the same assessed field population. Field counts
+represent field occurrences; a checkbox root counts once. The other three
+checks count target outcomes within their stratum. Failures across these
+different checks must not be added into one headline count.
+
+### Event and instrument view
+
+```{r comparison-instruments}
+if (requireNamespace("flextable", quietly = TRUE) &&
+    requireNamespace("glue", quietly = TRUE)) {
+  flex_event_instruments(comparison)
+}
+```
+
+Baseline/Visit incomplete instruments change **2/3 → 2/4** in Full scope,
+versus **2/3 → 1/3** on Shared targets. Follow-up/Diary instance 2 has **3/3 →
+1/2** incomplete instruments in Full scope and **2/2 → 1/2** on Shared targets.
+Incomplete instruments count target outcomes, not field failures. Both sides
+use the same threshold. Rate differences are percentage points.
+
+Event headers deduplicate record/event contexts across instruments, repeating
+rows show repeat-gate counts, and the All row sums instrument opportunities.
+An absent context displays "Out of scope"; disjoint plans display "No shared
+targets" in the shared section.
+
+### Record and field changes
+
+```{r comparison-changes}
+knitr::kable(get_changes(comparison, instruments = "diary")[, c(
+  "record_id", "repeat_instance", "validation_check", "field_name", "change", "reason"
+)])
+```
+
+`get_changes()` retains failures present in either report. Exact target keys
+plus check and field name identify each failure; leading-zero IDs are retained.
+Added/removed targets take scope precedence. Within shared targets,
+`newly_detected`, `still_missing`, `completed`, `verified`, and
+`no_longer_assessed` distinguish new failure, persistent failure, direct pass,
+verification, and branching/gate exclusion. Newly reached checks and loss of
+verification have explicit reasons. Verification setup changes are flagged in
+`comparison$verification` without claiming they caused an outcome change.
+
+Each stratum reconciles previous failures to still-missing, completed,
+verified, no-longer-assessed, and removed-scope failures; current failures
+reconcile to still-missing, newly detected, and added-scope failures. Full-scope
+summary sides agree with the source reports. Shared summaries contain only
+retained-target transitions.
+
+```{r comparison-filters, eval = FALSE}
+get_summary(comparison, population = "shared", instruments = "visit")
+get_changes(comparison, change = c("newly_detected", "still_missing"))
+comparison$scope_changes  # Includes added/removed targets with no failures.
+flexify(get_changes(comparison))
+```
+
+The comparison preserves plans, paired target results, normalized settings,
+summary strata, transitions, scope changes, and verification mode/reviewer.
+It excludes response values and raw verification history. Available current
+links are preferred, with previous links as fallback. Existing saved reports
+remain usable with report accessors and formatters; regenerate legacy or
+nondetailed reports before comparing them.
+
 ## Verification
 
 Verification is optional and intended for projects that use REDCap's Data
@@ -772,6 +950,7 @@ Absent row rules are:
 | `verification` | Counts named `enabled`, `verified_user`, `input_rows`, `user_rows`, `latest_user_rows`, `verified_rows`, and `overrides_applied`. |
 | `diagnostics` | The twelve stages with completion and elapsed time. |
 | `details` | Detailed check and field rows when `details = TRUE`; `NULL` when `details = FALSE`. |
+| `settings` | Versioned `required_fields`, `ignore_fields`, and `exclude_types`; empty selections are character vectors and selection order is normalized. |
 
 `summary$status` is `"assessed"` or `"not applicable"`.
 `summary$reason` is typed missing for assessed rows and contains the applicable

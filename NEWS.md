@@ -2,6 +2,19 @@
 
 ## 2026-09-04
 
+- Added `compare_reports()` for full-scope and shared-target comparisons,
+  stratified by event, instrument, repeat context, and registry check. Stored
+  outcomes retain changing denominators without rerunning branching logic.
+- Added `get_changes()` with record/check/field transitions, scope changes,
+  and paired verification dispositions. `get_summary()` now dispatches on
+  reports and comparisons while preserving existing report results.
+- Added paired event/instrument comparison tables and comparison support in
+  `flexify()`. Both presentation paths use the same metric calculations.
+- New reports retain normalized field-selection settings. Comparison requires
+  these settings and detailed outcomes; existing saved reports remain readable.
+- Empty longitudinal reports now retain character event-status columns, matching
+  the documented report schema.
+
 - Added `export_data_quality()` to retrieve complete Data Resolution Workflow
   history through Vanderbilt's Data Quality API module, optionally restricted
   by record IDs, and return a table ready for `run_plan(verified = ...)`.

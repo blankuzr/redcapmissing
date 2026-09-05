@@ -260,8 +260,14 @@ retains that username, with every count \code{0L}.
 \section{Return value}{
 
 A \code{redcapmissing} object with exactly \code{plan}, \code{target_results}, \code{summary},
-\code{missing}, \code{verification}, \code{diagnostics}, and \code{details}. The stored components
+\code{missing}, \code{verification}, \code{diagnostics}, \code{details}, and \code{settings}. The stored components
 exclude source \code{data}, raw \code{verified}, tokens, and the live connection.
+\code{settings} contains integer \code{schema_version = 1L}, logical \code{required_fields},
+and character \code{ignore_fields} and \code{exclude_types} stored as sorted sets.
+Empty selections use \code{character()}. These settings and \code{details = TRUE}
+allow \code{\link[=compare_reports]{compare_reports()}} to check compatibility and compare stored outcomes.
+Reports saved before settings were introduced remain readable through the
+existing report accessors and formatters.
 
 \code{target_results} has one row per \code{assessible_targets} row and exactly:\tabular{ll}{
    Columns \tab Storage \cr

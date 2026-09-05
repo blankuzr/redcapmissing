@@ -4,7 +4,9 @@
 #' [run_plan()]. Filters select rows from the stored summary. Assessment results,
 #' applicability, and denominators remain those computed by [run_plan()].
 #'
-#' @param report A validated `redcapmissing` object created by [run_plan()].
+#' @param report A `redcapmissing` report from [run_plan()] or a
+#'   `redcapmissing_comparison` from [compare_reports()].
+#' @param ... Arguments for methods. The comparison method accepts `population`.
 #' @param validation_check `NULL`, or a nonempty character vector containing one
 #'   or more exact codes from [registry()]: `"event-row-started"`,
 #'   `"repeat-instance-row-started"`, `"instrument-started"`, or
@@ -32,7 +34,9 @@
 #' continues to contain labels for every event and instrument represented by
 #' `report$plan`, including labels absent from the returned rows.
 #'
-#' @return A tibble with exactly these columns and storage types:
+#' @return For a comparison, the stratified tibble documented in
+#'   [compare_reports()]. For a report, a tibble with exactly these columns
+#'   and storage types:
 #'
 #' | Column | Storage and values |
 #' |---|---|
@@ -69,8 +73,22 @@ get_summary <- function(
   report,
   validation_check = NULL,
   events = NULL,
-  instruments = NULL
+  instruments = NULL,
+  ...
 ) {
+  UseMethod("get_summary")
+}
+
+#' @rdname get_summary
+#' @export
+get_summary.redcapmissing <- function(
+  report,
+  validation_check = NULL,
+  events = NULL,
+  instruments = NULL,
+  ...
+) {
+  if (length(list(...))) .condition_signal_error("Unused arguments in `...`.")
   .report_validate_object(report, arg = "report")
   .summary_validate_rows(report$summary)
 
@@ -89,6 +107,15 @@ get_summary <- function(
   .report_attach_labels(out, report)
 }
 
+#' @rdname get_summary
+#' @export
+get_summary.default <- function(report, validation_check = NULL, events = NULL,
+                                instruments = NULL, ...) {
+  .condition_signal_error(
+    "`report` must be a `redcapmissing` report or `redcapmissing_comparison`."
+  )
+}
+
 #' Get unresolved missing rows from a REDCap missingness report
 #'
 #' `get_missing()` returns effective unresolved failures stored by [run_plan()].
@@ -97,6 +124,7 @@ get_summary <- function(
 #' those computed by [run_plan()].
 #'
 #' @inheritParams get_summary
+#' @param report A `redcapmissing` report created by [run_plan()].
 #'
 #' @return A tibble with exactly these columns and storage types:
 #'
@@ -168,11 +196,12 @@ get_missing <- function(
     "plan", "target_results", "summary", "missing", "verification",
     "diagnostics", "details"
   )
-  if (!is.list(x) || !identical(names(x), expected_names)) {
+  if (!is.list(x) || !(identical(names(x), expected_names) ||
+                      identical(names(x), c(expected_names, "settings")))) {
     .condition_signal_error(
       paste0(
         "`", arg, "` must contain exactly: ",
-        paste(expected_names, collapse = ", "), "."
+        paste(expected_names, collapse = ", "), ", optionally followed by settings."
       ),
       "schema"
     )
