@@ -1,12 +1,12 @@
 #' Format an accessor tibble as a flextable
 #'
 #' @description
-#' `flexify()` turns a tibble returned by [get_summary()] or [get_missing()]
+#' `flexify()` turns a tibble returned by [get_summary()], [get_missing()], or [get_changes()]
 #' into a presentation ready `flextable`.
 #'
 #' @details
-#' Column names and storage types must match either the `get_summary()` or
-#' `get_missing()` return schema. Columns may appear in any
+#' Column names and storage types must match one `get_summary()`,
+#' `get_missing()`, or `get_changes()` return schema. Columns may appear in any
 #' order, but added or renamed columns and combinations of summary columns and
 #' missing row columns are rejected.
 #'
@@ -17,6 +17,10 @@
 #' missing values are displayed as blank cells, and available `url` values are
 #' formatted as
 #' hyperlinks.
+#' Comparison summaries preserve their population and validation context.
+#' Previous/current rates are percentages; `delta_fail_rate` is displayed in
+#' percentage points. Select columns before formatting when a comparison table
+#' is too wide for the intended document.
 #'
 #' Input row and column order are preserved. If both repeat context columns are
 #' present and entirely blank, they are omitted together when at least one other
@@ -26,7 +30,8 @@
 #' The optional `flextable` package is required when this function is called;
 #' the error lists it when unavailable.
 #'
-#' @param x A tibble returned by [get_summary()] or [get_missing()], optionally
+#' @param x A tibble returned by [get_summary()], [get_missing()], or
+#'   [get_changes()], optionally
 #'   filtered, grouped, reordered, or reduced to a nonempty subset of its
 #'   documented columns.
 #'
@@ -83,7 +88,7 @@ flexify <- function(x) {
 .flexify_validate_input <- function(x) {
   if (!inherits(x, "tbl_df")) {
     stop(
-      "`x` must be a tibble returned by `get_summary()` or `get_missing()`.",
+      "`x` must be a tibble returned by `get_summary()`, `get_missing()`, or `get_changes()`.",
       call. = FALSE
     )
   }
@@ -105,20 +110,20 @@ flexify <- function(x) {
 
   summary_columns <- .summary_list_columns()
   missing_columns <- .missing_list_columns()
-  allowed_columns <- union(summary_columns, missing_columns)
+  schemas <- list(summary_columns, missing_columns,
+                  names(.comparison_summary_prototype()), names(.comparison_changes_prototype()))
+  allowed_columns <- unique(unlist(schemas, use.names = FALSE))
   unknown_columns <- setdiff(column_names, allowed_columns)
   if (length(unknown_columns) > 0) {
     stop(
       "`x` contains unsupported column(s): ",
       .flexify_detect_list_columns(unknown_columns),
-      ". Columns must come from `get_summary()` or `get_missing()`.",
+      ". Columns must come from `get_summary()`, `get_missing()`, or `get_changes()`.",
       call. = FALSE
     )
   }
 
-  summary_compatible <- all(column_names %in% summary_columns)
-  missing_compatible <- all(column_names %in% missing_columns)
-  if (!summary_compatible && !missing_compatible) {
+  if (!any(vapply(schemas, function(schema) all(column_names %in% schema), logical(1)))) {
     stop(
       "`x` must use columns from one accessor schema.",
       call. = FALSE
@@ -161,10 +166,15 @@ flexify <- function(x) {
     character(1)
   )
 
-  c(
+  types <- c(
     summary_types,
     missing_types[setdiff(names(missing_types), names(summary_types))]
   )
+  for (prototype in list(.comparison_summary_prototype(), .comparison_changes_prototype())) {
+    extra <- vapply(prototype, typeof, character(1))
+    types <- c(types, extra[setdiff(names(extra), names(types))])
+  }
+  types
 }
 
 .flexify_detect_list_columns <- function(x) {
@@ -219,7 +229,7 @@ flexify <- function(x) {
 }
 
 .flexify_build_header_labels <- function() {
-  c(
+  labels <- c(
     record_id = "Record ID",
     redcap_event_name = "Event",
     instrument = "Instrument",
@@ -241,6 +251,11 @@ flexify <- function(x) {
     pass_rate = "Pass Rate",
     fail_rate = "Fail Rate"
   )
+  columns <- union(names(.comparison_summary_prototype()), names(.comparison_changes_prototype()))
+  extra <- setdiff(columns, names(labels))
+  labels <- c(labels, stats::setNames(gsub("_", " ", extra, fixed = TRUE), extra))
+  labels[["delta_fail_rate"]] <- "Change in Fail Rate (pp)"
+  labels
 }
 
 .flexify_format_cells <- function(x, data) {
@@ -258,7 +273,8 @@ flexify <- function(x) {
     x <- flextable::colformat_int(x, j = integer_columns, na_str = "")
   }
 
-  rate_columns <- intersect(c("pass_rate", "fail_rate"), names(data))
+  rate_columns <- intersect(c("pass_rate", "fail_rate", "previous_pass_rate", "previous_fail_rate",
+                              "current_pass_rate", "current_fail_rate"), names(data))
   if (length(rate_columns) > 0) {
     rate_formatters <- rep(
       list(.flexify_format_rate),
@@ -266,6 +282,9 @@ flexify <- function(x) {
     )
     names(rate_formatters) <- rate_columns
     x <- flextable::set_formatter(x, values = rate_formatters)
+  }
+  if ("delta_fail_rate" %in% names(data)) {
+    x <- flextable::set_formatter(x, values = list(delta_fail_rate = .comparison_format_percentage_points))
   }
 
   x

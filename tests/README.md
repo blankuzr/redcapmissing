@@ -43,6 +43,8 @@ If a test establishes user-visible behavior that is absent from package document
 | `structure_fingerprint` determinism and project-structure changes | `test-plan-structure-fingerprint.R` |
 | `assessible_targets` identity, ordering, six-column schema, cardinality, and `target_source` | `test-plan-assessible-targets.R` |
 | `run_plan()` result class and component order, twelve diagnostics stages, privacy exclusions, `details` and `progress` controls, and progress cleanup | `test-run-plan.R` |
+| Full/shared comparison strata, transitions, scope, settings, compatibility, serialization, and reconciliation | `test-compare-reports.R` |
+| Comparison event/instrument denominators, formatter agreement, threshold boundaries, labels, and optional dependencies | `test-flex-comparison.R` |
 | Plan validation, newer `data` snapshots, frozen response scope, structural columns, and project-surface reads | `test-run-plan-data-scope.R` |
 | `event-row-started`, `repeat-instance-row-started`, absent targets, repeat context, and downstream `"not reached"` results | `test-run-plan-target-gates.R` |
 | Detection fields, checkbox children, and `instrument-started` | `test-run-plan-instrument-started.R` |

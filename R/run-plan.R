@@ -219,8 +219,14 @@
 #'
 #' @section Return value:
 #' A `redcapmissing` object with exactly `plan`, `target_results`, `summary`,
-#' `missing`, `verification`, `diagnostics`, and `details`. The stored components
+#' `missing`, `verification`, `diagnostics`, `details`, and `settings`. The stored components
 #' exclude source `data`, raw `verified`, tokens, and the live connection.
+#' `settings` contains integer `schema_version = 1L`, logical `required_fields`,
+#' and character `ignore_fields` and `exclude_types` stored as sorted sets.
+#' Empty selections use `character()`. These settings and `details = TRUE`
+#' allow [compare_reports()] to check compatibility and compare stored outcomes.
+#' Reports saved before settings were introduced remain readable through the
+#' existing report accessors and formatters.
 #'
 #' `target_results` has one row per `assessible_targets` row and exactly:
 #'
@@ -447,7 +453,7 @@ run_plan <- function(
 
   started <- Sys.time()
   event_status <- if (isTRUE(snapshot$project$longitudinal)) {
-    ifelse(joins$event_present, "passed", "failed")
+    as.character(ifelse(joins$event_present, "passed", "failed"))
   } else rep("not applicable", nrow(targets))
   complete_stage(started)
 
@@ -570,7 +576,8 @@ run_plan <- function(
       .details_build_check_rows(targets, target_results, field_rows)
     } else {
       NULL
-    }
+    },
+    settings = .comparison_normalize_settings(required_fields, ignore_fields, exclude_types)
   )
   class(out) <- c("redcapmissing", "list")
   complete_stage(started)
