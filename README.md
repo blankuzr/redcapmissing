@@ -9,15 +9,30 @@
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 <!-- badges: end -->
 
-`redcapmissing` records which REDCap record, event, instrument, and
-repeat instance combinations require assessment. `run_plan()` evaluates
-physical rows, instrument start, and field completeness for those
-combinations.
+<!-- canonical-readme-introduction: start -->
 
-<p align="center">
+<img src="man/figures/logo.svg" align="right" width="160"
+     alt="redcapmissing hex logo" />
 
-<img src="man/figures/logo.svg" width="160" alt="redcapmissing hex logo" />
-</p>
+`redcapmissing` identifies and contextualizes missing data in REDCap
+databases through four practical data-entry checks:
+
+- **Event started** · `event-row-started`<br> Has the event been started
+  for this patient?
+- **Repeat instance started** · `repeat-instance-row-started`<br> Has
+  the repeat instance been started for this patient?
+- **Form started** · `instrument-started`<br> Has the form been started
+  for this patient?
+- **Field complete** · `field-complete`<br> Is the field complete for
+  this patient?
+
+Results are returned as tidy data frames, making it easy to filter,
+group, and create custom summaries with familiar R tools.
+`redcapmissing` also provides built-in summaries and optional detailed
+results, supports comparisons with prior reports, and can incorporate
+verified resolutions from REDCap's Data Resolution Workflow when the
+Data Quality API module is enabled.
+<!-- canonical-readme-introduction: end -->
 
 ## Installation
 
@@ -28,134 +43,12 @@ combinations.
 pak::pak("blankuzr/redcapmissing")
 ```
 
-## First success with a synthetic offline project
-
-This credential-free example uses a `redcapOfflineConnection` and a
-small synthetic classic project to construct, run, and inspect a plan.
-
-``` r
-library(redcapmissing)
-
-metadata <- data.frame(
-  field_name = c("record_id", "started", "value"),
-  form_name = "baseline",
-  field_type = "text",
-  field_label = c("Record ID", "Started", "Value"),
-  required_field = c("y", "", "y")
-)
-project_info <- data.frame(
-  project_id = "1",
-  is_longitudinal = "0",
-  has_repeating_instruments_or_events = "0"
-)
-rcon <- suppressWarnings(redcapAPI::offlineConnection(
-  meta_data = metadata,
-  project_info = project_info,
-  repeat_instrument = redcapAPI::REDCAP_REPEAT_INSTRUMENT_STRUCTURE
-))
-records <- data.frame(
-  record_id = c("1", "2"),
-  started = c("yes", "yes"),
-  value = c("complete", "")
-)
-
-plan <- plan_from_data(records, rcon, "baseline")
-report <- run_plan(plan, records, rcon, progress = FALSE)
-knitr::kable(
-  get_summary(report)[, c("validation_check", "status", "failed")]
-)
-```
-
-| validation_check            | status         | failed |
-|:----------------------------|:---------------|-------:|
-| event-row-started           | not applicable |      0 |
-| repeat-instance-row-started | not applicable |      0 |
-| instrument-started          | assessed       |      0 |
-| field-complete              | assessed       |      1 |
-
-``` r
-knitr::kable(
-  get_missing(report)[, c("record_id", "validation_check", "field_name")]
-)
-```
-
-| record_id | validation_check | field_name |
-|:----------|:-----------------|:-----------|
-| 2         | field-complete   | value      |
-
-Both records start the instrument; record `2` then fails
-`field-complete` because its required `value` field is blank.
-
-## Compare assessments
-
-Retain detailed outcomes in both reports. Comparison shows **Full
-scope** (each plan as assessed) and **Shared targets** (exact targets in
-both plans). Shared results subset stored outcomes, preserving the
-original branching context.
-
-``` r
-previous <- run_plan(plan, records, rcon, details = TRUE, progress = FALSE)
-current_records <- records
-current_records$value[2] <- "entered"
-current <- run_plan(plan, current_records, rcon, details = TRUE, progress = FALSE)
-comparison <- compare_reports(previous, current)
-knitr::kable(get_summary(comparison, validation_check = "field-complete")[, c(
-  "population", "instrument", "previous_failed", "previous_assessed",
-  "current_failed", "current_assessed", "completed"
-)])
-```
-
-| population | instrument | previous_failed | previous_assessed | current_failed | current_assessed | completed |
-|:---|:---|---:|---:|---:|---:|---:|
-| full | baseline | 1 | 4 | 0 | 4 | 1 |
-| shared | baseline | 1 | 4 | 0 | 4 | 1 |
-
-``` r
-knitr::kable(get_changes(comparison)[, c(
-  "record_id", "validation_check", "field_name", "change"
-)])
-```
-
-| record_id | validation_check | field_name | change    |
-|:----------|:-----------------|:-----------|:----------|
-| 2         | field-complete   | value      | completed |
-
-Every summary row retains its event, instrument, repeat context, and
-validation check. Counts use that check's unit: target outcomes for
-gates and instrument start, field occurrences for completeness. Checkbox
-roots count once. Avoid adding failures across checks into a single
-issue count.
-
-``` r
-get_summary(comparison, population = "shared")
-get_changes(comparison, change = c("newly_detected", "still_missing"))
-flex_event_instruments(comparison, missing_threshold = 0.10)
-flexify(get_changes(comparison))
-```
-
-Instrument tables pair Previous and Current numerators, denominators,
-and rates under the existing All/event/instrument hierarchy; differences
-are percentage points. `scope_changes` also includes added or removed
-targets that have no failures. A previously failed field excluded by
-branching or a gate is `no_longer_assessed`; a verification override is
-`verified`.
-
-Reports must have matching project structure and field-selection
-settings. Plans and verification setups may differ. Reports saved
-without settings or details must be regenerated for comparison. See the
-[runnable longitudinal and repeating-instrument
-example](vignettes/redcapmissing.html#compare-assessments) for both
-population views and changing field denominators.
-
 ## Prepare a live connection and records
 
 Supported `rcon` objects inherit from `redcapApiConnection`, returned by
 `redcapAPI::redcapConnection()`, or `redcapOfflineConnection`, returned
 by `redcapAPI::offlineConnection()` or
-`redcapAPI::readPreservedProject()`. `instruments` is a character vector
-of raw REDCap instrument names. Use `all_instruments(rcon)` when the
-plan should include the complete project inventory. Keep API tokens
-outside source files, console output, reports, and saved R objects.
+`redcapAPI::readPreservedProject()`.
 
 ``` r
 library(redcapmissing)
@@ -173,165 +66,205 @@ records <- redcapAPI::exportRecordsTyped(
 )
 ```
 
-`plan_from_data()` uses the project record ID field and the applicable
-`redcap_event_name`, `redcap_repeat_instrument`, and
-`redcap_repeat_instance` columns to identify observed crossings.
-`run_plan()` evaluates their responses.
+## Offline example
 
-## 1. Construct an assessment plan
+This credential-free example uses a longitudinal
+`redcapOfflineConnection`. The `study_baseline` form is offered at
+`baseline`; the `testing` and `visit` forms are offered at each of the
+three test events.
 
-Use `plan_from_data()` to begin with record, event, instrument, and
-repeat instance combinations observed in `records` and permitted by the
-project structure:
+### Prepare an offline connection and records
+
+Define a small synthetic REDCap project and its observed records:
+
+``` r
+library(redcapmissing)
+
+metadata <- tibble::tribble(
+  ~field_name, ~form_name, ~field_type, ~field_label,
+  ~select_choices_or_calculations,
+  ~text_validation_type_or_show_slider_number, ~branching_logic,
+  ~required_field,
+  "record_id", "study_baseline", "text", "Record ID", "", "", "", "",
+  "group", "study_baseline", "radio", "Group",
+  "A, Group A | B, Group B", "", "", "y",
+  "test_performed", "testing", "radio", "Test performed",
+  "yes, Yes | no, No", "", "", "y",
+  "test_date", "testing", "text", "Test date", "", "date_ymd",
+  "[test_performed] = 'yes'", "y",
+  "visit_status", "visit", "radio", "Visit status",
+  "1, Status 1 | 2, Status 2 | 3, Status 3", "", "", "y",
+  "visit_date", "visit", "text", "Visit date", "", "date_ymd", "", "y"
+)
+
+project_info <- tibble::tibble(
+  project_id = "1",
+  is_longitudinal = "1",
+  has_repeating_instruments_or_events = "0"
+)
+
+events <- tibble::tribble(
+  ~event_id, ~arm_num, ~unique_event_name, ~event_name,
+  101L, 1L, "baseline", "Baseline",
+  102L, 1L, "test_event_1", "Test event 1",
+  103L, 1L, "test_event_2", "Test event 2",
+  104L, 1L, "test_event_3", "Test event 3"
+)
+
+instrument_metadata <- tibble::tribble(
+  ~instrument_name, ~instrument_label,
+  "study_baseline", "Study baseline",
+  "testing", "Testing",
+  "visit", "Visit"
+)
+
+event_mapping <- tibble::tribble(
+  ~arm_num, ~unique_event_name, ~form,
+  1L, "baseline", "study_baseline",
+  1L, "test_event_1", "testing",
+  1L, "test_event_1", "visit",
+  1L, "test_event_2", "testing",
+  1L, "test_event_2", "visit",
+  1L, "test_event_3", "testing",
+  1L, "test_event_3", "visit"
+)
+
+rcon <- suppressWarnings(redcapAPI::offlineConnection(
+  meta_data = metadata,
+  project_info = project_info,
+  arms = tibble::tibble(arm_num = 1L, name = "Arm 1"),
+  events = events,
+  instruments = instrument_metadata,
+  mapping = event_mapping,
+  repeat_instrument = redcapAPI::REDCAP_REPEAT_INSTRUMENT_STRUCTURE
+))
+
+records <- tibble::tribble(
+  ~record_id, ~redcap_event_name, ~group, ~test_performed, ~test_date,
+  ~visit_status, ~visit_date,
+  "001", "baseline", "A", NA_character_, NA_character_, NA_character_, NA_character_,
+  "001", "test_event_1", NA_character_, "yes", "2026-01-10", "1", "2026-01-11",
+  "001", "test_event_2", NA_character_, "no", NA_character_, "2", "2026-02-11",
+  "001", "test_event_3", NA_character_, "yes", "2026-03-10", "3", "2026-03-11",
+  "002", "baseline", "B", NA_character_, NA_character_, NA_character_, NA_character_,
+  "002", "test_event_1", NA_character_, "yes", NA_character_, NA_character_, NA_character_,
+  "002", "test_event_2", NA_character_, NA_character_, NA_character_, "2", NA_character_,
+  "002", "test_event_3", NA_character_, NA_character_, NA_character_, "3", NA_character_,
+  "003", "baseline", "A", NA_character_, NA_character_, NA_character_, NA_character_,
+  "003", "test_event_1", NA_character_, "no", NA_character_, NA_character_, NA_character_,
+  "004", "baseline", "B", NA_character_, NA_character_, NA_character_, NA_character_,
+  "004", "test_event_1", NA_character_, "yes", NA_character_, "1", NA_character_,
+  "004", "test_event_2", NA_character_, "no", NA_character_, "2", "2026-02-14",
+  "004", "test_event_3", NA_character_, "yes", NA_character_, NA_character_, "2026-03-14"
+)
+```
+
+### 1. Construct an assessment plan
+
+Use `plan_from_data()` to identify the record, event, and instrument
+combinations observed in `records` and permitted by the project
+structure:
 
 ``` r
 plan <- plan_from_data(
   data = records,
   rcon = rcon,
-  instruments = instruments
+  instruments = all_instruments(rcon)
 )
 ```
 
-Build an `extended_schedule` when selected instruments should also be
-assessed at every event where REDCap permits them. The builder's
-instruments may be all plan instruments or a subset:
+### 2. Run the plan
+
+Evaluate the planned combinations against the observed records:
 
 ``` r
-instruments <- all_instruments(rcon)
-extended_schedule <- build_extended_schedule(
-  rcon = rcon,
-  instruments = c("followup", "diary"),
-  n_repeat_instances = 3L
-)
+report <- run_plan(plan, records, rcon, progress = FALSE)
 ```
 
+### 3. Inspect results
+
+`registry()` documents the exact check codes, report levels, assessment
+order, presentation labels, and pass conditions used throughout the
+package.
+
+The result contains `plan`, `target_results`, `summary`, `missing`,
+`verification`, `diagnostics`, `details`, and normalized field-selection
+`settings`. Structural absence uses typed `NA` values.
+
+#### Stored field values
+
+With `details = TRUE`, `details$value_summary` stores each assessed
+ordinary field value as character. For a checkbox field,
+`details$value_summary` contains the names of its selected exported
+checkbox child columns. Reports also contain record IDs and may contain
+REDCap data entry URLs.
+
+With `details = FALSE`, the result contains `details = NULL`. Apply the
+same storage, access, retention, and sharing rules to each report that
+apply to its REDCap export.
+
+Review the failed checks by event and instrument, then inspect the
+individual missing fields:
+
 ``` r
-plan <- plan_from_data(
-  data = records,
-  rcon = rcon,
-  instruments = instruments,
-  extended_schedule = extended_schedule
-)
+get_summary(report) |>
+  dplyr::filter(failed > 0L) |>
+  dplyr::select(redcap_event_name, instrument, validation_check, failed) |>
+  knitr::kable()
 ```
 
-Each extension row expands across records observed in its arm. In a
-classic project, it expands across all observed records. Crossings
-observed in `records` remain in the plan when their rows are absent from
-`extended_schedule`.
-
-In a classic project, builder rows use
-`redcap_event_name = NA_character_`; repeating instruments receive
-instances `1` through `n_repeat_instances`. In a longitudinal project,
-the builder returns only concrete instrument/event crossings designated
-in REDCap. A requested project instrument designated to no longitudinal
-event contributes no row and produces one classed warning; the builder
-never invents an eventless longitudinal crossing. Omit
-`extended_schedule` to request observed-only planning.
-
-Use `plan_explicit()` when every assessed combination must have a row in
-a caller supplied `explicit_schedule`:
+| redcap_event_name | instrument | validation_check   | failed |
+|:------------------|:-----------|:-------------------|-------:|
+| test_event_1      | testing    | field-complete     |      2 |
+| test_event_2      | testing    | instrument-started |      1 |
+| test_event_3      | testing    | instrument-started |      1 |
+| test_event_3      | testing    | field-complete     |      1 |
+| test_event_1      | visit      | instrument-started |      2 |
+| test_event_1      | visit      | field-complete     |      1 |
+| test_event_2      | visit      | field-complete     |      1 |
+| test_event_3      | visit      | field-complete     |      2 |
 
 ``` r
-explicit_spec_1 <- rcon$mapping() |>
-  dplyr::filter(unique_event_name %in% desired_events_1)
 
-explicit_schedule_1 <- data.frame(
-  participant_id = c("001", "002", "003")
-) |>
-  build_explicit_schedule(rcon, explicit_spec_1)
-
-explicit_spec_2 <- rcon$mapping() |>
-  dplyr::filter(
-    unique_event_name %in% desired_events_2,
-    form == "diary"
+get_missing(report) |>
+  dplyr::select(
+    record_id,
+    redcap_event_name,
+    instrument,
+    validation_check,
+    field_name
   ) |>
-  dplyr::mutate(repeat_instance = 2L)
-
-explicit_schedule_2 <- data.frame(
-  participant_id = c("008", "009", "010")
-) |>
-  build_explicit_schedule(rcon, explicit_spec_2)
-
-explicit_schedule <- dplyr::bind_rows(
-  explicit_schedule_1,
-  explicit_schedule_2
-)
-
-plan <- plan_explicit(
-  data = records,
-  rcon = rcon,
-  explicit_schedule = explicit_schedule
-)
+  knitr::kable()
 ```
 
-The builder discovers that this example project's ID field is
-`participant_id` and returns the project-independent `record_id` column
-needed by `plan_explicit()`. It ignores mapping columns such as
-`arm_num`. A missing `repeat_instance` column means missing instances;
-supply positive instances for repeating events or instruments. The
-builder validates every specification row against `rcon` before crossing
-it with the unique cohort IDs.
+| record_id | redcap_event_name | instrument | validation_check   | field_name   |
+|:----------|:------------------|:-----------|:-------------------|:-------------|
+| 002       | test_event_2      | testing    | instrument-started | NA           |
+| 002       | test_event_3      | testing    | instrument-started | NA           |
+| 002       | test_event_1      | visit      | instrument-started | NA           |
+| 003       | test_event_1      | visit      | instrument-started | NA           |
+| 002       | test_event_1      | testing    | field-complete     | test_date    |
+| 004       | test_event_1      | testing    | field-complete     | test_date    |
+| 004       | test_event_3      | testing    | field-complete     | test_date    |
+| 004       | test_event_1      | visit      | field-complete     | visit_date   |
+| 002       | test_event_2      | visit      | field-complete     | visit_date   |
+| 002       | test_event_3      | visit      | field-complete     | visit_date   |
+| 004       | test_event_3      | visit      | field-complete     | visit_status |
 
-`explicit_schedule` is the complete instrument scope for
-`plan_explicit()`. The plan derives its unique instrument vector from
-normalized schedule rows in first-appearance order; no separate
-`instruments` argument is used. A typed zero-row schedule produces an
-explicit plan with `character()` instrument scope.
+`plan_from_data()` scopes this report to record-event crossings
+represented in `records`. Records `001`, `002`, and `004` have rows at
+all three test events, so the plan assesses both permitted forms at each
+event, even when a form is entirely blank, and reports applicable form-
+and field-level failures.
 
-Each row in `explicit_schedule` creates one permitted target. A target
-may name a record that is absent from `records`. During `run_plan()`, an
-absent longitudinal event fails `event-row-started`; a present event
-with an absent repeat instance fails `repeat-instance-row-started`; and
-an absent classic target with `repeat_instance = NA_integer_` has both
-row checks marked `"not applicable"` and fails `instrument-started`.
+Record `003` has rows only at `baseline` and `test_event_1`. Its blank
+`visit` form at `test_event_1` is assessed and reported as not started,
+but `test_event_2` and `test_event_3` never enter the plan. The
+potentially expected `testing` and `visit` assessments at those two
+events (four targets in total) are therefore absent from the report
+rather than counted as passes or failures for record `003`.
 
-Both constructors return a `redcapmissing_plan`. The plan contains its
-stored instrument scope, `assessible_targets`, project identity, project
-structure fingerprint, construction value, and schema version. Source
-records and `rcon` remain outside the plan.
-
-## 2. Run the plan
-
-``` r
-report <- run_plan(
-  plan = plan,
-  data = records,
-  rcon = rcon
-)
-```
-
-The runner evaluates four checks in order:
-
-1.  `event-row-started`
-2.  `repeat-instance-row-started`
-3.  `instrument-started`
-4.  `field-complete`
-
-Classic event checks have status `"not applicable"`. Repeat instance
-checks have that status when a target stores `NA_integer_` in
-`repeat_instance`. A failed physical row check gives later checks status
-`"not reached"`. `instrument-started` uses data entry metadata fields
-other than the record ID field and fields of type `descriptive` or
-`calc`. Checkbox roots require at least one selected exported child
-column. This detection set is independent of `required_fields`,
-`exclude_types`, and `ignore_fields`. Those three arguments affect
-`field-complete`, in that order. When no fields remain, `field-complete`
-has status `"not applicable"` and reason
-`"no fields remain after field policy"`.
-
-`run_plan()` accepts a newer record export when the REDCap project
-structure matches the stored fingerprint. The plan continues to supply
-its `assessible_targets`.
-
-Runtime response requirements follow the frozen targets, not every
-instrument retained in the plan's declared scope. `run_plan()` requires
-the detection and assessment fields for instruments represented in
-`assessible_targets`, along with any fields needed to evaluate their
-branching logic and the structural columns needed to match targets. An
-instrument with no target imposes no exclusive response-column
-requirement.
-
-### Verified field failures
+## Verified field failures
 
 For projects using REDCap's Data Resolution Workflow, export history
 through the [Data Quality API
@@ -365,34 +298,154 @@ runnable synthetic example with before/after results. The report's
 `verification` component records supplied evidence and applied
 overrides.
 
-## 3. Inspect results
+## Compare assessments
+
+Reports generated with `details = TRUE` can be compared for changes.
+
+**`compare_reports()` — create the comparison**
+
+`compare_reports(previous, current)` returns a
+`redcapmissing_comparison` object. The returned object records plan
+membership in two components:
+
+- **Target results** · `comparison$target_results`<br> Contains the
+  union of exact target keys from both plans. Its `target_scope` column
+  is `"shared"` when a target is in both plans, `"added"` when it is
+  only in the current plan, and `"removed"` when it is only in the
+  previous plan.
+- **Scope changes** · `comparison$scope_changes`<br> Contains the added
+  and removed target rows, including targets with no failures.
+
+The input reports must have matching project structure and
+field-selection settings. Plans and verification setups may differ.
+Reports saved without settings or details must be regenerated for
+comparison. See the [runnable longitudinal and repeating-instrument
+example](vignettes/redcapmissing.html#compare-assessments) for both
+population views and changing field denominators.
+
+**`get_summary()` — choose a comparison population**
+
+`get_summary(comparison)` returns summary rows with a `population`
+column. Its `population` argument accepts one or both of these values:
+
+- **Full scope** · `population = "full"`<br> Compares each report
+  exactly as assessed, including targets that entered or left the plan.
+- **Shared targets** · `population = "shared"`<br> Compares only the
+  exact target keys present in both plans. Stored outcomes are retained
+  without reevaluating branching logic.
+
+**`get_changes()` — inspect failure transitions**
+
+`get_changes(comparison)` returns failures present in either report with
+a `change` column. Its `change` argument accepts `NULL` to return every
+transition, or one or more of these exact values:
+
+- **Newly detected** · `change = "newly_detected"`<br> The check fails
+  in the current report but did not fail previously.
+- **Still missing** · `change = "still_missing"`<br> The check fails in
+  both reports.
+- **Completed** · `change = "completed"`<br> The check failed previously
+  and now passes directly.
+- **Verified** · `change = "verified"`<br> The check failed previously
+  and now passes through verification.
+- **No longer assessed** · `change = "no_longer_assessed"`<br> The check
+  failed previously but is now blocked by branching logic or an upstream
+  gate; this does not represent completed data entry.
+- **Added to scope** · `change = "added_to_scope"`<br> The failed target
+  appears only in the current plan.
+- **Removed from scope** · `change = "removed_from_scope"`<br> The
+  failed target appears only in the previous plan.
+
+In this example, both reports use the same plan, and the current export
+changes only the four fields reported missing for record `004`:
+`test_date` at `test_event_1` and `test_event_3`, `visit_date` at
+`test_event_1`, and `visit_status` at `test_event_3`.
 
 ``` r
-registry()
-get_summary(report)
-get_missing(report, validation_check = "field-complete")
-get_summary(report, instruments = instruments)
+previous <- run_plan(
+  plan,
+  records,
+  rcon,
+  details = TRUE,
+  progress = FALSE
+)
+current_records <- records |>
+  dplyr::mutate(
+    test_date = dplyr::case_when(
+      record_id == "004" &
+        redcap_event_name == "test_event_1" ~ "2026-01-14",
+      record_id == "004" &
+        redcap_event_name == "test_event_3" ~ "2026-03-14",
+      TRUE ~ test_date
+    ),
+    visit_status = dplyr::if_else(
+      record_id == "004" & redcap_event_name == "test_event_3",
+      "3",
+      visit_status
+    ),
+    visit_date = dplyr::if_else(
+      record_id == "004" & redcap_event_name == "test_event_1",
+      "2026-01-15",
+      visit_date
+    )
+  )
+current <- run_plan(
+  plan,
+  current_records,
+  rcon,
+  details = TRUE,
+  progress = FALSE
+)
+comparison <- compare_reports(previous, current)
+
+get_summary(
+  comparison,
+  validation_check = "field-complete",
+  population = "full"
+) |>
+  dplyr::select(
+    population,
+    redcap_event_name,
+    instrument,
+    previous_failed,
+    previous_assessed,
+    current_failed,
+    current_assessed,
+    completed
+  ) |>
+  knitr::kable()
 ```
 
-`registry()` documents the exact check codes, report levels, assessment
-order, presentation labels, and pass conditions used throughout the
-package.
+| population | redcap_event_name | instrument | previous_failed | previous_assessed | current_failed | current_assessed | completed |
+|:---|:---|:---|---:|---:|---:|---:|---:|
+| full | baseline | study_baseline | 0 | 4 | 0 | 4 | 0 |
+| full | test_event_1 | testing | 2 | 7 | 1 | 7 | 1 |
+| full | test_event_2 | testing | 0 | 2 | 0 | 2 | 0 |
+| full | test_event_3 | testing | 1 | 4 | 0 | 4 | 1 |
+| full | test_event_1 | visit | 1 | 4 | 0 | 4 | 1 |
+| full | test_event_2 | visit | 1 | 6 | 1 | 6 | 0 |
+| full | test_event_3 | visit | 2 | 6 | 1 | 6 | 1 |
 
-The result contains `plan`, `target_results`, `summary`, `missing`,
-`verification`, `diagnostics`, `details`, and normalized field-selection
-`settings`. Structural absence uses typed `NA` values.
+``` r
 
-### Stored field values
+get_changes(comparison, change = "completed") |>
+  dplyr::select(
+    record_id,
+    redcap_event_name,
+    instrument,
+    validation_check,
+    field_name,
+    change
+  ) |>
+  knitr::kable()
+```
 
-With `details = TRUE`, `details$value_summary` stores each assessed
-ordinary field value as character. For a checkbox field,
-`details$value_summary` contains the names of its selected exported
-checkbox child columns. Reports also contain record IDs and may contain
-REDCap data entry URLs.
-
-With `details = FALSE`, the result contains `details = NULL`. Apply the
-same storage, access, retention, and sharing rules to each report that
-apply to its REDCap export.
+| record_id | redcap_event_name | instrument | validation_check | field_name | change |
+|:---|:---|:---|:---|:---|:---|
+| 004 | test_event_1 | testing | field-complete | test_date | completed |
+| 004 | test_event_3 | testing | field-complete | test_date | completed |
+| 004 | test_event_1 | visit | field-complete | visit_date | completed |
+| 004 | test_event_3 | visit | field-complete | visit_status | completed |
 
 ## Learn more
 
